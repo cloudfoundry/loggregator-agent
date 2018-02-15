@@ -1,9 +1,12 @@
 package main
 
 import (
+	"fmt"
 	"io/ioutil"
 	"log"
 	"math/rand"
+	"net"
+	"net/http"
 	"time"
 
 	"code.cloudfoundry.org/loggregator-agent/cmd/agent/app"
@@ -22,7 +25,19 @@ func main() {
 	a := app.NewAgent(config)
 	go a.Start()
 
-	// TODO: Bring over profiler
-	// profiler.New(config.PProfPort).Start()
-	panic("YOU FORGOT THE PROFILER!!!")
+	runPProf(config.PProfPort)
+}
+
+func runPProf(port uint32) {
+	addr := fmt.Sprintf("localhost:%d", port)
+	lis, err := net.Listen("tcp", addr)
+	if err != nil {
+		log.Panicf("Error creating pprof listener: %s", err)
+	}
+
+	log.Printf("pprof bound to: %s", lis.Addr())
+	err = http.Serve(lis, nil)
+	if err != nil {
+		log.Panicf("Error starting pprof server: %s", err)
+	}
 }
