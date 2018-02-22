@@ -71,7 +71,7 @@ func (t *Transponder) Start() {
 		envelope, ok := t.nexter.TryNext()
 		if !ok {
 			b.Flush()
-			time.Sleep(10 * time.Millisecond)
+			time.Sleep(100 * time.Millisecond)
 			continue
 		}
 

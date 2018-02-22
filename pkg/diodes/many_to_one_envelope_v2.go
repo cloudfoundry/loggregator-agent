@@ -8,14 +8,14 @@ import (
 // ManyToOneEnvelopeV2 diode is optimal for many writers and a single reader for
 // V2 envelopes.
 type ManyToOneEnvelopeV2 struct {
-	d *gendiodes.Poller
+	d *gendiodes.Waiter
 }
 
 // NewManyToOneEnvelopeV2 returns a new ManyToOneEnvelopeV2 diode to be used
 // with many writers and a single reader.
 func NewManyToOneEnvelopeV2(size int, alerter gendiodes.Alerter) *ManyToOneEnvelopeV2 {
 	return &ManyToOneEnvelopeV2{
-		d: gendiodes.NewPoller(gendiodes.NewManyToOne(size, alerter)),
+		d: gendiodes.NewWaiter(gendiodes.NewManyToOne(size, alerter)),
 	}
 }
 

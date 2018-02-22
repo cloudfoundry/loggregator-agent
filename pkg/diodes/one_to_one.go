@@ -5,7 +5,7 @@ import gendiodes "code.cloudfoundry.org/go-diodes"
 // OneToOne diode is optimized for a single writer and a single reader for
 // byte slices.
 type OneToOne struct {
-	d *gendiodes.Poller
+	d *gendiodes.Waiter
 }
 
 // NewOneToOne initializes a new one to one diode of a given size and alerter.
@@ -13,7 +13,7 @@ type OneToOne struct {
 // the number of byte slices that were dropped.
 func NewOneToOne(size int, alerter gendiodes.Alerter) *OneToOne {
 	return &OneToOne{
-		d: gendiodes.NewPoller(gendiodes.NewOneToOne(size, alerter)),
+		d: gendiodes.NewWaiter(gendiodes.NewOneToOne(size, alerter)),
 	}
 }
 
