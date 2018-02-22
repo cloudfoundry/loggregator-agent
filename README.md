@@ -17,11 +17,11 @@ Loggregator Agent only listens to local network interfaces and all logs and
 metrics are immediately signed before forwarding to Dopplers. This prevents
 man-in-the-middle attacks and ensures data integrity.
 
-* [Compatability](#compatability)
+* [Compatibility](#compatibility)
 * [Usage](#using-loggregator-agent)
 * [More Resources and Documentation](#more-resources-and-documentation)
 
-## Compatability
+## Compatibility
 
 The Loggregator Agent is compatable with Loggregator v96+.
 
