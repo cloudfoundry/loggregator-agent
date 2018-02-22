@@ -7,6 +7,7 @@ import (
 	"math/rand"
 	"net"
 	"net/http"
+	_ "net/http/pprof"
 	"time"
 
 	"code.cloudfoundry.org/loggregator-agent/cmd/agent/app"
