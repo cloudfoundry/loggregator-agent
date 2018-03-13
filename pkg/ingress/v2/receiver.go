@@ -43,6 +43,7 @@ func (s *Receiver) Sender(sender loggregator_v2.Ingress_SenderServer) error {
 			return err
 		}
 
+		e.SourceId = sourceID(e)
 		s.dataSetter.Set(e)
 		s.ingressMetric.Increment(1)
 	}
@@ -59,6 +60,7 @@ func (s *Receiver) BatchSender(sender loggregator_v2.Ingress_BatchSenderServer) 
 		}
 
 		for _, e := range envelopes.Batch {
+			e.SourceId = sourceID(e)
 			s.dataSetter.Set(e)
 		}
 		s.ingressMetric.Increment(uint64(len(envelopes.Batch)))
@@ -69,10 +71,27 @@ func (s *Receiver) BatchSender(sender loggregator_v2.Ingress_BatchSenderServer) 
 
 func (s *Receiver) Send(_ context.Context, b *loggregator_v2.EnvelopeBatch) (*loggregator_v2.SendResponse, error) {
 	for _, e := range b.Batch {
+		e.SourceId = sourceID(e)
 		s.dataSetter.Set(e)
 	}
 
 	s.ingressMetric.Increment(uint64(len(b.Batch)))
 
 	return &loggregator_v2.SendResponse{}, nil
+}
+
+func sourceID(e *loggregator_v2.Envelope) string {
+	if e.SourceId != "" {
+		return e.SourceId
+	}
+
+	if id, ok := e.GetTags()["origin"]; ok {
+		return id
+	}
+
+	if id, ok := e.GetDeprecatedTags()["origin"]; ok {
+		return id.GetText()
+	}
+
+	return ""
 }

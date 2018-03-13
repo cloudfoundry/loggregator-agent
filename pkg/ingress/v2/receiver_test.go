@@ -36,15 +36,19 @@ var _ = Describe("Receiver", func() {
 		})
 
 		It("calls set on the data setter with the data", func() {
-			e := &loggregator_v2.Envelope{
+			eActual := &loggregator_v2.Envelope{
+				SourceId: "some-id",
+			}
+
+			eExpected := &loggregator_v2.Envelope{
 				SourceId: "some-id",
 			}
 
 			spySender.recvResponses <- SenderRecvResponse{
-				envelope: e,
+				envelope: eActual,
 			}
 			spySender.recvResponses <- SenderRecvResponse{
-				envelope: e,
+				envelope: eActual,
 			}
 			spySender.recvResponses <- SenderRecvResponse{
 				err: io.EOF,
@@ -52,8 +56,8 @@ var _ = Describe("Receiver", func() {
 
 			rx.Sender(spySender)
 
-			Expect(spySetter.envelopes).To(Receive(Equal(e)))
-			Expect(spySetter.envelopes).To(Receive(Equal(e)))
+			Expect(spySetter.envelopes).To(Receive(Equal(eExpected)))
+			Expect(spySetter.envelopes).To(Receive(Equal(eExpected)))
 		})
 
 		It("returns an error when receive fails", func() {
@@ -85,6 +89,66 @@ var _ = Describe("Receiver", func() {
 
 			metric := metricClient.GetMetric("ingress")
 			Expect(metric.Delta()).To(Equal(uint64(2)))
+		})
+
+		Context("when source ID is not set", func() {
+			It("sets the source ID with the origin tag value", func() {
+				eActual := &loggregator_v2.Envelope{
+					Tags: map[string]string{"origin": "some-origin"},
+				}
+
+				eExpected := &loggregator_v2.Envelope{
+					SourceId: "some-origin",
+					Tags:     map[string]string{"origin": "some-origin"},
+				}
+
+				spySender.recvResponses <- SenderRecvResponse{
+					envelope: eActual,
+				}
+				spySender.recvResponses <- SenderRecvResponse{
+					err: io.EOF,
+				}
+
+				rx.Sender(spySender)
+
+				Expect(spySetter.envelopes).To(Receive(Equal(eExpected)))
+			})
+
+			Context("when the origin tag is not set", func() {
+				It("sets the source ID with the origin deprecated tag value", func() {
+					eActual := &loggregator_v2.Envelope{
+						DeprecatedTags: map[string]*loggregator_v2.Value{
+							"origin": &loggregator_v2.Value{
+								Data: &loggregator_v2.Value_Text{
+									Text: "deprecated-origin",
+								},
+							},
+						},
+					}
+
+					eExpected := &loggregator_v2.Envelope{
+						SourceId: "deprecated-origin",
+						DeprecatedTags: map[string]*loggregator_v2.Value{
+							"origin": &loggregator_v2.Value{
+								Data: &loggregator_v2.Value_Text{
+									Text: "deprecated-origin",
+								},
+							},
+						},
+					}
+
+					spySender.recvResponses <- SenderRecvResponse{
+						envelope: eActual,
+					}
+					spySender.recvResponses <- SenderRecvResponse{
+						err: io.EOF,
+					}
+
+					rx.Sender(spySender)
+
+					Expect(spySetter.envelopes).To(Receive(Equal(eExpected)))
+				})
+			})
 		})
 	})
 
@@ -143,23 +207,102 @@ var _ = Describe("Receiver", func() {
 			metric := metricClient.GetMetric("ingress")
 			Expect(metric.Delta()).To(Equal(uint64(5)))
 		})
+
+		It("sets the source ID with the origin value when missing source ID", func() {
+			e1Actual := &loggregator_v2.Envelope{
+				Tags: map[string]string{"origin": "some-origin"},
+			}
+
+			e1Expected := &loggregator_v2.Envelope{
+				SourceId: "some-origin",
+				Tags:     map[string]string{"origin": "some-origin"},
+			}
+
+			e2Actual := &loggregator_v2.Envelope{
+				SourceId: "some-id-2",
+				Tags:     map[string]string{"origin": "some-origin"},
+			}
+
+			e2Expected := &loggregator_v2.Envelope{
+				SourceId: "some-id-2",
+				Tags:     map[string]string{"origin": "some-origin"},
+			}
+
+			spyBatchSender.recvResponses <- BatchSenderRecvResponse{
+				envelopes: []*loggregator_v2.Envelope{e1Actual, e2Actual},
+			}
+			spyBatchSender.recvResponses <- BatchSenderRecvResponse{
+				err: io.EOF,
+			}
+
+			rx.BatchSender(spyBatchSender)
+
+			Expect(spySetter.envelopes).Should(Receive(Equal(e1Expected)))
+			Expect(spySetter.envelopes).Should(Receive(Equal(e2Expected)))
+		})
+
+		Context("when the origin tag is not set", func() {
+			It("sets the source ID with the origin deprecated tag value", func() {
+				eActual := &loggregator_v2.Envelope{
+					DeprecatedTags: map[string]*loggregator_v2.Value{
+						"origin": &loggregator_v2.Value{
+							Data: &loggregator_v2.Value_Text{
+								Text: "deprecated-origin",
+							},
+						},
+					},
+				}
+
+				eExpected := &loggregator_v2.Envelope{
+					SourceId: "deprecated-origin",
+					DeprecatedTags: map[string]*loggregator_v2.Value{
+						"origin": &loggregator_v2.Value{
+							Data: &loggregator_v2.Value_Text{
+								Text: "deprecated-origin",
+							},
+						},
+					},
+				}
+
+				spyBatchSender.recvResponses <- BatchSenderRecvResponse{
+					envelopes: []*loggregator_v2.Envelope{eActual},
+				}
+				spyBatchSender.recvResponses <- BatchSenderRecvResponse{
+					err: io.EOF,
+				}
+
+				rx.BatchSender(spyBatchSender)
+
+				Expect(spySetter.envelopes).To(Receive(Equal(eExpected)))
+			})
+		})
 	})
 
 	Describe("Send()", func() {
 		It("calls set on the setter with the given envelopes", func() {
-			e1 := &loggregator_v2.Envelope{
+			e1Actual := &loggregator_v2.Envelope{
 				SourceId: "some-id-1",
+				Tags:     map[string]string{"origin": "my-origin"},
 			}
-			e2 := &loggregator_v2.Envelope{
+			e2Actual := &loggregator_v2.Envelope{
 				SourceId: "some-id-2",
+				Tags:     map[string]string{"origin": "my-origin"},
+			}
+			e1Expected := &loggregator_v2.Envelope{
+				SourceId: "some-id-1",
+				Tags:     map[string]string{"origin": "my-origin"},
+			}
+			e2Expected := &loggregator_v2.Envelope{
+				SourceId: "some-id-2",
+				Tags:     map[string]string{"origin": "my-origin"},
 			}
 
 			rx.Send(context.Background(), &loggregator_v2.EnvelopeBatch{
-				Batch: []*loggregator_v2.Envelope{e1, e2},
+				Batch: []*loggregator_v2.Envelope{e1Actual, e2Actual},
 			})
 
-			Expect(spySetter.envelopes).To(Receive(Equal(e1)))
-			Expect(spySetter.envelopes).To(Receive(Equal(e2)))
+			Expect(spySetter.envelopes).To(Receive(Equal(e1Expected)))
+			Expect(spySetter.envelopes).To(Receive(Equal(e2Expected)))
 		})
 
 		It("increments the ingress metric", func() {
@@ -173,6 +316,56 @@ var _ = Describe("Receiver", func() {
 
 			metric := metricClient.GetMetric("ingress")
 			Expect(metric.Delta()).To(Equal(uint64(1)))
+		})
+
+		Context("when source ID is not set", func() {
+			It("sets source ID with origin tag", func() {
+				eActual := &loggregator_v2.Envelope{
+					Tags: map[string]string{"origin": "some-origin-1"},
+				}
+
+				eExpected := &loggregator_v2.Envelope{
+					SourceId: "some-origin-1",
+					Tags:     map[string]string{"origin": "some-origin-1"},
+				}
+
+				rx.Send(context.Background(), &loggregator_v2.EnvelopeBatch{
+					Batch: []*loggregator_v2.Envelope{eActual},
+				})
+
+				Expect(spySetter.envelopes).To(Receive(Equal(eExpected)))
+			})
+
+			Context("when the origin tag is not set", func() {
+				It("sets the source ID with the origin deprecated tag value", func() {
+					eActual := &loggregator_v2.Envelope{
+						DeprecatedTags: map[string]*loggregator_v2.Value{
+							"origin": &loggregator_v2.Value{
+								Data: &loggregator_v2.Value_Text{
+									Text: "deprecated-origin",
+								},
+							},
+						},
+					}
+
+					eExpected := &loggregator_v2.Envelope{
+						SourceId: "deprecated-origin",
+						DeprecatedTags: map[string]*loggregator_v2.Value{
+							"origin": &loggregator_v2.Value{
+								Data: &loggregator_v2.Value_Text{
+									Text: "deprecated-origin",
+								},
+							},
+						},
+					}
+
+					rx.Send(context.Background(), &loggregator_v2.EnvelopeBatch{
+						Batch: []*loggregator_v2.Envelope{eActual},
+					})
+
+					Expect(spySetter.envelopes).To(Receive(Equal(eExpected)))
+				})
+			})
 		})
 	})
 })

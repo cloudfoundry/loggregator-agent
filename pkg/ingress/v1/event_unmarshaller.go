@@ -45,6 +45,14 @@ func (u *EventUnmarshaller) UnmarshallMessage(message []byte) (*events.Envelope,
 		return nil, err
 	}
 
+	if envelope.Tags == nil {
+		envelope.Tags = make(map[string]string)
+	}
+
+	if envelope.Tags["source_id"] == "" {
+		envelope.Tags["source_id"] = envelope.GetOrigin()
+	}
+
 	if !valid(envelope) {
 		log.Printf("eventUnmarshaller: validation failed for message %v", envelope.GetEventType())
 		return nil, invalidEnvelope

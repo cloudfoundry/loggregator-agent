@@ -25,9 +25,11 @@ var _ = Describe("EventUnmarshaller", func() {
 			Origin:      proto.String("fake-origin-3"),
 			EventType:   events.Envelope_ValueMetric.Enum(),
 			ValueMetric: NewValueMetric("value-name", 1.0, "units"),
+			Tags: map[string]string{
+				"source_id": "my-source-id",
+			},
 		}
 		message, _ = proto.Marshal(event)
-
 	})
 
 	Context("UnmarshallMessage", func() {
@@ -59,6 +61,30 @@ var _ = Describe("EventUnmarshaller", func() {
 			output, err := unmarshaller.UnmarshallMessage(message)
 			Expect(output).To(BeNil())
 			Expect(err).To(HaveOccurred())
+		})
+
+		Context("with no source_id tag", func() {
+			BeforeEach(func() {
+				event = &events.Envelope{
+					Origin:      proto.String("fake-origin-3"),
+					EventType:   events.Envelope_ValueMetric.Enum(),
+					ValueMetric: NewValueMetric("value-name", 1.0, "units"),
+				}
+				message, _ = proto.Marshal(event)
+			})
+
+			It("sets source_id tag to origin value", func() {
+				output, _ := unmarshaller.UnmarshallMessage(message)
+
+				eventWithSourceID := &events.Envelope{
+					Origin:      proto.String("fake-origin-3"),
+					EventType:   events.Envelope_ValueMetric.Enum(),
+					ValueMetric: NewValueMetric("value-name", 1.0, "units"),
+					Tags:        map[string]string{"source_id": "fake-origin-3"},
+				}
+
+				Expect(output).To(Equal(eventWithSourceID))
+			})
 		})
 	})
 
