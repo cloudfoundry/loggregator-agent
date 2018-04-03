@@ -110,6 +110,14 @@ func stubGaugeMap() map[string]prometheus.Gauge {
 				Help:      "Number of V2 gRPC streams to dopplers",
 			},
 		),
+		"originMappings": prometheus.NewGauge(
+			prometheus.GaugeOpts{
+				Namespace: "loggregator",
+				Subsystem: "agent",
+				Name:      "originMappings",
+				Help:      "Number of origin -> source id conversions",
+			},
+		),
 	}
 }
 

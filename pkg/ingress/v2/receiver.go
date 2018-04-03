@@ -17,21 +17,34 @@ type MetricClient interface {
 	NewCounterMetric(name string, opts ...pulseemitter.MetricOption) pulseemitter.CounterMetric
 }
 
-type Receiver struct {
-	dataSetter    DataSetter
-	ingressMetric pulseemitter.CounterMetric
+// HealthEndpointClient increments existing metrics.
+type HealthEndpointClient interface {
+	Inc(string)
 }
 
-func NewReceiver(dataSetter DataSetter, metricClient MetricClient) *Receiver {
+type Receiver struct {
+	dataSetter           DataSetter
+	ingressMetric        pulseemitter.CounterMetric
+	originMappingsMetric pulseemitter.CounterMetric
+	healthEndpointClient HealthEndpointClient
+}
+
+func NewReceiver(dataSetter DataSetter, metricClient MetricClient, health HealthEndpointClient) *Receiver {
 	// metric-documentation-v2: (loggregator.metron.ingress) The number of
 	// received messages over Metrons V2 gRPC API.
 	ingressMetric := metricClient.NewCounterMetric("ingress",
 		pulseemitter.WithVersion(2, 0),
 	)
 
+	originMappingsMetric := metricClient.NewCounterMetric("origin_mappings",
+		pulseemitter.WithVersion(2, 0),
+	)
+
 	return &Receiver{
-		dataSetter:    dataSetter,
-		ingressMetric: ingressMetric,
+		dataSetter:           dataSetter,
+		ingressMetric:        ingressMetric,
+		originMappingsMetric: originMappingsMetric,
+		healthEndpointClient: health,
 	}
 }
 
@@ -42,8 +55,7 @@ func (s *Receiver) Sender(sender loggregator_v2.Ingress_SenderServer) error {
 			log.Printf("Failed to receive data: %s", err)
 			return err
 		}
-
-		e.SourceId = sourceID(e)
+		e.SourceId = s.sourceID(e)
 		s.dataSetter.Set(e)
 		s.ingressMetric.Increment(1)
 	}
@@ -60,7 +72,7 @@ func (s *Receiver) BatchSender(sender loggregator_v2.Ingress_BatchSenderServer) 
 		}
 
 		for _, e := range envelopes.Batch {
-			e.SourceId = sourceID(e)
+			e.SourceId = s.sourceID(e)
 			s.dataSetter.Set(e)
 		}
 		s.ingressMetric.Increment(uint64(len(envelopes.Batch)))
@@ -71,7 +83,7 @@ func (s *Receiver) BatchSender(sender loggregator_v2.Ingress_BatchSenderServer) 
 
 func (s *Receiver) Send(_ context.Context, b *loggregator_v2.EnvelopeBatch) (*loggregator_v2.SendResponse, error) {
 	for _, e := range b.Batch {
-		e.SourceId = sourceID(e)
+		e.SourceId = s.sourceID(e)
 		s.dataSetter.Set(e)
 	}
 
@@ -80,16 +92,20 @@ func (s *Receiver) Send(_ context.Context, b *loggregator_v2.EnvelopeBatch) (*lo
 	return &loggregator_v2.SendResponse{}, nil
 }
 
-func sourceID(e *loggregator_v2.Envelope) string {
+func (r *Receiver) sourceID(e *loggregator_v2.Envelope) string {
 	if e.SourceId != "" {
 		return e.SourceId
 	}
 
 	if id, ok := e.GetTags()["origin"]; ok {
+		r.originMappingsMetric.Increment(1)
+		r.healthEndpointClient.Inc("originMappings")
 		return id
 	}
 
 	if id, ok := e.GetDeprecatedTags()["origin"]; ok {
+		r.originMappingsMetric.Increment(1)
+		r.healthEndpointClient.Inc("originMappings")
 		return id.GetText()
 	}
 

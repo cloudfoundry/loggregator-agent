@@ -102,7 +102,7 @@ func (a *AppV2) Start() {
 	agentAddress := fmt.Sprintf("127.0.0.1:%d", a.config.GRPC.Port)
 	log.Printf("agent v2 API started on addr %s", agentAddress)
 
-	rx := ingress.NewReceiver(envelopeBuffer, a.metricClient)
+	rx := ingress.NewReceiver(envelopeBuffer, a.metricClient, a.healthRegistrar)
 	kp := keepalive.EnforcementPolicy{
 		MinTime:             10 * time.Second,
 		PermitWithoutStream: true,

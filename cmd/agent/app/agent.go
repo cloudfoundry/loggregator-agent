@@ -136,6 +136,16 @@ func startHealthEndpoint(addr string) *healthendpoint.Registrar {
 				Help:      "Number of V2 gRPC streams to dopplers",
 			},
 		),
+		// metric-documentation-health: (originMappings)
+		// Number of origin -> sourceId mappings
+		"originMappings": prometheus.NewGauge(
+			prometheus.GaugeOpts{
+				Namespace: "loggregator",
+				Subsystem: "agent",
+				Name:      "originMappings",
+				Help:      "Number of origin -> source id conversions",
+			},
+		),
 	})
 
 	return healthRegistrar

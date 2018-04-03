@@ -11,6 +11,7 @@ import (
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
+	"github.com/prometheus/client_golang/prometheus"
 )
 
 var _ = Describe("Receiver", func() {
@@ -18,12 +19,15 @@ var _ = Describe("Receiver", func() {
 		rx           *ingress.Receiver
 		spySetter    *SpySetter
 		metricClient *testhelper.SpyMetricClient
+		h            *spyHealthEndpointClient
 	)
 
 	BeforeEach(func() {
+		h = newSpyHealthEndpointClient()
+
 		spySetter = NewSpySetter()
 		metricClient = testhelper.NewMetricClient()
-		rx = ingress.NewReceiver(spySetter, metricClient)
+		rx = ingress.NewReceiver(spySetter, metricClient, h)
 	})
 
 	Describe("Sender()", func() {
@@ -112,6 +116,10 @@ var _ = Describe("Receiver", func() {
 				rx.Sender(spySender)
 
 				Expect(spySetter.envelopes).To(Receive(Equal(eExpected)))
+
+				metric := metricClient.GetMetric("origin_mappings")
+				Expect(metric.Delta()).To(Equal(uint64(1)))
+				Expect(h.called["originMappings"]).To(Equal(1))
 			})
 
 			Context("when the origin tag is not set", func() {
@@ -147,6 +155,31 @@ var _ = Describe("Receiver", func() {
 					rx.Sender(spySender)
 
 					Expect(spySetter.envelopes).To(Receive(Equal(eExpected)))
+
+					metric := metricClient.GetMetric("origin_mappings")
+					Expect(metric.Delta()).To(Equal(uint64(1)))
+					Expect(h.called["originMappings"]).To(Equal(1))
+				})
+			})
+
+			Context("no origin or source id is set", func() {
+				It("sets the source ID with the origin deprecated tag value", func() {
+					eActual := &loggregator_v2.Envelope{}
+
+					spySender.recvResponses <- SenderRecvResponse{
+						envelope: eActual,
+					}
+					spySender.recvResponses <- SenderRecvResponse{
+						err: io.EOF,
+					}
+
+					rx.Sender(spySender)
+
+					Expect(spySetter.envelopes).To(Receive(Equal(eActual)))
+
+					metric := metricClient.GetMetric("origin_mappings")
+					Expect(metric.Delta()).To(Equal(uint64(0)))
+					Expect(h.called["originMappings"]).To(Equal(0))
 				})
 			})
 		})
@@ -239,6 +272,10 @@ var _ = Describe("Receiver", func() {
 
 			Expect(spySetter.envelopes).Should(Receive(Equal(e1Expected)))
 			Expect(spySetter.envelopes).Should(Receive(Equal(e2Expected)))
+
+			metric := metricClient.GetMetric("origin_mappings")
+			Expect(metric.Delta()).To(Equal(uint64(1)))
+			Expect(h.called["originMappings"]).To(Equal(1))
 		})
 
 		Context("when the origin tag is not set", func() {
@@ -274,6 +311,10 @@ var _ = Describe("Receiver", func() {
 				rx.BatchSender(spyBatchSender)
 
 				Expect(spySetter.envelopes).To(Receive(Equal(eExpected)))
+
+				metric := metricClient.GetMetric("origin_mappings")
+				Expect(metric.Delta()).To(Equal(uint64(1)))
+				Expect(h.called["originMappings"]).To(Equal(1))
 			})
 		})
 	})
@@ -316,6 +357,20 @@ var _ = Describe("Receiver", func() {
 
 			metric := metricClient.GetMetric("ingress")
 			Expect(metric.Delta()).To(Equal(uint64(1)))
+		})
+
+		It("increments the origin_mappings metric", func() {
+			e := &loggregator_v2.Envelope{
+				Tags: map[string]string{"origin": "my-origin"},
+			}
+
+			rx.Send(context.Background(), &loggregator_v2.EnvelopeBatch{
+				Batch: []*loggregator_v2.Envelope{e},
+			})
+
+			metric := metricClient.GetMetric("origin_mappings")
+			Expect(metric.Delta()).To(Equal(uint64(1)))
+			Expect(h.called["originMappings"]).To(Equal(1))
 		})
 
 		Context("when source ID is not set", func() {
@@ -364,6 +419,26 @@ var _ = Describe("Receiver", func() {
 					})
 
 					Expect(spySetter.envelopes).To(Receive(Equal(eExpected)))
+
+					metric := metricClient.GetMetric("origin_mappings")
+					Expect(metric.Delta()).To(Equal(uint64(1)))
+					Expect(h.called["originMappings"]).To(Equal(1))
+				})
+			})
+
+			Context("no origin or source id is set", func() {
+				It("sets the source ID with the origin deprecated tag value", func() {
+					eActual := &loggregator_v2.Envelope{}
+
+					rx.Send(context.Background(), &loggregator_v2.EnvelopeBatch{
+						Batch: []*loggregator_v2.Envelope{eActual},
+					})
+
+					Expect(spySetter.envelopes).To(Receive(Equal(eActual)))
+
+					metric := metricClient.GetMetric("origin_mappings")
+					Expect(metric.Delta()).To(Equal(uint64(0)))
+					Expect(h.called["originMappings"]).To(Equal(0))
 				})
 			})
 		})
@@ -426,4 +501,32 @@ func NewSpySetter() *SpySetter {
 
 func (s *SpySetter) Set(e *loggregator_v2.Envelope) {
 	s.envelopes <- e
+}
+
+type spyHealthEndpointClient struct {
+	called map[string]int
+}
+
+func newSpyHealthEndpointClient() *spyHealthEndpointClient {
+	return &spyHealthEndpointClient{
+		called: make(map[string]int),
+	}
+}
+
+func (s *spyHealthEndpointClient) Inc(name string) {
+	count := s.called[name]
+	s.called[name] = count + 1
+}
+
+func stubGaugeMap() *map[string]prometheus.Gauge {
+	return &map[string]prometheus.Gauge{
+		"originMappings": prometheus.NewGauge(
+			prometheus.GaugeOpts{
+				Namespace: "loggregator",
+				Subsystem: "agent",
+				Name:      "originMappings",
+				Help:      "Number of origin -> source id conversions",
+			},
+		),
+	}
 }
