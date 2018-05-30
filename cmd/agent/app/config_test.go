@@ -29,4 +29,11 @@ var _ = Describe("Config", func() {
 		Expect(err).ToNot(HaveOccurred())
 		Expect(c.RouterAddrWithAZ).ToNot(ContainSubstring("@"))
 	})
+
+	It("source id defaults to metron", func() {
+		c, err := app.LoadConfig()
+
+		Expect(err).ToNot(HaveOccurred())
+		Expect(c.MetricSourceID).To(Equal("metron"))
+	})
 })

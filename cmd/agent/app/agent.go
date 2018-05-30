@@ -88,9 +88,10 @@ func (a *Agent) Start() {
 		log.Fatalf("failed to initialize ingress client: %s", err)
 	}
 
-	metricClient := pulseemitter.New(ingressClient,
+	metricClient := pulseemitter.New(
+		ingressClient,
 		pulseemitter.WithPulseInterval(batchInterval),
-		pulseemitter.WithSourceID("metron"),
+		pulseemitter.WithSourceID(a.config.MetricSourceID),
 	)
 
 	healthRegistrar := startHealthEndpoint(fmt.Sprintf("localhost:%d", a.config.HealthEndpointPort))
