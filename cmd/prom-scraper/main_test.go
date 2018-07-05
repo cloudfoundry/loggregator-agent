@@ -1,7 +1,6 @@
 package main_test
 
 import (
-	"context"
 	"net"
 	"net/http"
 	"net/http/httptest"
@@ -108,6 +107,8 @@ node_timex_pps_jitter_total 5
 )
 
 type spyAgent struct {
+	loggregator_v2.IngressServer
+
 	mu        sync.Mutex
 	envelopes []*loggregator_v2.Envelope
 	addr      string
@@ -140,10 +141,6 @@ func newSpyAgent() *spyAgent {
 	return agent
 }
 
-func (s *spyAgent) Sender(loggregator_v2.Ingress_SenderServer) error {
-	panic("not implemented")
-}
-
 func (s *spyAgent) BatchSender(srv loggregator_v2.Ingress_BatchSenderServer) error {
 	for {
 		batch, err := srv.Recv()
@@ -173,8 +170,4 @@ func (s *spyAgent) Envelopes() []*loggregator_v2.Envelope {
 	results := make([]*loggregator_v2.Envelope, len(s.envelopes))
 	copy(results, s.envelopes)
 	return results
-}
-
-func (s *spyAgent) Send(context.Context, *loggregator_v2.EnvelopeBatch) (*loggregator_v2.SendResponse, error) {
-	panic("not implemented")
 }
