@@ -23,8 +23,8 @@ var _ = Describe("v1 App", func() {
 		promRegistry := prometheus.NewRegistry()
 		he := healthendpoint.New(promRegistry, gaugeMap)
 		clientCreds, err := plumbing.NewClientCredentials(
-			testhelper.Cert("agent.crt"),
-			testhelper.Cert("agent.key"),
+			testhelper.Cert("metron.crt"),
+			testhelper.Cert("metron.key"),
 			testhelper.Cert("loggregator-ca.crt"),
 			"doppler",
 		)
@@ -142,8 +142,8 @@ func buildAgentConfig(dopplerURI string, dopplerGRPCPort int) app.Config {
 		RouterAddrWithAZ: fmt.Sprintf("%s.%s:%d", availabilityZone, dopplerURI, dopplerGRPCPort),
 
 		GRPC: app.GRPC{
-			CertFile: testhelper.Cert("agent.crt"),
-			KeyFile:  testhelper.Cert("agent.key"),
+			CertFile: testhelper.Cert("metron.crt"),
+			KeyFile:  testhelper.Cert("metron.key"),
 			CAFile:   testhelper.Cert("loggregator-ca.crt"),
 		},
 

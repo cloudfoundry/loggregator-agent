@@ -21,8 +21,8 @@ var _ = Describe("v2 App", func() {
 		promRegistry := prometheus.NewRegistry()
 		he := healthendpoint.New(promRegistry, gaugeMap)
 		clientCreds, err := plumbing.NewClientCredentials(
-			testhelper.Cert("agent.crt"),
-			testhelper.Cert("agent.key"),
+			testhelper.Cert("metron.crt"),
+			testhelper.Cert("metron.key"),
 			testhelper.Cert("loggregator-ca.crt"),
 			"doppler",
 		)
