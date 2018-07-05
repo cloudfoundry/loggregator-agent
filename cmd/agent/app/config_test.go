@@ -31,6 +31,7 @@ var _ = Describe("Config", func() {
 	})
 
 	It("source id defaults to metron", func() {
+		os.Setenv("ROUTER_ADDR", "router-addr")
 		c, err := app.LoadConfig()
 
 		Expect(err).ToNot(HaveOccurred())
