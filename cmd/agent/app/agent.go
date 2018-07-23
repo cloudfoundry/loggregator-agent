@@ -82,7 +82,7 @@ func (a *Agent) Start() {
 
 	ingressClient, err := loggregator.NewIngressClient(ingressTLS,
 		loggregator.WithTag("origin", "loggregator.metron"),
-		loggregator.WithAddr(fmt.Sprintf("localhost:%d", a.config.GRPC.Port)),
+		loggregator.WithAddr(fmt.Sprintf("127.0.0.1:%d", a.config.GRPC.Port)),
 	)
 	if err != nil {
 		log.Fatalf("failed to initialize ingress client: %s", err)
@@ -94,7 +94,7 @@ func (a *Agent) Start() {
 		pulseemitter.WithSourceID(a.config.MetricSourceID),
 	)
 
-	healthRegistrar := startHealthEndpoint(fmt.Sprintf("localhost:%d", a.config.HealthEndpointPort))
+	healthRegistrar := startHealthEndpoint(fmt.Sprintf("127.0.0.1:%d", a.config.HealthEndpointPort))
 
 	appV1 := NewV1App(a.config, healthRegistrar, clientCreds, metricClient)
 	go appV1.Start()

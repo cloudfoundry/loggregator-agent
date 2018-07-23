@@ -32,7 +32,7 @@ func main() {
 }
 
 func runPProf(port uint32) {
-	addr := fmt.Sprintf("localhost:%d", port)
+	addr := fmt.Sprintf("127.0.0.1:%d", port)
 	lis, err := net.Listen("tcp", addr)
 	if err != nil {
 		log.Panicf("Error creating pprof listener: %s", err)
