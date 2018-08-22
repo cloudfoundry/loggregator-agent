@@ -92,6 +92,36 @@ var _ = Describe("MessageAggregator", func() {
 			expectCorrectCounterNameDeltaAndTotal(mockWriter.Events[2], "total", 4, 12)
 		})
 
+		It("overwrites aggregated total when total is set", func() {
+			messageAggregator.Write(createCounterMessage(
+				"total",
+				"fake-origin-4",
+				map[string]string{
+					"protocol": "tcp",
+				},
+			))
+			messageAggregator.Write(createCounterMessageWithTotal(
+				"total",
+				"fake-origin-4",
+				map[string]string{
+					"protocol": "tcp",
+				},
+			))
+			messageAggregator.Write(createCounterMessage(
+				"total",
+				"fake-origin-4",
+				map[string]string{
+					"protocol": "tcp",
+				},
+			))
+
+			Expect(mockWriter.Events).To(HaveLen(3))
+			expectCorrectCounterNameDeltaAndTotal(mockWriter.Events[0], "total", 4, 4)
+			expectCorrectCounterNameDeltaAndTotal(mockWriter.Events[1], "total", 0, 101)
+			expectCorrectCounterNameDeltaAndTotal(mockWriter.Events[2], "total", 4, 105)
+		})
+
+
 		It("accumulates differently-named counters separately", func() {
 			messageAggregator.Write(createCounterMessage("total1", "fake-origin-4", nil))
 			messageAggregator.Write(createCounterMessage("total2", "fake-origin-4", nil))
@@ -189,6 +219,18 @@ func createCounterMessage(name, origin string, tags map[string]string) *events.E
 		CounterEvent: &events.CounterEvent{
 			Name:  proto.String(name),
 			Delta: proto.Uint64(4),
+		},
+		Tags: tags,
+	}
+}
+
+func createCounterMessageWithTotal(name, origin string, tags map[string]string) *events.Envelope {
+	return &events.Envelope{
+		Origin:    proto.String(origin),
+		EventType: events.Envelope_CounterEvent.Enum(),
+		CounterEvent: &events.CounterEvent{
+			Name:  proto.String(name),
+			Total: proto.Uint64(101),
 		},
 		Tags: tags,
 	}
