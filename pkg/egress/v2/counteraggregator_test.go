@@ -94,13 +94,14 @@ var _ = Describe("Counteraggregator", func() {
 		Expect(receivedEnvelope[0].GetCounter().GetTotal()).To(Equal(uint64(20)))
 	})
 
-	It("calculations are unaffected for counter envelopes with total set", func() {
+	It("overwrites aggregated total when total is set", func() {
 		mockWriter := newMockWriter()
 		close(mockWriter.WriteOutput.Ret0)
 
 		aggregator := egress.NewCounterAggregator(mockWriter)
 		aggregator.Write(buildCounterEnvelope(10, "name-1", "origin-1"))
 		aggregator.Write(buildCounterEnvelopeWithTotal(5000, "name-1", "origin-1"))
+		aggregator.Write(buildCounterEnvelope(10, "name-1", "origin-1"))
 
 		var receivedEnvelope []*loggregator_v2.Envelope
 		Expect(mockWriter.WriteInput.Msg).To(Receive(&receivedEnvelope))
@@ -109,7 +110,11 @@ var _ = Describe("Counteraggregator", func() {
 
 		Expect(mockWriter.WriteInput.Msg).To(Receive(&receivedEnvelope))
 		Expect(receivedEnvelope).To(HaveLen(1))
-		Expect(receivedEnvelope[0].GetCounter().GetTotal()).To(Equal(uint64(10)))
+		Expect(receivedEnvelope[0].GetCounter().GetTotal()).To(Equal(uint64(5000)))
+
+		Expect(mockWriter.WriteInput.Msg).To(Receive(&receivedEnvelope))
+		Expect(receivedEnvelope).To(HaveLen(1))
+		Expect(receivedEnvelope[0].GetCounter().GetTotal()).To(Equal(uint64(5010)))
 	})
 
 	It("prunes the cache of totals when there are too many unique counters", func() {

@@ -28,19 +28,24 @@ func NewCounterAggregator(w Writer) *CounterAggregator {
 
 func (ca *CounterAggregator) Write(msgs []*loggregator_v2.Envelope) error {
 	for i := range msgs {
-		if msgs[i].GetCounter() != nil {
+		c := msgs[i].GetCounter()
+		if c != nil {
 			if len(ca.counterTotals) > 10000 {
 				ca.resetTotals()
 			}
 
 			id := counterID{
-				name:     msgs[i].GetCounter().Name,
+				name:     c.Name,
 				tagsHash: hashTags(msgs[i].GetDeprecatedTags()),
 			}
 
-			ca.counterTotals[id] = ca.counterTotals[id] + msgs[i].GetCounter().GetDelta()
+			if c.GetTotal() != 0 {
+				ca.counterTotals[id] = c.GetTotal()
+				continue
+			}
 
-			msgs[i].GetCounter().Total = ca.counterTotals[id]
+			ca.counterTotals[id] = ca.counterTotals[id] + c.GetDelta()
+			c.Total = ca.counterTotals[id]
 		}
 	}
 

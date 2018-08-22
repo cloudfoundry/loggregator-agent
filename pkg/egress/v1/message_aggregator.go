@@ -42,6 +42,12 @@ func (m *MessageAggregator) handleCounter(envelope *events.Envelope) *events.Env
 
 	m.mu.Lock()
 	defer m.mu.Unlock()
+
+	if envelope.GetCounterEvent().GetTotal() != 0 {
+		m.counterTotals[countID] = envelope.GetCounterEvent().GetTotal()
+		return envelope
+	}
+
 	newVal := m.counterTotals[countID] + envelope.GetCounterEvent().GetDelta()
 	m.counterTotals[countID] = newVal
 
