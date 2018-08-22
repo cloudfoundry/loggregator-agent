@@ -121,7 +121,6 @@ var _ = Describe("MessageAggregator", func() {
 			expectCorrectCounterNameDeltaAndTotal(mockWriter.Events[2], "total", 4, 105)
 		})
 
-
 		It("accumulates differently-named counters separately", func() {
 			messageAggregator.Write(createCounterMessage("total1", "fake-origin-4", nil))
 			messageAggregator.Write(createCounterMessage("total2", "fake-origin-4", nil))
