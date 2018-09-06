@@ -8,7 +8,6 @@ import (
 
 	"code.cloudfoundry.org/go-loggregator/rpc/loggregator_v2"
 	clientpool "code.cloudfoundry.org/loggregator-agent/pkg/clientpool/v2"
-	plumbing "code.cloudfoundry.org/loggregator-agent/pkg/plumbing/v2"
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
@@ -17,7 +16,7 @@ import (
 type SpyConnector struct {
 	mu      sync.Mutex
 	closer  io.Closer
-	client  plumbing.DopplerIngress_BatchSenderClient
+	client  loggregator_v2.Ingress_BatchSenderClient
 	err     error
 	called_ int
 }
@@ -25,6 +24,7 @@ type SpyConnector struct {
 func (s *SpyConnector) Connect() (io.Closer, loggregator_v2.Ingress_BatchSenderClient, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+
 	s.called_++
 	return s.closer, s.client, s.err
 }
@@ -40,7 +40,7 @@ func (s *SpyConnector) called() int {
 }
 
 type SpyClient struct {
-	plumbing.DopplerIngress_BatchSenderClient
+	loggregator_v2.Ingress_BatchSenderClient
 
 	batch *loggregator_v2.EnvelopeBatch
 	err   error

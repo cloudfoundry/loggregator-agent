@@ -9,7 +9,6 @@ import (
 	"unsafe"
 
 	"code.cloudfoundry.org/go-loggregator/rpc/loggregator_v2"
-	plumbing "code.cloudfoundry.org/loggregator-agent/pkg/plumbing/v2"
 )
 
 type Connector interface {
@@ -17,7 +16,7 @@ type Connector interface {
 }
 
 type v2GRPCConn struct {
-	client plumbing.DopplerIngress_BatchSenderClient
+	client loggregator_v2.Ingress_BatchSenderClient
 	closer io.Closer
 	writes int64
 }
