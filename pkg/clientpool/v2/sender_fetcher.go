@@ -6,13 +6,8 @@ import (
 	"io"
 	"log"
 
-	"google.golang.org/grpc/codes"
-
 	"code.cloudfoundry.org/go-loggregator/rpc/loggregator_v2"
-	plumbing "code.cloudfoundry.org/loggregator-agent/pkg/plumbing/v2"
-
 	"google.golang.org/grpc"
-	"google.golang.org/grpc/status"
 )
 
 type HealthRegistrar interface {
@@ -38,10 +33,11 @@ func (p *SenderFetcher) Fetch(addr string) (io.Closer, loggregator_v2.Ingress_Ba
 		return nil, nil, fmt.Errorf("error dialing ingestor stream to %s: %s", addr, err)
 	}
 
-	sender, err := openStream(conn)
+	client := loggregator_v2.NewIngressClient(conn)
+	sender, err := client.BatchSender(context.Background())
 	if err != nil {
 		conn.Close()
-		return nil, nil, err
+		return nil, nil, fmt.Errorf("failed to establish stream to doppler (%s): %s", addr, err)
 	}
 
 	p.health.Inc("dopplerConnections")
@@ -54,34 +50,6 @@ func (p *SenderFetcher) Fetch(addr string) (io.Closer, loggregator_v2.Ingress_Ba
 		health: p.health,
 	}
 	return closer, sender, err
-}
-
-func openStream(conn *grpc.ClientConn) (loggregator_v2.Ingress_BatchSenderClient, error) {
-	client := loggregator_v2.NewIngressClient(conn)
-	sender, err := client.BatchSender(context.Background())
-	if err != nil {
-		return nil, fmt.Errorf("error establishing ingestor stream to: %s", err)
-	}
-
-	_, err = sender.CloseAndRecv()
-	s, ok := status.FromError(err)
-	if ok && s.Code() == codes.Unimplemented {
-		log.Printf("failed to open stream, falling back to deprecated API")
-		client := plumbing.NewDopplerIngressClient(conn)
-		sender, err = client.BatchSender(context.Background())
-		if err != nil {
-			return nil, fmt.Errorf("error establishing ingestor stream to: %s", err)
-		}
-
-		return sender, nil
-	}
-
-	sender, err = client.BatchSender(context.Background())
-	if err != nil {
-		return nil, fmt.Errorf("error establishing ingestor stream to: %s", err)
-	}
-
-	return sender, nil
 }
 
 type decrementingCloser struct {
