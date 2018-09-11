@@ -165,8 +165,8 @@ func buildCounterEnvelope(delta uint64, name, origin string) []*loggregator_v2.E
 				Delta: delta,
 			},
 		},
-		DeprecatedTags: map[string]*loggregator_v2.Value{
-			"origin": {Data: &loggregator_v2.Value_Text{origin}},
+		Tags: map[string]string{
+			"origin": origin,
 		},
 	}}
 }
@@ -179,8 +179,8 @@ func buildCounterEnvelopeWithTotal(total uint64, name, origin string) []*loggreg
 				Total: total,
 			},
 		},
-		DeprecatedTags: map[string]*loggregator_v2.Value{
-			"origin": {Data: &loggregator_v2.Value_Text{origin}},
+		Tags: map[string]string{
+			"origin": origin,
 		},
 	}}
 }

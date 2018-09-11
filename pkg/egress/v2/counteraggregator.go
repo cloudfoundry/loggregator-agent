@@ -36,7 +36,7 @@ func (ca *CounterAggregator) Write(msgs []*loggregator_v2.Envelope) error {
 
 			id := counterID{
 				name:     c.Name,
-				tagsHash: hashTags(msgs[i].GetDeprecatedTags()),
+				tagsHash: hashTags(msgs[i].GetTags()),
 			}
 
 			if c.GetTotal() != 0 {
@@ -56,14 +56,11 @@ func (ca *CounterAggregator) resetTotals() {
 	ca.counterTotals = make(map[counterID]uint64)
 }
 
-// hashTags only uses the deprecated tags because agent only egresses
-// the deprecated tags. Therefore, when the deprecated tags are removed,
-// hashTags will have to be updated to receive the preferred tags.
-func hashTags(tags map[string]*loggregator_v2.Value) string {
+func hashTags(tags map[string]string) string {
 	hash := ""
 	elements := []mapElement{}
 	for k, v := range tags {
-		elements = append(elements, mapElement{k, v.String()})
+		elements = append(elements, mapElement{k, v})
 	}
 	sort.Sort(byKey(elements))
 	for _, element := range elements {
