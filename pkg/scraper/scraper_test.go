@@ -27,7 +27,7 @@ var _ = Describe("Scraper", func() {
 		s = scraper.New("some-id", "http://some.url/metrics", spyMetricClient, spyDoer)
 	})
 
-	It("emits a guage metric", func() {
+	It("emits a gauge metric", func() {
 		spyDoer.resp = &http.Response{
 			StatusCode: 200,
 			Body:       ioutil.NopCloser(strings.NewReader(promOutput)),
@@ -133,7 +133,7 @@ func buildEnvelope(name string, value float64, tags map[string]string) *loggrega
 		Message: &loggregator_v2.Envelope_Gauge{
 			Gauge: &loggregator_v2.Gauge{
 				Metrics: map[string]*loggregator_v2.GaugeValue{
-					name: &loggregator_v2.GaugeValue{Value: value},
+					name: {Value: value},
 				},
 			},
 		},

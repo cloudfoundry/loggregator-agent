@@ -63,7 +63,7 @@ func buildEnvelope(name string, value float64) *loggregator_v2.Envelope {
 		Message: &loggregator_v2.Envelope_Gauge{
 			Gauge: &loggregator_v2.Gauge{
 				Metrics: map[string]*loggregator_v2.GaugeValue{
-					name: &loggregator_v2.GaugeValue{Value: value},
+					name: {Value: value},
 				},
 			},
 		},

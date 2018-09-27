@@ -126,7 +126,7 @@ var _ = Describe("Receiver", func() {
 				It("sets the source ID with the origin deprecated tag value", func() {
 					eActual := &loggregator_v2.Envelope{
 						DeprecatedTags: map[string]*loggregator_v2.Value{
-							"origin": &loggregator_v2.Value{
+							"origin": {
 								Data: &loggregator_v2.Value_Text{
 									Text: "deprecated-origin",
 								},
@@ -137,7 +137,7 @@ var _ = Describe("Receiver", func() {
 					eExpected := &loggregator_v2.Envelope{
 						SourceId: "deprecated-origin",
 						DeprecatedTags: map[string]*loggregator_v2.Value{
-							"origin": &loggregator_v2.Value{
+							"origin": {
 								Data: &loggregator_v2.Value_Text{
 									Text: "deprecated-origin",
 								},
@@ -282,7 +282,7 @@ var _ = Describe("Receiver", func() {
 			It("sets the source ID with the origin deprecated tag value", func() {
 				eActual := &loggregator_v2.Envelope{
 					DeprecatedTags: map[string]*loggregator_v2.Value{
-						"origin": &loggregator_v2.Value{
+						"origin": {
 							Data: &loggregator_v2.Value_Text{
 								Text: "deprecated-origin",
 							},
@@ -293,7 +293,7 @@ var _ = Describe("Receiver", func() {
 				eExpected := &loggregator_v2.Envelope{
 					SourceId: "deprecated-origin",
 					DeprecatedTags: map[string]*loggregator_v2.Value{
-						"origin": &loggregator_v2.Value{
+						"origin": {
 							Data: &loggregator_v2.Value_Text{
 								Text: "deprecated-origin",
 							},
@@ -395,7 +395,7 @@ var _ = Describe("Receiver", func() {
 				It("sets the source ID with the origin deprecated tag value", func() {
 					eActual := &loggregator_v2.Envelope{
 						DeprecatedTags: map[string]*loggregator_v2.Value{
-							"origin": &loggregator_v2.Value{
+							"origin": {
 								Data: &loggregator_v2.Value_Text{
 									Text: "deprecated-origin",
 								},
@@ -406,7 +406,7 @@ var _ = Describe("Receiver", func() {
 					eExpected := &loggregator_v2.Envelope{
 						SourceId: "deprecated-origin",
 						DeprecatedTags: map[string]*loggregator_v2.Value{
-							"origin": &loggregator_v2.Value{
+							"origin": {
 								Data: &loggregator_v2.Value_Text{
 									Text: "deprecated-origin",
 								},
