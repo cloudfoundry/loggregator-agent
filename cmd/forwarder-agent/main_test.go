@@ -16,7 +16,7 @@ var _ = Describe("Main", func() {
 	})
 
 	It("has a health endpoint", func() {
-		session := startSyslogAgent("DEBUG_PORT=7392")
+		session := startForwarderAgent("DEBUG_PORT=7392")
 		defer session.Kill()
 
 		Eventually(func() int {
@@ -30,8 +30,8 @@ var _ = Describe("Main", func() {
 	})
 })
 
-func startSyslogAgent(envs ...string) *gexec.Session {
-	path, err := gexec.Build("code.cloudfoundry.org/loggregator-agent/cmd/syslog-agent")
+func startForwarderAgent(envs ...string) *gexec.Session {
+	path, err := gexec.Build("code.cloudfoundry.org/loggregator-agent/cmd/forwarder-agent")
 	if err != nil {
 		panic(err)
 	}

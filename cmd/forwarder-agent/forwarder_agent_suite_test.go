@@ -7,7 +7,7 @@ import (
 	. "github.com/onsi/gomega"
 )
 
-func TestSyslogAgent(t *testing.T) {
+func TestForwarderAgent(t *testing.T) {
 	RegisterFailHandler(Fail)
-	RunSpecs(t, "SyslogAgent Suite")
+	RunSpecs(t, "ForwarderAgent Suite")
 }

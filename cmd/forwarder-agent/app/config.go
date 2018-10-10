@@ -6,12 +6,12 @@ import (
 	envstruct "code.cloudfoundry.org/go-envstruct"
 )
 
-// Config holds the configuration for the Syslog Agent
+// Config holds the configuration for the forwarder agent
 type Config struct {
 	DebugPort uint32 `env:"DEBUG_PORT"`
 }
 
-// LoadConfig will load the configuration for the Syslog Agent from the
+// LoadConfig will load the configuration for the forwarder agent from the
 // environment. If loading the config fails for any reason this function will
 // panic.
 func LoadConfig() Config {
