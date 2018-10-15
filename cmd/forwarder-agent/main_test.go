@@ -83,23 +83,6 @@ var _ = Describe("Main", func() {
 			return string(body)
 		}
 		Eventually(f, 3*time.Second, 500*time.Millisecond).Should(ContainSubstring(`"drainCount": 2`))
-		var resp *http.Response
-		Eventually(func() int {
-			var err error
-			resp, err = http.Get("http://127.0.0.1:7392/debug/vars")
-			if err != nil {
-				return -1
-			}
-
-			resp = resp
-
-			return resp.StatusCode
-		}).Should(Equal(http.StatusOK))
-
-		body, err := ioutil.ReadAll(resp.Body)
-		Expect(err).ToNot(HaveOccurred())
-
-		Expect(string(body)).To(ContainSubstring("drainCount"))
 	})
 })
 

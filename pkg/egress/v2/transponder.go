@@ -9,7 +9,7 @@ import (
 	"code.cloudfoundry.org/loggregator-agent/pkg/plumbing/batching"
 )
 
-type Nexter interface {
+type TryNexter interface {
 	TryNext() (*loggregator_v2.Envelope, bool)
 }
 
@@ -23,7 +23,7 @@ type MetricClient interface {
 }
 
 type Transponder struct {
-	nexter        Nexter
+	nexter        TryNexter
 	writer        Writer
 	tags          map[string]string
 	batcher       *batching.V2EnvelopeBatcher
@@ -34,7 +34,7 @@ type Transponder struct {
 }
 
 func NewTransponder(
-	n Nexter,
+	n TryNexter,
 	w Writer,
 	tags map[string]string,
 	batchSize int,
@@ -61,7 +61,7 @@ func NewTransponder(
 	}
 }
 
-func (t *Transponder) Start() {
+func (t *Transponder) Start() {^
 	b := batching.NewV2EnvelopeBatcher(
 		t.batchSize,
 		t.batchInterval,
