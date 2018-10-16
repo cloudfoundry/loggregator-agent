@@ -1,9 +1,8 @@
 package testhelper
 
 import (
+	"fmt"
 	"sync"
-
-	"code.cloudfoundry.org/go-loggregator/pulseemitter"
 )
 
 type SpyMetricClient struct {
@@ -16,22 +15,30 @@ func NewMetricClient() *SpyMetricClient {
 	}
 }
 
-func (s *SpyMetricClient) NewCounterMetric(name string, opts ...pulseemitter.MetricOption) pulseemitter.CounterMetric {
+func (s *SpyMetricClient) NewCounter(name string) func(uint64) {
 	m := &SpyMetric{}
 	s.metrics[name] = m
 
-	return m
+	return func(delta uint64) {
+		m.Increment(delta)
+	}
 }
 
-func (s *SpyMetricClient) NewGaugeMetric(name, unit string, opts ...pulseemitter.MetricOption) pulseemitter.GaugeMetric {
+func (s *SpyMetricClient) NewGauge(name string) func(float64) {
 	m := &SpyMetric{}
 	s.metrics[name] = m
 
-	return m
+	return func(value float64) {
+		m.Set(value)
+	}
 }
 
 func (s *SpyMetricClient) GetMetric(name string) *SpyMetric {
-	return s.metrics[name]
+	if m, ok := s.metrics[name]; ok {
+		return m
+	}
+
+	panic(fmt.Sprintf("unknown metric: %s", name))
 }
 
 type SpyMetric struct {
@@ -45,8 +52,6 @@ func (s *SpyMetric) Increment(c uint64) {
 	defer s.mu.Unlock()
 	s.delta += c
 }
-
-func (s *SpyMetric) Emit(c pulseemitter.LogClient) {}
 
 func (s *SpyMetric) Set(c float64) {
 	s.mu.Lock()

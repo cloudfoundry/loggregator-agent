@@ -91,7 +91,7 @@ var _ = Describe("Receiver", func() {
 
 			rx.Sender(spySender)
 
-			metric := metricClient.GetMetric("ingress")
+			metric := metricClient.GetMetric("IngressV2")
 			Expect(metric.Delta()).To(Equal(uint64(2)))
 		})
 
@@ -117,7 +117,7 @@ var _ = Describe("Receiver", func() {
 
 				Expect(spySetter.envelopes).To(Receive(Equal(eExpected)))
 
-				metric := metricClient.GetMetric("origin_mappings")
+				metric := metricClient.GetMetric("OriginMappingsV2")
 				Expect(metric.Delta()).To(Equal(uint64(1)))
 				Expect(h.called["originMappings"]).To(Equal(1))
 			})
@@ -156,7 +156,7 @@ var _ = Describe("Receiver", func() {
 
 					Expect(spySetter.envelopes).To(Receive(Equal(eExpected)))
 
-					metric := metricClient.GetMetric("origin_mappings")
+					metric := metricClient.GetMetric("OriginMappingsV2")
 					Expect(metric.Delta()).To(Equal(uint64(1)))
 					Expect(h.called["originMappings"]).To(Equal(1))
 				})
@@ -177,7 +177,7 @@ var _ = Describe("Receiver", func() {
 
 					Expect(spySetter.envelopes).To(Receive(Equal(eActual)))
 
-					metric := metricClient.GetMetric("origin_mappings")
+					metric := metricClient.GetMetric("OriginMappingsV2")
 					Expect(metric.Delta()).To(Equal(uint64(0)))
 					Expect(h.called["originMappings"]).To(Equal(0))
 				})
@@ -237,7 +237,7 @@ var _ = Describe("Receiver", func() {
 
 			Expect(spySetter.envelopes).Should(HaveLen(5))
 
-			metric := metricClient.GetMetric("ingress")
+			metric := metricClient.GetMetric("IngressV2")
 			Expect(metric.Delta()).To(Equal(uint64(5)))
 		})
 
@@ -273,7 +273,7 @@ var _ = Describe("Receiver", func() {
 			Expect(spySetter.envelopes).Should(Receive(Equal(e1Expected)))
 			Expect(spySetter.envelopes).Should(Receive(Equal(e2Expected)))
 
-			metric := metricClient.GetMetric("origin_mappings")
+			metric := metricClient.GetMetric("OriginMappingsV2")
 			Expect(metric.Delta()).To(Equal(uint64(1)))
 			Expect(h.called["originMappings"]).To(Equal(1))
 		})
@@ -312,7 +312,7 @@ var _ = Describe("Receiver", func() {
 
 				Expect(spySetter.envelopes).To(Receive(Equal(eExpected)))
 
-				metric := metricClient.GetMetric("origin_mappings")
+				metric := metricClient.GetMetric("OriginMappingsV2")
 				Expect(metric.Delta()).To(Equal(uint64(1)))
 				Expect(h.called["originMappings"]).To(Equal(1))
 			})
@@ -355,7 +355,7 @@ var _ = Describe("Receiver", func() {
 				Batch: []*loggregator_v2.Envelope{e},
 			})
 
-			metric := metricClient.GetMetric("ingress")
+			metric := metricClient.GetMetric("IngressV2")
 			Expect(metric.Delta()).To(Equal(uint64(1)))
 		})
 
@@ -368,7 +368,7 @@ var _ = Describe("Receiver", func() {
 				Batch: []*loggregator_v2.Envelope{e},
 			})
 
-			metric := metricClient.GetMetric("origin_mappings")
+			metric := metricClient.GetMetric("OriginMappingsV2")
 			Expect(metric.Delta()).To(Equal(uint64(1)))
 			Expect(h.called["originMappings"]).To(Equal(1))
 		})
@@ -420,7 +420,7 @@ var _ = Describe("Receiver", func() {
 
 					Expect(spySetter.envelopes).To(Receive(Equal(eExpected)))
 
-					metric := metricClient.GetMetric("origin_mappings")
+					metric := metricClient.GetMetric("OriginMappingsV2")
 					Expect(metric.Delta()).To(Equal(uint64(1)))
 					Expect(h.called["originMappings"]).To(Equal(1))
 				})
@@ -436,7 +436,7 @@ var _ = Describe("Receiver", func() {
 
 					Expect(spySetter.envelopes).To(Receive(Equal(eActual)))
 
-					metric := metricClient.GetMetric("origin_mappings")
+					metric := metricClient.GetMetric("OriginMappingsV2")
 					Expect(metric.Delta()).To(Equal(uint64(0)))
 					Expect(h.called["originMappings"]).To(Equal(0))
 				})

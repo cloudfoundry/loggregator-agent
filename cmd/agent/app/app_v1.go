@@ -7,7 +7,6 @@ import (
 	"net"
 	"time"
 
-	"code.cloudfoundry.org/go-loggregator/pulseemitter"
 	"code.cloudfoundry.org/loggregator-agent/pkg/clientpool"
 	clientpoolv1 "code.cloudfoundry.org/loggregator-agent/pkg/clientpool/v1"
 	egress "code.cloudfoundry.org/loggregator-agent/pkg/egress/v1"
@@ -122,15 +121,9 @@ func (a *AppV1) setupGRPC() *clientpoolv1.ClientPool {
 		clientpoolv1.WithLookup(a.lookup),
 	))
 
-	avgEnvelopeSize := a.metricClient.NewGaugeMetric("average_envelope", "bytes/minute",
-		pulseemitter.WithVersion(2, 0),
-		pulseemitter.WithTags(map[string]string{
-			"loggregator": "v1",
-		}))
+	avgEnvelopeSize := a.metricClient.NewGauge("AverageEnvelope")
 	tracker := plumbing.NewEnvelopeAverager()
-	tracker.Start(60*time.Second, func(average float64) {
-		avgEnvelopeSize.Set(average)
-	})
+	tracker.Start(60*time.Second, avgEnvelopeSize)
 	statsHandler := clientpool.NewStatsHandler(tracker)
 
 	kp := keepalive.ClientParameters{

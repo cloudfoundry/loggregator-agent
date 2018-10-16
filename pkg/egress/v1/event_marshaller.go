@@ -4,7 +4,6 @@ import (
 	"log"
 	"sync"
 
-	"code.cloudfoundry.org/go-loggregator/pulseemitter"
 	"github.com/cloudfoundry/sonde-go/events"
 	"github.com/gogo/protobuf/proto"
 )
@@ -13,7 +12,7 @@ import (
 
 // MetricClient creates new CounterMetrics to be emitted periodically.
 type MetricClient interface {
-	NewCounterMetric(name string, opts ...pulseemitter.MetricOption) pulseemitter.CounterMetric
+	NewCounter(name string) func(uint64)
 }
 
 type BatchChainByteWriter interface {
@@ -21,14 +20,14 @@ type BatchChainByteWriter interface {
 }
 
 type EventMarshaller struct {
-	egressCounter pulseemitter.CounterMetric
+	egressCounter func(uint64)
 	byteWriter    BatchChainByteWriter
 	bwLock        sync.RWMutex
 }
 
 func NewMarshaller(mc MetricClient) *EventMarshaller {
 	return &EventMarshaller{
-		egressCounter: mc.NewCounterMetric("egress"),
+		egressCounter: mc.NewCounter("Egress"),
 	}
 }
 
@@ -58,5 +57,5 @@ func (m *EventMarshaller) Write(envelope *events.Envelope) {
 	}
 
 	writer.Write(envelopeBytes)
-	m.egressCounter.Increment(1)
+	m.egressCounter(1)
 }

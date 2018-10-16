@@ -1,14 +1,13 @@
 package app
 
 import (
+	"expvar"
 	"fmt"
 	"log"
 	"net"
-	"time"
 
-	"code.cloudfoundry.org/go-loggregator"
-	"code.cloudfoundry.org/go-loggregator/pulseemitter"
 	"code.cloudfoundry.org/loggregator-agent/pkg/healthendpoint"
+	"code.cloudfoundry.org/loggregator-agent/pkg/metrics"
 	"code.cloudfoundry.org/loggregator-agent/pkg/plumbing"
 	"github.com/prometheus/client_golang/prometheus"
 )
@@ -70,30 +69,7 @@ func (a *Agent) Start() {
 		log.Fatalf("Could not use GRPC creds for server: %s", err)
 	}
 
-	batchInterval := time.Duration(a.config.MetricBatchIntervalMilliseconds) * time.Millisecond
-	ingressTLS, err := loggregator.NewIngressTLSConfig(
-		a.config.GRPC.CAFile,
-		a.config.GRPC.CertFile,
-		a.config.GRPC.KeyFile,
-	)
-	if err != nil {
-		log.Fatalf("failed to load ingress TLS config: %s", err)
-	}
-
-	ingressClient, err := loggregator.NewIngressClient(ingressTLS,
-		loggregator.WithTag("origin", "loggregator.metron"),
-		loggregator.WithAddr(fmt.Sprintf("127.0.0.1:%d", a.config.GRPC.Port)),
-	)
-	if err != nil {
-		log.Fatalf("failed to initialize ingress client: %s", err)
-	}
-
-	metricClient := pulseemitter.New(
-		ingressClient,
-		pulseemitter.WithPulseInterval(batchInterval),
-		pulseemitter.WithSourceID(a.config.MetricSourceID),
-	)
-
+	metricClient := metrics.New(expvar.NewMap("Agent"))
 	healthRegistrar := startHealthEndpoint(fmt.Sprintf("127.0.0.1:%d", a.config.HealthEndpointPort))
 
 	appV1 := NewV1App(a.config, healthRegistrar, clientCreds, metricClient)

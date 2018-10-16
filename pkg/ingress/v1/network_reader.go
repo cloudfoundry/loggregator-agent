@@ -5,7 +5,6 @@ import (
 	"net"
 
 	gendiodes "code.cloudfoundry.org/go-diodes"
-	"code.cloudfoundry.org/go-loggregator/pulseemitter"
 	"code.cloudfoundry.org/loggregator-agent/pkg/diodes"
 )
 
@@ -15,13 +14,13 @@ type ByteArrayWriter interface {
 
 // MetricClient creates new CounterMetrics to be emitted periodically.
 type MetricClient interface {
-	NewCounterMetric(name string, opts ...pulseemitter.MetricOption) pulseemitter.CounterMetric
+	NewCounter(name string) func(uint64)
 }
 
 type NetworkReader struct {
 	connection  net.PacketConn
 	writer      ByteArrayWriter
-	rxMsgCount  pulseemitter.CounterMetric
+	rxMsgCount  func(uint64)
 	contextName string
 	buffer      *diodes.OneToOne
 }
@@ -36,15 +35,15 @@ func NewNetworkReader(
 		return nil, err
 	}
 	log.Printf("udp bound to: %s", connection.LocalAddr())
-	rxErrCount := m.NewCounterMetric("dropped")
+	rxErrCount := m.NewCounter("Dropped")
 
 	return &NetworkReader{
 		connection: connection,
-		rxMsgCount: m.NewCounterMetric("ingress"),
+		rxMsgCount: m.NewCounter("Ingress"),
 		writer:     writer,
 		buffer: diodes.NewOneToOne(10000, gendiodes.AlertFunc(func(missed int) {
 			log.Printf("network reader dropped messages %d", missed)
-			rxErrCount.Increment(uint64(missed))
+			rxErrCount(uint64(missed))
 		})),
 	}, nil
 }
@@ -67,7 +66,7 @@ func (nr *NetworkReader) StartReading() {
 func (nr *NetworkReader) StartWriting() {
 	for {
 		data := nr.buffer.Next()
-		nr.rxMsgCount.Increment(1)
+		nr.rxMsgCount(1)
 		nr.writer.Write(data)
 	}
 }

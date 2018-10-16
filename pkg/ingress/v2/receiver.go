@@ -3,7 +3,6 @@ package v2
 import (
 	"log"
 
-	"code.cloudfoundry.org/go-loggregator/pulseemitter"
 	"code.cloudfoundry.org/go-loggregator/rpc/loggregator_v2"
 	"golang.org/x/net/context"
 )
@@ -14,7 +13,7 @@ type DataSetter interface {
 
 // MetricClient creates new CounterMetrics to be emitted periodically.
 type MetricClient interface {
-	NewCounterMetric(name string, opts ...pulseemitter.MetricOption) pulseemitter.CounterMetric
+	NewCounter(name string) func(uint64)
 }
 
 // HealthEndpointClient increments existing metrics.
@@ -24,26 +23,16 @@ type HealthEndpointClient interface {
 
 type Receiver struct {
 	dataSetter           DataSetter
-	ingressMetric        pulseemitter.CounterMetric
-	originMappingsMetric pulseemitter.CounterMetric
+	ingressMetric        func(uint64)
+	originMappingsMetric func(uint64)
 	healthEndpointClient HealthEndpointClient
 }
 
 func NewReceiver(dataSetter DataSetter, metricClient MetricClient, health HealthEndpointClient) *Receiver {
-	// metric-documentation-v2: (loggregator.metron.ingress) The number of
-	// received messages over Metrons V2 gRPC API.
-	ingressMetric := metricClient.NewCounterMetric("ingress",
-		pulseemitter.WithVersion(2, 0),
-	)
-
-	originMappingsMetric := metricClient.NewCounterMetric("origin_mappings",
-		pulseemitter.WithVersion(2, 0),
-	)
-
 	return &Receiver{
 		dataSetter:           dataSetter,
-		ingressMetric:        ingressMetric,
-		originMappingsMetric: originMappingsMetric,
+		ingressMetric:        metricClient.NewCounter("IngressV2"),
+		originMappingsMetric: metricClient.NewCounter("OriginMappingsV2"),
 		healthEndpointClient: health,
 	}
 }
@@ -57,7 +46,7 @@ func (s *Receiver) Sender(sender loggregator_v2.Ingress_SenderServer) error {
 		}
 		e.SourceId = s.sourceID(e)
 		s.dataSetter.Set(e)
-		s.ingressMetric.Increment(1)
+		s.ingressMetric(1)
 	}
 
 	return nil
@@ -75,7 +64,7 @@ func (s *Receiver) BatchSender(sender loggregator_v2.Ingress_BatchSenderServer) 
 			e.SourceId = s.sourceID(e)
 			s.dataSetter.Set(e)
 		}
-		s.ingressMetric.Increment(uint64(len(envelopes.Batch)))
+		s.ingressMetric(uint64(len(envelopes.Batch)))
 	}
 
 	return nil
@@ -87,7 +76,7 @@ func (s *Receiver) Send(_ context.Context, b *loggregator_v2.EnvelopeBatch) (*lo
 		s.dataSetter.Set(e)
 	}
 
-	s.ingressMetric.Increment(uint64(len(b.Batch)))
+	s.ingressMetric(uint64(len(b.Batch)))
 
 	return &loggregator_v2.SendResponse{}, nil
 }
@@ -98,13 +87,13 @@ func (r *Receiver) sourceID(e *loggregator_v2.Envelope) string {
 	}
 
 	if id, ok := e.GetTags()["origin"]; ok {
-		r.originMappingsMetric.Increment(1)
+		r.originMappingsMetric(1)
 		r.healthEndpointClient.Inc("originMappings")
 		return id
 	}
 
 	if id, ok := e.GetDeprecatedTags()["origin"]; ok {
-		r.originMappingsMetric.Increment(1)
+		r.originMappingsMetric(1)
 		r.healthEndpointClient.Inc("originMappings")
 		return id.GetText()
 	}

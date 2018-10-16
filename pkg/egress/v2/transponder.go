@@ -4,7 +4,6 @@ import (
 	"strconv"
 	"time"
 
-	"code.cloudfoundry.org/go-loggregator/pulseemitter"
 	"code.cloudfoundry.org/go-loggregator/rpc/loggregator_v2"
 	"code.cloudfoundry.org/loggregator-agent/pkg/plumbing/batching"
 )
@@ -17,9 +16,9 @@ type Writer interface {
 	Write(msgs []*loggregator_v2.Envelope) error
 }
 
-// MetricClient creates new CounterMetrics to be emitted periodically.
+// MetricClient creates new CounterMetrics.
 type MetricClient interface {
-	NewCounterMetric(name string, opts ...pulseemitter.MetricOption) pulseemitter.CounterMetric
+	NewCounter(name string) func(uint64)
 }
 
 type Transponder struct {
@@ -29,8 +28,8 @@ type Transponder struct {
 	batcher       *batching.V2EnvelopeBatcher
 	batchSize     int
 	batchInterval time.Duration
-	droppedMetric pulseemitter.CounterMetric
-	egressMetric  pulseemitter.CounterMetric
+	droppedMetric func(uint64)
+	egressMetric  func(uint64)
 }
 
 func NewTransponder(
@@ -41,21 +40,12 @@ func NewTransponder(
 	batchInterval time.Duration,
 	metricClient MetricClient,
 ) *Transponder {
-	droppedMetric := metricClient.NewCounterMetric("dropped",
-		pulseemitter.WithVersion(2, 0),
-		pulseemitter.WithTags(map[string]string{"direction": "egress"}),
-	)
-
-	egressMetric := metricClient.NewCounterMetric("egress",
-		pulseemitter.WithVersion(2, 0),
-	)
-
 	return &Transponder{
 		nexter:        n,
 		writer:        w,
 		tags:          tags,
-		droppedMetric: droppedMetric,
-		egressMetric:  egressMetric,
+		droppedMetric: metricClient.NewCounter("DroppedEgressV2"),
+		egressMetric:  metricClient.NewCounter("EgressV2"),
 		batchSize:     batchSize,
 		batchInterval: batchInterval,
 	}
@@ -88,13 +78,13 @@ func (t *Transponder) write(batch []*loggregator_v2.Envelope) {
 	if err := t.writer.Write(batch); err != nil {
 		// metric-documentation-v2: (loggregator.metron.dropped) Number of messages
 		// dropped when failing to write to Dopplers v2 API
-		t.droppedMetric.Increment(uint64(len(batch)))
+		t.droppedMetric(uint64(len(batch)))
 		return
 	}
 
 	// metric-documentation-v2: (loggregator.metron.egress)
 	// Number of messages written to Doppler's v2 API
-	t.egressMetric.Increment(uint64(len(batch)))
+	t.egressMetric(uint64(len(batch)))
 }
 
 func (t *Transponder) addTags(e *loggregator_v2.Envelope) {

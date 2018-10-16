@@ -106,7 +106,7 @@ var _ = Describe("Transponder", func() {
 			go tx.Start()
 
 			f := func() uint64 {
-				return spy.GetMetric("egress").Delta()
+				return spy.GetMetric("EgressV2").Delta()
 			}
 
 			Eventually(f).Should(Equal(uint64(5)))

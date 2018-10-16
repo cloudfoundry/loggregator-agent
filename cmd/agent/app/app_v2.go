@@ -8,7 +8,6 @@ import (
 	"time"
 
 	gendiodes "code.cloudfoundry.org/go-diodes"
-	"code.cloudfoundry.org/go-loggregator/pulseemitter"
 	"code.cloudfoundry.org/loggregator-agent/pkg/clientpool"
 	clientpoolv2 "code.cloudfoundry.org/loggregator-agent/pkg/clientpool/v2"
 	"code.cloudfoundry.org/loggregator-agent/pkg/diodes"
@@ -23,8 +22,8 @@ import (
 
 // MetricClient creates new CounterMetrics to be emitted periodically.
 type MetricClient interface {
-	NewCounterMetric(name string, opts ...pulseemitter.MetricOption) pulseemitter.CounterMetric
-	NewGaugeMetric(name, unit string, opts ...pulseemitter.MetricOption) pulseemitter.GaugeMetric
+	NewCounter(name string) func(uint64)
+	NewGauge(name string) func(float64)
 }
 
 // AppV2Option configures AppV2 options.
@@ -75,15 +74,11 @@ func (a *AppV2) Start() {
 		log.Panic("Failed to load TLS server config")
 	}
 
-	droppedMetric := a.metricClient.NewCounterMetric("dropped",
-		pulseemitter.WithVersion(2, 0),
-		pulseemitter.WithTags(map[string]string{"direction": "ingress"}),
-	)
-
+	droppedMetric := a.metricClient.NewCounter("DroppedIngressv2")
 	envelopeBuffer := diodes.NewManyToOneEnvelopeV2(10000, gendiodes.AlertFunc(func(missed int) {
 		// metric-documentation-v2: (loggregator.metron.dropped) Number of v2 envelopes
 		// dropped from the agent ingress diode
-		droppedMetric.Increment(uint64(missed))
+		droppedMetric(uint64(missed))
 
 		log.Printf("Dropped %d v2 envelopes", missed)
 	}))
@@ -133,15 +128,9 @@ func (a *AppV2) initializePool() *clientpoolv2.ClientPool {
 		clientpoolv2.WithLookup(a.lookup)),
 	)
 
-	avgEnvelopeSize := a.metricClient.NewGaugeMetric("average_envelope", "bytes/minute",
-		pulseemitter.WithVersion(2, 0),
-		pulseemitter.WithTags(map[string]string{
-			"loggregator": "v2",
-		}))
+	avgEnvelopeSize := a.metricClient.NewGauge("AverageEnvelopeV2")
 	tracker := plumbing.NewEnvelopeAverager()
-	tracker.Start(60*time.Second, func(average float64) {
-		avgEnvelopeSize.Set(average)
-	})
+	tracker.Start(60*time.Second, avgEnvelopeSize)
 	statsHandler := clientpool.NewStatsHandler(tracker)
 
 	kp := keepalive.ClientParameters{
