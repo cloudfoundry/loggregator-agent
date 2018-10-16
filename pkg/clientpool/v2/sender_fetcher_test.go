@@ -5,6 +5,7 @@ import (
 	"net"
 
 	"code.cloudfoundry.org/go-loggregator/rpc/loggregator_v2"
+	"code.cloudfoundry.org/loggregator-agent/internal/testhelper"
 	"code.cloudfoundry.org/loggregator-agent/pkg/clientpool/v2"
 	"golang.org/x/net/context"
 	"google.golang.org/grpc"
@@ -14,12 +15,20 @@ import (
 )
 
 var _ = Describe("PusherFetcher", func() {
+	var (
+		mc *testhelper.SpyMetricClient
+	)
+
+	BeforeEach(func() {
+		mc = testhelper.NewMetricClient()
+	})
+
 	It("opens a stream with the ingress client", func() {
 		server := newSpyIngestorServer()
 		Expect(server.Start()).To(Succeed())
 		defer server.Stop()
 
-		fetcher := v2.NewSenderFetcher(newSpyRegistry(), grpc.WithInsecure())
+		fetcher := v2.NewSenderFetcher(mc, grpc.WithInsecure())
 		closer, sender, err := fetcher.Fetch(server.addr)
 		Expect(err).ToNot(HaveOccurred())
 
@@ -35,14 +44,12 @@ var _ = Describe("PusherFetcher", func() {
 		Expect(server.Start()).To(Succeed())
 		defer server.Stop()
 
-		registry := newSpyRegistry()
-
-		fetcher := v2.NewSenderFetcher(registry, grpc.WithInsecure())
+		fetcher := v2.NewSenderFetcher(mc, grpc.WithInsecure())
 		_, _, err := fetcher.Fetch(server.addr)
 		Expect(err).ToNot(HaveOccurred())
 
-		Expect(registry.GetValue("dopplerConnections")).To(Equal(int64(1)))
-		Expect(registry.GetValue("dopplerV2Streams")).To(Equal(int64(1)))
+		Expect(mc.GetMetric("DopplerConnections").GaugeValue()).To(Equal(float64(1)))
+		Expect(mc.GetMetric("DopplerV2Streams").GaugeValue()).To(Equal(float64(1)))
 	})
 
 	It("decrements a counter when a connection is closed", func() {
@@ -50,50 +57,21 @@ var _ = Describe("PusherFetcher", func() {
 		Expect(server.Start()).To(Succeed())
 		defer server.Stop()
 
-		registry := newSpyRegistry()
-
-		fetcher := v2.NewSenderFetcher(registry, grpc.WithInsecure())
+		fetcher := v2.NewSenderFetcher(mc, grpc.WithInsecure())
 		closer, _, err := fetcher.Fetch(server.addr)
 		Expect(err).ToNot(HaveOccurred())
 
 		closer.Close()
-		Expect(registry.GetValue("dopplerConnections")).To(Equal(int64(0)))
-		Expect(registry.GetValue("dopplerV2Streams")).To(Equal(int64(0)))
+		Expect(mc.GetMetric("DopplerConnections").GaugeValue()).To(Equal(float64(0)))
+		Expect(mc.GetMetric("DopplerV2Streams").GaugeValue()).To(Equal(float64(0)))
 	})
 
 	It("returns an error when the server is unavailable", func() {
-		fetcher := v2.NewSenderFetcher(newSpyRegistry(), grpc.WithInsecure())
+		fetcher := v2.NewSenderFetcher(mc, grpc.WithInsecure())
 		_, _, err := fetcher.Fetch("127.0.0.1:1122")
 		Expect(err).To(HaveOccurred())
 	})
 })
-
-type SpyRegistry struct {
-	counters map[string]int64
-}
-
-func newSpyRegistry() *SpyRegistry {
-	return &SpyRegistry{
-		counters: make(map[string]int64),
-	}
-}
-
-func (s *SpyRegistry) Inc(name string) {
-	s.counters[name] += 1
-}
-
-func (s *SpyRegistry) Dec(name string) {
-	s.counters[name] -= 1
-}
-
-func (s *SpyRegistry) GetValue(name string) int64 {
-	v, ok := s.counters[name]
-	if !ok {
-		return -89282828
-	}
-
-	return v
-}
 
 type SpyIngestorServer struct {
 	addr            string

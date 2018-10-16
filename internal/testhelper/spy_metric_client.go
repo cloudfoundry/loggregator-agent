@@ -33,6 +33,15 @@ func (s *SpyMetricClient) NewGauge(name string) func(float64) {
 	}
 }
 
+func (s *SpyMetricClient) NewSumGauge(name string) func(float64) {
+	m := &SpyMetric{}
+	s.metrics[name] = m
+
+	return func(value float64) {
+		m.Add(value)
+	}
+}
+
 func (s *SpyMetricClient) GetMetric(name string) *SpyMetric {
 	if m, ok := s.metrics[name]; ok {
 		return m
@@ -57,6 +66,12 @@ func (s *SpyMetric) Set(c float64) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.gaugeValue = c
+}
+
+func (s *SpyMetric) Add(c float64) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.gaugeValue += c
 }
 
 func (s *SpyMetric) Delta() uint64 {

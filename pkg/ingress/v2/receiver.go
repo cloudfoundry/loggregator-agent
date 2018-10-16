@@ -25,15 +25,13 @@ type Receiver struct {
 	dataSetter           DataSetter
 	ingressMetric        func(uint64)
 	originMappingsMetric func(uint64)
-	healthEndpointClient HealthEndpointClient
 }
 
-func NewReceiver(dataSetter DataSetter, metricClient MetricClient, health HealthEndpointClient) *Receiver {
+func NewReceiver(dataSetter DataSetter, metricClient MetricClient) *Receiver {
 	return &Receiver{
 		dataSetter:           dataSetter,
 		ingressMetric:        metricClient.NewCounter("IngressV2"),
 		originMappingsMetric: metricClient.NewCounter("OriginMappingsV2"),
-		healthEndpointClient: health,
 	}
 }
 
@@ -88,13 +86,11 @@ func (r *Receiver) sourceID(e *loggregator_v2.Envelope) string {
 
 	if id, ok := e.GetTags()["origin"]; ok {
 		r.originMappingsMetric(1)
-		r.healthEndpointClient.Inc("originMappings")
 		return id
 	}
 
 	if id, ok := e.GetDeprecatedTags()["origin"]; ok {
 		r.originMappingsMetric(1)
-		r.healthEndpointClient.Inc("originMappings")
 		return id.GetText()
 	}
 

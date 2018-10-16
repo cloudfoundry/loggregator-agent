@@ -10,20 +10,21 @@ import (
 	"google.golang.org/grpc"
 )
 
-type HealthRegistrar interface {
-	Inc(name string)
-	Dec(name string)
+type MetricClient interface {
+	NewSumGauge(string) func(float64)
 }
 
 type SenderFetcher struct {
-	opts   []grpc.DialOption
-	health HealthRegistrar
+	opts               []grpc.DialOption
+	dopplerConnections func(float64)
+	dopplerV2Streams   func(float64)
 }
 
-func NewSenderFetcher(r HealthRegistrar, opts ...grpc.DialOption) *SenderFetcher {
+func NewSenderFetcher(mc MetricClient, opts ...grpc.DialOption) *SenderFetcher {
 	return &SenderFetcher{
-		opts:   opts,
-		health: r,
+		opts:               opts,
+		dopplerConnections: mc.NewSumGauge("DopplerConnections"),
+		dopplerV2Streams:   mc.NewSumGauge("DopplerV2Streams"),
 	}
 }
 
@@ -40,26 +41,28 @@ func (p *SenderFetcher) Fetch(addr string) (io.Closer, loggregator_v2.Ingress_Ba
 		return nil, nil, fmt.Errorf("failed to establish stream to doppler (%s): %s", addr, err)
 	}
 
-	p.health.Inc("dopplerConnections")
-	p.health.Inc("dopplerV2Streams")
+	p.dopplerConnections(1)
+	p.dopplerV2Streams(1)
 
 	log.Printf("successfully established a stream to doppler %s", addr)
 
 	closer := &decrementingCloser{
-		closer: conn,
-		health: p.health,
+		closer:             conn,
+		dopplerConnections: p.dopplerConnections,
+		dopplerV2Streams:   p.dopplerV2Streams,
 	}
 	return closer, sender, err
 }
 
 type decrementingCloser struct {
-	closer io.Closer
-	health HealthRegistrar
+	closer             io.Closer
+	dopplerConnections func(float64)
+	dopplerV2Streams   func(float64)
 }
 
 func (d *decrementingCloser) Close() error {
-	d.health.Dec("dopplerConnections")
-	d.health.Dec("dopplerV2Streams")
+	d.dopplerConnections(-1)
+	d.dopplerV2Streams(-1)
 
 	return d.closer.Close()
 }

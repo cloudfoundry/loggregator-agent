@@ -10,7 +10,6 @@ import (
 	"code.cloudfoundry.org/loggregator-agent/pkg/clientpool"
 	clientpoolv1 "code.cloudfoundry.org/loggregator-agent/pkg/clientpool/v1"
 	egress "code.cloudfoundry.org/loggregator-agent/pkg/egress/v1"
-	"code.cloudfoundry.org/loggregator-agent/pkg/healthendpoint"
 	ingress "code.cloudfoundry.org/loggregator-agent/pkg/ingress/v1"
 	"code.cloudfoundry.org/loggregator-agent/pkg/plumbing"
 	"google.golang.org/grpc"
@@ -19,11 +18,10 @@ import (
 )
 
 type AppV1 struct {
-	config          *Config
-	creds           credentials.TransportCredentials
-	healthRegistrar *healthendpoint.Registrar
-	metricClient    MetricClient
-	lookup          func(string) ([]net.IP, error)
+	config       *Config
+	creds        credentials.TransportCredentials
+	metricClient MetricClient
+	lookup       func(string) ([]net.IP, error)
 }
 
 // AppV1Option configures AppV1 options.
@@ -38,17 +36,15 @@ func WithV1Lookup(l func(string) ([]net.IP, error)) func(*AppV1) {
 
 func NewV1App(
 	c *Config,
-	r *healthendpoint.Registrar,
 	creds credentials.TransportCredentials,
 	m MetricClient,
 	opts ...AppV1Option,
 ) *AppV1 {
 	a := &AppV1{
-		config:          c,
-		healthRegistrar: r,
-		creds:           creds,
-		metricClient:    m,
-		lookup:          net.LookupIP,
+		config:       c,
+		creds:        creds,
+		metricClient: m,
+		lookup:       net.LookupIP,
 	}
 
 	for _, o := range opts {
@@ -132,7 +128,7 @@ func (a *AppV1) setupGRPC() *clientpoolv1.ClientPool {
 		PermitWithoutStream: true,
 	}
 	fetcher := clientpoolv1.NewPusherFetcher(
-		a.healthRegistrar,
+		a.metricClient,
 		grpc.WithTransportCredentials(a.creds),
 		grpc.WithStatsHandler(statsHandler),
 		grpc.WithKeepaliveParams(kp),

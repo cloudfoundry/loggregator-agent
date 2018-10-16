@@ -52,3 +52,16 @@ func (m *Metrics) NewGauge(name string) func(value float64) {
 
 	return f.Set
 }
+
+// NewSumGauge returns a func to be used to add to the value of a gauge
+// metric.
+func (m *Metrics) NewSumGauge(name string) func(delta float64) {
+	if m.m == nil {
+		return func(_ float64) {}
+	}
+
+	m.m.AddFloat(name, 0)
+	f := m.m.Get(name).(*expvar.Float)
+
+	return f.Add
+}

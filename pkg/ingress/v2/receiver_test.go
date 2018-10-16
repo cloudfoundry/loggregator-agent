@@ -11,7 +11,6 @@ import (
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
-	"github.com/prometheus/client_golang/prometheus"
 )
 
 var _ = Describe("Receiver", func() {
@@ -19,15 +18,12 @@ var _ = Describe("Receiver", func() {
 		rx           *ingress.Receiver
 		spySetter    *SpySetter
 		metricClient *testhelper.SpyMetricClient
-		h            *spyHealthEndpointClient
 	)
 
 	BeforeEach(func() {
-		h = newSpyHealthEndpointClient()
-
 		spySetter = NewSpySetter()
 		metricClient = testhelper.NewMetricClient()
-		rx = ingress.NewReceiver(spySetter, metricClient, h)
+		rx = ingress.NewReceiver(spySetter, metricClient)
 	})
 
 	Describe("Sender()", func() {
@@ -119,7 +115,6 @@ var _ = Describe("Receiver", func() {
 
 				metric := metricClient.GetMetric("OriginMappingsV2")
 				Expect(metric.Delta()).To(Equal(uint64(1)))
-				Expect(h.called["originMappings"]).To(Equal(1))
 			})
 
 			Context("when the origin tag is not set", func() {
@@ -158,7 +153,6 @@ var _ = Describe("Receiver", func() {
 
 					metric := metricClient.GetMetric("OriginMappingsV2")
 					Expect(metric.Delta()).To(Equal(uint64(1)))
-					Expect(h.called["originMappings"]).To(Equal(1))
 				})
 			})
 
@@ -179,7 +173,6 @@ var _ = Describe("Receiver", func() {
 
 					metric := metricClient.GetMetric("OriginMappingsV2")
 					Expect(metric.Delta()).To(Equal(uint64(0)))
-					Expect(h.called["originMappings"]).To(Equal(0))
 				})
 			})
 		})
@@ -275,7 +268,6 @@ var _ = Describe("Receiver", func() {
 
 			metric := metricClient.GetMetric("OriginMappingsV2")
 			Expect(metric.Delta()).To(Equal(uint64(1)))
-			Expect(h.called["originMappings"]).To(Equal(1))
 		})
 
 		Context("when the origin tag is not set", func() {
@@ -314,7 +306,6 @@ var _ = Describe("Receiver", func() {
 
 				metric := metricClient.GetMetric("OriginMappingsV2")
 				Expect(metric.Delta()).To(Equal(uint64(1)))
-				Expect(h.called["originMappings"]).To(Equal(1))
 			})
 		})
 	})
@@ -370,7 +361,6 @@ var _ = Describe("Receiver", func() {
 
 			metric := metricClient.GetMetric("OriginMappingsV2")
 			Expect(metric.Delta()).To(Equal(uint64(1)))
-			Expect(h.called["originMappings"]).To(Equal(1))
 		})
 
 		Context("when source ID is not set", func() {
@@ -422,7 +412,6 @@ var _ = Describe("Receiver", func() {
 
 					metric := metricClient.GetMetric("OriginMappingsV2")
 					Expect(metric.Delta()).To(Equal(uint64(1)))
-					Expect(h.called["originMappings"]).To(Equal(1))
 				})
 			})
 
@@ -438,7 +427,6 @@ var _ = Describe("Receiver", func() {
 
 					metric := metricClient.GetMetric("OriginMappingsV2")
 					Expect(metric.Delta()).To(Equal(uint64(0)))
-					Expect(h.called["originMappings"]).To(Equal(0))
 				})
 			})
 		})
@@ -501,32 +489,4 @@ func NewSpySetter() *SpySetter {
 
 func (s *SpySetter) Set(e *loggregator_v2.Envelope) {
 	s.envelopes <- e
-}
-
-type spyHealthEndpointClient struct {
-	called map[string]int
-}
-
-func newSpyHealthEndpointClient() *spyHealthEndpointClient {
-	return &spyHealthEndpointClient{
-		called: make(map[string]int),
-	}
-}
-
-func (s *spyHealthEndpointClient) Inc(name string) {
-	count := s.called[name]
-	s.called[name] = count + 1
-}
-
-func stubGaugeMap() *map[string]prometheus.Gauge {
-	return &map[string]prometheus.Gauge{
-		"originMappings": prometheus.NewGauge(
-			prometheus.GaugeOpts{
-				Namespace: "loggregator",
-				Subsystem: "agent",
-				Name:      "originMappings",
-				Help:      "Number of origin -> source id conversions",
-			},
-		),
-	}
 }

@@ -5,21 +5,16 @@ import (
 
 	"code.cloudfoundry.org/loggregator-agent/cmd/agent/app"
 	"code.cloudfoundry.org/loggregator-agent/internal/testhelper"
-	"code.cloudfoundry.org/loggregator-agent/pkg/healthendpoint"
 	"code.cloudfoundry.org/loggregator-agent/pkg/plumbing"
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
-	"github.com/prometheus/client_golang/prometheus"
 )
 
 var _ = Describe("v2 App", func() {
 	It("uses DopplerAddrWithAZ for AZ affinity", func() {
 		spyLookup := newSpyLookup()
-		gaugeMap := stubGaugeMap()
 
-		promRegistry := prometheus.NewRegistry()
-		he := healthendpoint.New(promRegistry, gaugeMap)
 		clientCreds, err := plumbing.NewClientCredentials(
 			testhelper.Cert("metron.crt"),
 			testhelper.Cert("metron.key"),
@@ -42,7 +37,6 @@ var _ = Describe("v2 App", func() {
 
 		app := app.NewV2App(
 			&config,
-			he,
 			clientCreds,
 			serverCreds,
 			testhelper.NewMetricClient(),

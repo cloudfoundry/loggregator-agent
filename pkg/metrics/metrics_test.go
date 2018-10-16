@@ -35,6 +35,15 @@ var _ = Describe("Metrics", func() {
 		Expect(spyMap.getValue("some-gauge")).To(Equal(101.1))
 	})
 
+	It("publishes the value of a sum gauge", func() {
+		c := m.NewSumGauge("sum-gauge")
+		c(10.0)
+		c(20.0)
+		c(-0.5)
+
+		Expect(spyMap.getValue("sum-gauge")).To(Equal(29.5))
+	})
+
 	It("deals with a nil map", func() {
 		m = metrics.New(nil)
 		Expect(func() { m.NewGauge("some-gauge") }).ToNot(Panic())

@@ -12,7 +12,6 @@ import (
 	clientpoolv2 "code.cloudfoundry.org/loggregator-agent/pkg/clientpool/v2"
 	"code.cloudfoundry.org/loggregator-agent/pkg/diodes"
 	egress "code.cloudfoundry.org/loggregator-agent/pkg/egress/v2"
-	"code.cloudfoundry.org/loggregator-agent/pkg/healthendpoint"
 	ingress "code.cloudfoundry.org/loggregator-agent/pkg/ingress/v2"
 	"code.cloudfoundry.org/loggregator-agent/pkg/plumbing"
 	"google.golang.org/grpc"
@@ -20,10 +19,11 @@ import (
 	"google.golang.org/grpc/keepalive"
 )
 
-// MetricClient creates new CounterMetrics to be emitted periodically.
+// MetricClient is used to serve metrics.
 type MetricClient interface {
 	NewCounter(name string) func(uint64)
 	NewGauge(name string) func(float64)
+	NewSumGauge(name string) func(float64)
 }
 
 // AppV2Option configures AppV2 options.
@@ -37,29 +37,26 @@ func WithV2Lookup(l func(string) ([]net.IP, error)) func(*AppV2) {
 }
 
 type AppV2 struct {
-	config          *Config
-	healthRegistrar *healthendpoint.Registrar
-	clientCreds     credentials.TransportCredentials
-	serverCreds     credentials.TransportCredentials
-	metricClient    MetricClient
-	lookup          func(string) ([]net.IP, error)
+	config       *Config
+	clientCreds  credentials.TransportCredentials
+	serverCreds  credentials.TransportCredentials
+	metricClient MetricClient
+	lookup       func(string) ([]net.IP, error)
 }
 
 func NewV2App(
 	c *Config,
-	r *healthendpoint.Registrar,
 	clientCreds credentials.TransportCredentials,
 	serverCreds credentials.TransportCredentials,
 	metricClient MetricClient,
 	opts ...AppV2Option,
 ) *AppV2 {
 	a := &AppV2{
-		config:          c,
-		healthRegistrar: r,
-		clientCreds:     clientCreds,
-		serverCreds:     serverCreds,
-		metricClient:    metricClient,
-		lookup:          net.LookupIP,
+		config:       c,
+		clientCreds:  clientCreds,
+		serverCreds:  serverCreds,
+		metricClient: metricClient,
+		lookup:       net.LookupIP,
 	}
 
 	for _, o := range opts {
@@ -74,7 +71,7 @@ func (a *AppV2) Start() {
 		log.Panic("Failed to load TLS server config")
 	}
 
-	droppedMetric := a.metricClient.NewCounter("DroppedIngressv2")
+	droppedMetric := a.metricClient.NewCounter("DroppedIngressV2")
 	envelopeBuffer := diodes.NewManyToOneEnvelopeV2(10000, gendiodes.AlertFunc(func(missed int) {
 		// metric-documentation-v2: (loggregator.metron.dropped) Number of v2 envelopes
 		// dropped from the agent ingress diode
@@ -97,7 +94,7 @@ func (a *AppV2) Start() {
 	agentAddress := fmt.Sprintf("127.0.0.1:%d", a.config.GRPC.Port)
 	log.Printf("agent v2 API started on addr %s", agentAddress)
 
-	rx := ingress.NewReceiver(envelopeBuffer, a.metricClient, a.healthRegistrar)
+	rx := ingress.NewReceiver(envelopeBuffer, a.metricClient)
 	kp := keepalive.EnforcementPolicy{
 		MinTime:             10 * time.Second,
 		PermitWithoutStream: true,
@@ -139,7 +136,7 @@ func (a *AppV2) initializePool() *clientpoolv2.ClientPool {
 		PermitWithoutStream: true,
 	}
 	fetcher := clientpoolv2.NewSenderFetcher(
-		a.healthRegistrar,
+		a.metricClient,
 		grpc.WithTransportCredentials(a.clientCreds),
 		grpc.WithStatsHandler(statsHandler),
 		grpc.WithKeepaliveParams(kp),

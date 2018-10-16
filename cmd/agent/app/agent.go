@@ -5,11 +5,10 @@ import (
 	"fmt"
 	"log"
 	"net"
+	"net/http"
 
-	"code.cloudfoundry.org/loggregator-agent/pkg/healthendpoint"
 	"code.cloudfoundry.org/loggregator-agent/pkg/metrics"
 	"code.cloudfoundry.org/loggregator-agent/pkg/plumbing"
-	"github.com/prometheus/client_golang/prometheus"
 )
 
 type Agent struct {
@@ -70,60 +69,23 @@ func (a *Agent) Start() {
 	}
 
 	metricClient := metrics.New(expvar.NewMap("Agent"))
-	healthRegistrar := startHealthEndpoint(fmt.Sprintf("127.0.0.1:%d", a.config.HealthEndpointPort))
 
-	appV1 := NewV1App(a.config, healthRegistrar, clientCreds, metricClient)
+	appV1 := NewV1App(a.config, clientCreds, metricClient)
 	go appV1.Start()
 
-	appV2 := NewV2App(a.config, healthRegistrar, clientCreds, serverCreds, metricClient)
+	appV2 := NewV2App(a.config, clientCreds, serverCreds, metricClient)
 	go appV2.Start()
+
+	go a.runHealthEndpoint()
 }
 
-func startHealthEndpoint(addr string) *healthendpoint.Registrar {
-	promRegistry := prometheus.NewRegistry()
-	healthendpoint.StartServer(addr, promRegistry)
-	healthRegistrar := healthendpoint.New(promRegistry, map[string]prometheus.Gauge{
-		// metric-documentation-health: (dopplerConnections)
-		// Number of connections open to dopplers.
-		"dopplerConnections": prometheus.NewGauge(
-			prometheus.GaugeOpts{
-				Namespace: "loggregator",
-				Subsystem: "agent",
-				Name:      "dopplerConnections",
-				Help:      "Number of connections open to dopplers",
-			},
-		),
-		// metric-documentation-health: (dopplerV1Streams)
-		// Number of V1 gRPC streams to dopplers.
-		"dopplerV1Streams": prometheus.NewGauge(
-			prometheus.GaugeOpts{
-				Namespace: "loggregator",
-				Subsystem: "agent",
-				Name:      "dopplerV1Streams",
-				Help:      "Number of V1 gRPC streams to dopplers",
-			},
-		),
-		// metric-documentation-health: (dopplerV2Streams)
-		// Number of V2 gRPC streams to dopplers.
-		"dopplerV2Streams": prometheus.NewGauge(
-			prometheus.GaugeOpts{
-				Namespace: "loggregator",
-				Subsystem: "agent",
-				Name:      "dopplerV2Streams",
-				Help:      "Number of V2 gRPC streams to dopplers",
-			},
-		),
-		// metric-documentation-health: (originMappings)
-		// Number of origin -> sourceId mappings
-		"originMappings": prometheus.NewGauge(
-			prometheus.GaugeOpts{
-				Namespace: "loggregator",
-				Subsystem: "agent",
-				Name:      "originMappings",
-				Help:      "Number of origin -> source id conversions",
-			},
-		),
-	})
+func (a *Agent) runHealthEndpoint() {
+	addr := fmt.Sprintf("127.0.0.1:%d", a.config.HealthEndpointPort)
+	lis, err := net.Listen("tcp", addr)
+	if err != nil {
+		log.Fatalf("Unable to setup Health endpoint (%s): %s", addr, err)
+	}
+	log.Printf("health bound to: %s", lis.Addr())
 
-	return healthRegistrar
+	http.Serve(lis, nil)
 }
