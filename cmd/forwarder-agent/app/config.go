@@ -7,6 +7,16 @@ import (
 	envstruct "code.cloudfoundry.org/go-envstruct"
 )
 
+// GRPC stores the configuration for the router as a server using a PORT
+// with mTLS certs and as a client.
+type GRPC struct {
+	Port         uint16   `env:"AGENT_PORT, report"`
+	CAFile       string   `env:"AGENT_CA_FILE, required, report"`
+	CertFile     string   `env:"AGENT_CERT_FILE, required, report"`
+	KeyFile      string   `env:"AGENT_KEY_FILE, required, report"`
+	CipherSuites []string `env:"AGENT_CIPHER_SUITES, report"`
+}
+
 // Config holds the configuration for the forwarder agent
 type Config struct {
 	APIURL             string        `env:"API_URL,              required, report"`
@@ -18,7 +28,14 @@ type Config struct {
 	APIPollingInterval time.Duration `env:"API_POLLING_INTERVAL, report"`
 	APIBatchSize       int           `env:"API_BATCH_SIZE, report"`
 
+	// DownstreamIngressAddrs will receive each envelope. It is assumed to
+	// adhere to the Loggregator Ingress Service and use the provided TLS
+	// configuration.
+	DownstreamIngressAddrs []string `env:"DOWNSTREAM_INGRESS_ADDRS, report"`
+
 	DebugPort uint16 `env:"DEBUG_PORT, report"`
+
+	GRPC GRPC
 }
 
 // LoadConfig will load the configuration for the forwarder agent from the
@@ -27,6 +44,9 @@ type Config struct {
 func LoadConfig() Config {
 	cfg := Config{
 		APIPollingInterval: 15 * time.Second,
+		GRPC: GRPC{
+			Port: 3458,
+		},
 	}
 	if err := envstruct.Load(&cfg); err != nil {
 		panic(fmt.Sprintf("Failed to load config from environment: %s", err))

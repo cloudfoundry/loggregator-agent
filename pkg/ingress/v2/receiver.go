@@ -16,11 +16,6 @@ type MetricClient interface {
 	NewCounter(name string) func(uint64)
 }
 
-// HealthEndpointClient increments existing metrics.
-type HealthEndpointClient interface {
-	Inc(string)
-}
-
 type Receiver struct {
 	dataSetter           DataSetter
 	ingressMetric        func(uint64)

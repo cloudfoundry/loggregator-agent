@@ -43,5 +43,8 @@ func main() {
 		metrics.New(expvar.NewMap("ForwarderAgent")),
 		bf,
 		cfg.APIPollingInterval,
+		cfg.GRPC,
+		cfg.DownstreamIngressAddrs,
+		log,
 	).Run(true)
 }
