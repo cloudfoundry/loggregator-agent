@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io/ioutil"
 	"net/http"
+	"net/url"
 	"strings"
 	"sync"
 
@@ -70,10 +71,17 @@ func (f *BindingFetcher) FetchBindings() ([]syslog.Binding, error) {
 			for _, drainURL := range bindingData.Drains {
 				// TODO: remove prefix when forwarder-agent is no longer
 				// feature-flagged
-				if strings.HasPrefix(drainURL, "v3-") {
+				u, err := url.Parse(drainURL)
+				if err != nil {
+					continue
+				}
+
+				if strings.HasSuffix(u.Scheme, "-v3") {
+					u.Scheme = strings.TrimSuffix(u.Scheme, "-v3")
+
 					bindings = append(bindings, syslog.Binding{
 						Hostname: hostname,
-						Drain:    strings.TrimPrefix(drainURL, "v3-"),
+						Drain:    u.String(),
 						AppId:    appID,
 					})
 				}

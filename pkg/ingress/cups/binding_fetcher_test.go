@@ -35,8 +35,8 @@ var _ = Describe("BindingFetcher", func() {
 								  "drains": [
 									"syslog://some.url",
 									"syslog://some.other.url",
-									"v3-syslog://v3.other.url",
-									"v3-https://v3.other.url"
+									"syslog-v3://v3.other.url",
+									"https-v3://v3.other.url"
 								  ],
 								  "hostname": "org.space.logspinner"
 								}

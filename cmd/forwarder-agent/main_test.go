@@ -51,13 +51,13 @@ var _ = Describe("Main", func() {
 					"some-id": appBindings{
 						Hostname: "org.space.name",
 						Drains: []string{
-							"v3-" + syslogHTTPS.server.URL,
+							strings.Replace(syslogHTTPS.server.URL, "https", "https-v3", 1),
 						},
 					},
 					"some-id-tls": appBindings{
 						Hostname: "org.space.name",
 						Drains: []string{
-							"v3-syslog-tls://" + syslogTLS.lis.Addr().String(),
+							"syslog-tls-v3://" + syslogTLS.lis.Addr().String(),
 						},
 					},
 				},
