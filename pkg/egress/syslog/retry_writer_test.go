@@ -242,9 +242,9 @@ func (s *spyLogClient) sourceInstance() map[string]struct{} {
 	return m
 }
 
-func buildDelay(mulitplier time.Duration) func(int) time.Duration {
+func buildDelay(multiplier time.Duration) func(int) time.Duration {
 	return func(attempt int) time.Duration {
-		return time.Duration(attempt) * mulitplier
+		return time.Duration(attempt) * multiplier
 	}
 }
 
