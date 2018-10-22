@@ -2,6 +2,7 @@ package main_test
 
 import (
 	"context"
+	"crypto/tls"
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
@@ -11,12 +12,14 @@ import (
 	"net/http/httptest"
 	"os/exec"
 	"strings"
+	"sync"
 	"time"
 
 	loggregator "code.cloudfoundry.org/go-loggregator"
 	"code.cloudfoundry.org/go-loggregator/rpc/loggregator_v2"
 	"code.cloudfoundry.org/loggregator-agent/internal/testhelper"
 	"code.cloudfoundry.org/loggregator-agent/pkg/plumbing"
+	"code.cloudfoundry.org/rfc5424"
 	"github.com/onsi/gomega/gexec"
 	"google.golang.org/grpc"
 
@@ -26,30 +29,35 @@ import (
 
 var _ = Describe("Main", func() {
 	var (
+		syslogHTTPS  *syslogHTTPSServer
+		syslogTLS    *syslogTCPServer
 		cupsProvider *httptest.Server
 		grpcPort     = 20000
 	)
 
 	BeforeEach(func() {
+		syslogHTTPS = newSyslogHTTPSServer()
+		syslogTLS = newSyslogTLSServer()
+
 		cupsProvider = httptest.NewServer(
 			&fakeCC{
 				results: results{
-					"9be15160-4845-4f05-b089-40e827ba61f1": appBindings{
+					"v2-drain": appBindings{
 						Hostname: "org.space.name",
 						Drains: []string{
-							"syslog://1.1.1.1",
+							syslogHTTPS.server.URL,
 						},
 					},
-					"9be15160-4845-4f05-b089-40e827ba61f2": appBindings{
+					"some-id": appBindings{
 						Hostname: "org.space.name",
 						Drains: []string{
-							"v3-syslog://1.1.1.1",
+							"v3-" + syslogHTTPS.server.URL,
 						},
 					},
-					"9be15160-4845-4f05-b089-40e827ba61f13": appBindings{
+					"some-id-tls": appBindings{
 						Hostname: "org.space.name",
 						Drains: []string{
-							"v3-syslog://1.1.1.2",
+							"v3-syslog-tls://" + syslogTLS.lis.Addr().String(),
 						},
 					},
 				},
@@ -116,7 +124,7 @@ var _ = Describe("Main", func() {
 		Expect(string(body)).To(ContainSubstring("drainCount"))
 	})
 
-	FIt("forwards all envelopes downstream", func() {
+	It("forwards all envelopes downstream", func() {
 		downstream1 := startSpyLoggregatorV2Ingress()
 		downstream2 := startSpyLoggregatorV2Ingress()
 
@@ -175,6 +183,88 @@ var _ = Describe("Main", func() {
 
 		Eventually(downstream1.envelopes, 5).Should(Receive(Equal(e)))
 		Eventually(downstream2.envelopes, 5).Should(Receive(Equal(e)))
+	})
+
+	It("forwards envelopes to syslog drains", func() {
+		session := startForwarderAgent(
+			fmt.Sprintf("API_CA_FILE_PATH=%s", testhelper.Cert("capi-ca.crt")),
+			fmt.Sprintf("API_CERT_FILE_PATH=%s", testhelper.Cert("forwarder.crt")),
+			fmt.Sprintf("API_COMMON_NAME=%s", "capiCA"),
+			fmt.Sprintf("API_KEY_FILE_PATH=%s", testhelper.Cert("forwarder.key")),
+			"API_POLLING_INTERVAL=10ms",
+			"DRAIN_SKIP_CERT_VERIFY=true",
+			fmt.Sprintf("API_URL=%s", cupsProvider.URL),
+			fmt.Sprintf("AGENT_PORT=%d", grpcPort),
+			fmt.Sprintf("AGENT_CA_FILE=%s", testhelper.Cert("loggregator-ca.crt")),
+			fmt.Sprintf("AGENT_CERT_FILE=%s", testhelper.Cert("metron.crt")),
+			fmt.Sprintf("AGENT_KEY_FILE=%s", testhelper.Cert("metron.key")),
+		)
+		defer session.Kill()
+
+		tlsConfig, err := loggregator.NewIngressTLSConfig(
+			testhelper.Cert("loggregator-ca.crt"),
+			testhelper.Cert("metron.crt"),
+			testhelper.Cert("metron.key"),
+		)
+		Expect(err).ToNot(HaveOccurred())
+		ingressClient, err := loggregator.NewIngressClient(
+			tlsConfig,
+			loggregator.WithAddr(fmt.Sprintf("127.0.0.1:%d", grpcPort)),
+			// loggregator.WithLogger(log.New(GinkgoWriter, "[TEST INGRESS CLIENT] ", 0)),
+			loggregator.WithBatchMaxSize(1),
+		)
+		Expect(err).ToNot(HaveOccurred())
+
+		e := &loggregator_v2.Envelope{
+			Timestamp: time.Now().UnixNano(),
+			SourceId:  "some-id",
+			Message: &loggregator_v2.Envelope_Log{
+				Log: &loggregator_v2.Log{
+					Payload: []byte("hello"),
+				},
+			},
+		}
+
+		eTLS := &loggregator_v2.Envelope{
+			Timestamp: time.Now().UnixNano(),
+			SourceId:  "some-id-tls",
+			Message: &loggregator_v2.Envelope_Log{
+				Log: &loggregator_v2.Log{
+					Payload: []byte("hello"),
+				},
+			},
+		}
+
+		ctx, cancel := context.WithCancel(context.Background())
+		defer cancel()
+		go func() {
+			ticker := time.NewTicker(10 * time.Millisecond)
+			for {
+				select {
+				case <-ticker.C:
+					ingressClient.Emit(e)
+					ingressClient.Emit(eTLS)
+				case <-ctx.Done():
+					return
+				}
+			}
+		}()
+
+		var msg *rfc5424.Message
+		Eventually(syslogHTTPS.receivedMessages, 5).Should(Receive(&msg))
+		Expect(msg.AppName).To(Equal("some-id"))
+
+		Consistently(func() string {
+			select {
+			case msg := <-syslogHTTPS.receivedMessages:
+				return msg.AppName
+			default:
+				return ""
+			}
+		}).ShouldNot(Equal("some-id-tls"))
+
+		Eventually(syslogTLS.receivedMessages, 5).Should(Receive(&msg))
+		Expect(msg.AppName).To(Equal("some-id-tls"))
 	})
 })
 
@@ -295,4 +385,99 @@ func startSpyLoggregatorV2Ingress() *spyLoggregatorV2Ingress {
 	go grpcServer.Serve(lis)
 
 	return s
+}
+
+type syslogHTTPSServer struct {
+	receivedMessages chan *rfc5424.Message
+	server           *httptest.Server
+}
+
+func newSyslogHTTPSServer() *syslogHTTPSServer {
+	syslogServer := syslogHTTPSServer{
+		receivedMessages: make(chan *rfc5424.Message, 100),
+	}
+
+	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		msg := &rfc5424.Message{}
+
+		data, err := ioutil.ReadAll(r.Body)
+		if err != nil {
+			panic(err)
+		}
+
+		err = msg.UnmarshalBinary(data)
+		if err != nil {
+			panic(err)
+		}
+
+		// msg.AppName
+		// msg.MessageID
+		syslogServer.receivedMessages <- msg
+	}))
+
+	syslogServer.server = server
+	return &syslogServer
+}
+
+type syslogTCPServer struct {
+	lis              net.Listener
+	mu               sync.Mutex
+	receivedMessages chan *rfc5424.Message
+}
+
+func newSyslogTCPServer() *syslogTCPServer {
+	lis, err := net.Listen("tcp", ":0")
+	Expect(err).ToNot(HaveOccurred())
+	m := &syslogTCPServer{
+		receivedMessages: make(chan *rfc5424.Message, 100),
+		lis:              lis,
+	}
+	go m.accept()
+	return m
+}
+
+func newSyslogTLSServer() *syslogTCPServer {
+	lis, err := net.Listen("tcp", ":0")
+	Expect(err).ToNot(HaveOccurred())
+	cert, err := tls.LoadX509KeyPair(
+		testhelper.Cert("forwarder.crt"),
+		testhelper.Cert("forwarder.key"),
+	)
+	Expect(err).ToNot(HaveOccurred())
+	tlsLis := tls.NewListener(lis, &tls.Config{
+		Certificates: []tls.Certificate{cert},
+	})
+	m := &syslogTCPServer{
+		receivedMessages: make(chan *rfc5424.Message, 100),
+		lis:              tlsLis,
+	}
+	go m.accept()
+	return m
+}
+
+func (m *syslogTCPServer) accept() {
+	for {
+		conn, err := m.lis.Accept()
+		if err != nil {
+			return
+		}
+		go m.handleConn(conn)
+	}
+}
+
+func (m *syslogTCPServer) handleConn(conn net.Conn) {
+	for {
+		var msg rfc5424.Message
+
+		_, err := msg.ReadFrom(conn)
+		if err != nil {
+			return
+		}
+
+		m.receivedMessages <- &msg
+	}
+}
+
+func (m *syslogTCPServer) addr() net.Addr {
+	return m.lis.Addr()
 }

@@ -28,7 +28,7 @@ func main() {
 	if err != nil {
 		log.Fatalf("Invalid TLS config: %s", err)
 	}
-	apiTLSConfig.InsecureSkipVerify = cfg.APISkipCertVerify
+	// apiTLSConfig.InsecureSkipVerify = cfg.APISkipCertVerify
 
 	apiClient := api.Client{
 		Client:    api.NewHTTPSClient(apiTLSConfig, 5*time.Second),
@@ -45,6 +45,7 @@ func main() {
 		cfg.APIPollingInterval,
 		cfg.GRPC,
 		cfg.DownstreamIngressAddrs,
+		cfg.DrainSkipCertVerify,
 		log,
 	).Run(true)
 }

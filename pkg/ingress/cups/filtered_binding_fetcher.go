@@ -6,12 +6,13 @@ import (
 	"net"
 
 	loggregator "code.cloudfoundry.org/go-loggregator"
+	"code.cloudfoundry.org/loggregator-agent/pkg/egress/syslog"
 )
 
 var allowedSchemes = []string{"syslog", "syslog-tls", "https"}
 
 type BindingReader interface {
-	FetchBindings() (appBindings []Binding, err error)
+	FetchBindings() (appBindings []syslog.Binding, err error)
 }
 
 type IPChecker interface {
@@ -39,17 +40,17 @@ func NewFilteredBindingFetcher(c IPChecker, b BindingReader, lc LogClient) *Filt
 	}
 }
 
-func (f *FilteredBindingFetcher) FetchBindings() ([]Binding, int, error) {
+func (f *FilteredBindingFetcher) FetchBindings() ([]syslog.Binding, int, error) {
 	sourceBindings, err := f.br.FetchBindings()
 	if err != nil {
 		return nil, 0, err
 	}
-	newBindings := []Binding{}
+	newBindings := []syslog.Binding{}
 
 	for _, binding := range sourceBindings {
 		scheme, host, err := f.ipChecker.ParseHost(binding.Drain)
 		if err != nil {
-			log.Println(err)
+			log.Printf("failed to parse host for drain URL: %s", err)
 			f.emitErrorLog(binding.AppId, "Invalid syslog drain URL: parse failure")
 			continue
 		}
@@ -60,7 +61,7 @@ func (f *FilteredBindingFetcher) FetchBindings() ([]Binding, int, error) {
 
 		ip, err := f.ipChecker.ResolveAddr(host)
 		if err != nil {
-			msg := fmt.Sprintf("Failed to resolve syslog drain host: %s", host)
+			msg := fmt.Sprintf("failed to resolve syslog drain host: %s", host)
 			log.Println(msg, err)
 			f.emitErrorLog(binding.AppId, msg)
 			continue
@@ -68,7 +69,7 @@ func (f *FilteredBindingFetcher) FetchBindings() ([]Binding, int, error) {
 
 		err = f.ipChecker.CheckBlacklist(ip)
 		if err != nil {
-			msg := fmt.Sprintf("Syslog drain blacklisted: %s (%s)", host, ip)
+			msg := fmt.Sprintf("syslog drain blacklisted: %s (%s)", host, ip)
 			log.Println(msg, err)
 			f.emitErrorLog(binding.AppId, msg)
 			continue

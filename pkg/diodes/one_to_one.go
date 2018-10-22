@@ -11,9 +11,9 @@ type OneToOne struct {
 // NewOneToOne initializes a new one to one diode of a given size and alerter.
 // The alerter is called whenever data is dropped with an integer representing
 // the number of byte slices that were dropped.
-func NewOneToOne(size int, alerter gendiodes.Alerter) *OneToOne {
+func NewOneToOne(size int, alerter gendiodes.Alerter, opts ...gendiodes.WaiterConfigOption) *OneToOne {
 	return &OneToOne{
-		d: gendiodes.NewWaiter(gendiodes.NewOneToOne(size, alerter)),
+		d: gendiodes.NewWaiter(gendiodes.NewOneToOne(size, alerter), opts...),
 	}
 }
 

@@ -6,6 +6,7 @@ import (
 	"net/url"
 
 	loggregator "code.cloudfoundry.org/go-loggregator"
+	"code.cloudfoundry.org/loggregator-agent/pkg/egress/syslog"
 	"code.cloudfoundry.org/loggregator-agent/pkg/ingress/cups"
 
 	. "github.com/onsi/ginkgo"
@@ -16,10 +17,10 @@ import (
 
 var _ = Describe("FilteredBindingFetcher", func() {
 	It("returns valid bindings", func() {
-		input := []cups.Binding{
-			cups.Binding{AppId: "app-id-with-multiple-drains", Hostname: "we.dont.care", Drain: "syslog://10.10.10.10"},
-			cups.Binding{AppId: "app-id-with-multiple-drains", Hostname: "we.dont.care", Drain: "syslog://10.10.10.12"},
-			cups.Binding{AppId: "app-id-with-good-drain", Hostname: "we.dont.care", Drain: "syslog://10.10.10.10"},
+		input := []syslog.Binding{
+			syslog.Binding{AppId: "app-id-with-multiple-drains", Hostname: "we.dont.care", Drain: "syslog://10.10.10.10"},
+			syslog.Binding{AppId: "app-id-with-multiple-drains", Hostname: "we.dont.care", Drain: "syslog://10.10.10.12"},
+			syslog.Binding{AppId: "app-id-with-good-drain", Hostname: "we.dont.care", Drain: "syslog://10.10.10.10"},
 		}
 		bindingReader := &SpyBindingReader{bindings: input}
 
@@ -48,8 +49,8 @@ var _ = Describe("FilteredBindingFetcher", func() {
 		)
 
 		BeforeEach(func() {
-			input := []cups.Binding{
-				cups.Binding{AppId: "app-id", Hostname: "we.dont.care", Drain: "syslog://some.invalid.host"},
+			input := []syslog.Binding{
+				syslog.Binding{AppId: "app-id", Hostname: "we.dont.care", Drain: "syslog://some.invalid.host"},
 			}
 
 			logClient = &spyLogClient{}
@@ -65,7 +66,7 @@ var _ = Describe("FilteredBindingFetcher", func() {
 			actual, removed, err := filter.FetchBindings()
 
 			Expect(err).ToNot(HaveOccurred())
-			Expect(actual).To(Equal([]cups.Binding{}))
+			Expect(actual).To(Equal([]syslog.Binding{}))
 			Expect(removed).To(Equal(1))
 		})
 
@@ -81,16 +82,16 @@ var _ = Describe("FilteredBindingFetcher", func() {
 	Context("when syslog drain has invalid scheme", func() {
 		var (
 			filter *cups.FilteredBindingFetcher
-			input  []cups.Binding
+			input  []syslog.Binding
 		)
 
 		BeforeEach(func() {
-			input = []cups.Binding{
-				cups.Binding{AppId: "app-id", Hostname: "we.dont.care", Drain: "syslog://10.10.10.10"},
-				cups.Binding{AppId: "app-id", Hostname: "we.dont.care", Drain: "syslog-tls://10.10.10.10"},
-				cups.Binding{AppId: "app-id", Hostname: "we.dont.care", Drain: "https://10.10.10.10"},
-				cups.Binding{AppId: "app-id", Hostname: "we.dont.care", Drain: "bad-scheme://10.10.10.10"},
-				cups.Binding{AppId: "app-id", Hostname: "we.dont.care", Drain: "blah://10.10.10.10"},
+			input = []syslog.Binding{
+				syslog.Binding{AppId: "app-id", Hostname: "we.dont.care", Drain: "syslog://10.10.10.10"},
+				syslog.Binding{AppId: "app-id", Hostname: "we.dont.care", Drain: "syslog-tls://10.10.10.10"},
+				syslog.Binding{AppId: "app-id", Hostname: "we.dont.care", Drain: "https://10.10.10.10"},
+				syslog.Binding{AppId: "app-id", Hostname: "we.dont.care", Drain: "bad-scheme://10.10.10.10"},
+				syslog.Binding{AppId: "app-id", Hostname: "we.dont.care", Drain: "blah://10.10.10.10"},
 			}
 
 			filter = cups.NewFilteredBindingFetcher(
@@ -116,8 +117,8 @@ var _ = Describe("FilteredBindingFetcher", func() {
 		)
 
 		BeforeEach(func() {
-			input := []cups.Binding{
-				cups.Binding{AppId: "app-id", Hostname: "we.dont.care", Drain: "syslog://some.invalid.host"},
+			input := []syslog.Binding{
+				syslog.Binding{AppId: "app-id", Hostname: "we.dont.care", Drain: "syslog://some.invalid.host"},
 			}
 
 			logClient = &spyLogClient{}
@@ -136,14 +137,14 @@ var _ = Describe("FilteredBindingFetcher", func() {
 			actual, removed, err := filter.FetchBindings()
 
 			Expect(err).ToNot(HaveOccurred())
-			Expect(actual).To(Equal([]cups.Binding{}))
+			Expect(actual).To(Equal([]syslog.Binding{}))
 			Expect(removed).To(Equal(1))
 		})
 
 		It("emitts a LGR error", func() {
 			_, _, _ = filter.FetchBindings()
 
-			Expect(logClient.calledWith).To(Equal("Failed to resolve syslog drain host: some.invalid.host"))
+			Expect(logClient.calledWith).To(Equal("failed to resolve syslog drain host: some.invalid.host"))
 			Expect(logClient.appID).To(Equal("app-id"))
 			Expect(logClient.sourceType).To(Equal("LGR"))
 		})
@@ -156,8 +157,8 @@ var _ = Describe("FilteredBindingFetcher", func() {
 		)
 
 		BeforeEach(func() {
-			input := []cups.Binding{
-				cups.Binding{AppId: "app-id", Hostname: "we.dont.care", Drain: "syslog://some.invalid.host"},
+			input := []syslog.Binding{
+				syslog.Binding{AppId: "app-id", Hostname: "we.dont.care", Drain: "syslog://some.invalid.host"},
 			}
 
 			logClient = &spyLogClient{}
@@ -177,14 +178,14 @@ var _ = Describe("FilteredBindingFetcher", func() {
 			actual, removed, err := filter.FetchBindings()
 
 			Expect(err).ToNot(HaveOccurred())
-			Expect(actual).To(Equal([]cups.Binding{}))
+			Expect(actual).To(Equal([]syslog.Binding{}))
 			Expect(removed).To(Equal(1))
 		})
 
 		It("emitts a LGR error", func() {
 			_, _, _ = filter.FetchBindings()
 
-			Expect(logClient.calledWith).To(Equal("Syslog drain blacklisted: some.invalid.host (127.0.0.1)"))
+			Expect(logClient.calledWith).To(Equal("syslog drain blacklisted: some.invalid.host (127.0.0.1)"))
 			Expect(logClient.appID).To(Equal("app-id"))
 			Expect(logClient.sourceType).To(Equal("LGR"))
 		})
@@ -236,10 +237,10 @@ func (s *spyLogClient) EmitLog(message string, opts ...loggregator.EmitLogOption
 }
 
 type SpyBindingReader struct {
-	bindings []cups.Binding
+	bindings []syslog.Binding
 	err      error
 }
 
-func (s *SpyBindingReader) FetchBindings() ([]cups.Binding, error) {
+func (s *SpyBindingReader) FetchBindings() ([]syslog.Binding, error) {
 	return s.bindings, s.err
 }

@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"strings"
 
+	"code.cloudfoundry.org/loggregator-agent/pkg/egress/syslog"
 	"code.cloudfoundry.org/loggregator-agent/pkg/ingress/cups"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
@@ -34,8 +35,8 @@ var _ = Describe("BindingFetcher", func() {
 								  "drains": [
 									"syslog://some.url",
 									"syslog://some.other.url",
-									"v3-syslog://some.other.url",
-									"v3-https://some.other.url"
+									"v3-syslog://v3.other.url",
+									"v3-https://v3.other.url"
 								  ],
 								  "hostname": "org.space.logspinner"
 								}
@@ -59,15 +60,15 @@ var _ = Describe("BindingFetcher", func() {
 
 			appID := "9be15160-4845-4f05-b089-40e827ba61f1"
 			Expect(bindings).To(ConsistOf(
-				cups.Binding{
+				syslog.Binding{
 					AppId:    appID,
 					Hostname: "org.space.logspinner",
-					Drain:    "v3-syslog://some.other.url",
+					Drain:    "syslog://v3.other.url",
 				},
-				cups.Binding{
+				syslog.Binding{
 					AppId:    appID,
 					Hostname: "org.space.logspinner",
-					Drain:    "v3-https://some.other.url",
+					Drain:    "https://v3.other.url",
 				}))
 		})
 

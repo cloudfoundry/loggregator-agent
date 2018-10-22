@@ -7,13 +7,9 @@ import (
 	"net/http"
 	"strings"
 	"sync"
-)
 
-type Binding struct {
-	AppId    string `json:"appId,omitempty"`
-	Hostname string `json:"hostname,omitempty"`
-	Drain    string `json:"drain,omitempty"`
-}
+	"code.cloudfoundry.org/loggregator-agent/pkg/egress/syslog"
+)
 
 // Getter is configured to fetch HTTP responses
 type Getter interface {
@@ -44,8 +40,8 @@ func NewBindingFetcher(g Getter) *BindingFetcher {
 
 // FetchBindings reaches out to the syslog drain binding provider via the Getter and decodes
 // the response. If it does not get a 200, it returns an error.
-func (f *BindingFetcher) FetchBindings() ([]Binding, error) {
-	bindings := []Binding{}
+func (f *BindingFetcher) FetchBindings() ([]syslog.Binding, error) {
+	bindings := []syslog.Binding{}
 	nextID := 0
 
 	for {
@@ -72,10 +68,12 @@ func (f *BindingFetcher) FetchBindings() ([]Binding, error) {
 		for appID, bindingData := range r.Results {
 			hostname := bindingData.Hostname
 			for _, drainURL := range bindingData.Drains {
+				// TODO: remove prefix when forwarder-agent is no longer
+				// feature-flagged
 				if strings.HasPrefix(drainURL, "v3-") {
-					bindings = append(bindings, Binding{
+					bindings = append(bindings, syslog.Binding{
 						Hostname: hostname,
-						Drain:    drainURL,
+						Drain:    strings.TrimPrefix(drainURL, "v3-"),
 						AppId:    appID,
 					})
 				}

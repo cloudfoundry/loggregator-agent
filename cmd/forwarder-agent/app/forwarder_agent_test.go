@@ -6,7 +6,7 @@ import (
 
 	"code.cloudfoundry.org/loggregator-agent/cmd/forwarder-agent/app"
 	"code.cloudfoundry.org/loggregator-agent/internal/testhelper"
-	"code.cloudfoundry.org/loggregator-agent/pkg/ingress/cups"
+	"code.cloudfoundry.org/loggregator-agent/pkg/egress/syslog"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 )
@@ -28,10 +28,10 @@ var _ = Describe("ForwarderAgent", func() {
 	})
 
 	It("reports the number of binding that come from the Getter", func() {
-		bf.bindings <- []cups.Binding{
-			{"app-1", "host-1", "v3-syslog://drain.url.com"},
-			{"app-2", "host-2", "v3-syslog://drain.url.com"},
-			{"app-3", "host-3", "v3-syslog://drain.url.com"},
+		bf.bindings <- []syslog.Binding{
+			{"app-1", "host-1", "syslog://drain.url.com"},
+			{"app-2", "host-2", "syslog://drain.url.com"},
+			{"app-3", "host-3", "syslog://drain.url.com"},
 		}
 
 		fa := app.NewForwarderAgent(
@@ -46,6 +46,7 @@ var _ = Describe("ForwarderAgent", func() {
 				KeyFile:  testhelper.Cert("metron.key"),
 			},
 			nil,
+			false,
 			log.New(GinkgoWriter, "", 0),
 		)
 		fa.Run(false)
@@ -56,14 +57,14 @@ var _ = Describe("ForwarderAgent", func() {
 	})
 
 	It("polls for updates from the binding fetcher and updates the metric accordingly", func() {
-		bf.bindings <- []cups.Binding{
-			{"app-1", "host-1", "v3-syslog://drain.url.com"},
-			{"app-3", "host-3", "v3-syslog://drain.url.com"},
+		bf.bindings <- []syslog.Binding{
+			{"app-1", "host-1", "syslog://drain.url.com"},
+			{"app-3", "host-3", "syslog://drain.url.com"},
 		}
-		bf.bindings <- []cups.Binding{
-			{"app-1", "host-1", "v3-syslog://drain.url.com"},
-			{"app-3", "host-3", "v3-syslog://drain.url.com"},
-			{"app-3", "host-3", "v3-syslog://drain.url.com"},
+		bf.bindings <- []syslog.Binding{
+			{"app-1", "host-1", "syslog://drain.url.com"},
+			{"app-3", "host-3", "syslog://drain.url.com"},
+			{"app-3", "host-3", "syslog://drain.url.com"},
 		}
 
 		fa := app.NewForwarderAgent(
@@ -78,28 +79,28 @@ var _ = Describe("ForwarderAgent", func() {
 				KeyFile:  testhelper.Cert("metron.key"),
 			},
 			nil,
+			false,
 			log.New(GinkgoWriter, "", 0),
 		)
 		fa.Run(false)
 
-		Eventually(sm.metricValues).Should(HaveLen(2))
-		Expect(<-sm.metricValues).To(BeNumerically("==", 2))
-		Expect(<-sm.metricValues).To(BeNumerically("==", 3))
+		Eventually(sm.metricValues).Should(Receive(Equal(2.0)))
+		Eventually(sm.metricValues).Should(Receive(Equal(3.0)))
 	})
 
 })
 
 type stubBindingFetcher struct {
-	bindings chan []cups.Binding
+	bindings chan []syslog.Binding
 }
 
 func newStubBindingFetcher() *stubBindingFetcher {
 	return &stubBindingFetcher{
-		bindings: make(chan []cups.Binding, 100),
+		bindings: make(chan []syslog.Binding, 100),
 	}
 }
 
-func (s *stubBindingFetcher) FetchBindings() ([]cups.Binding, error) {
+func (s *stubBindingFetcher) FetchBindings() ([]syslog.Binding, error) {
 	select {
 	case b := <-s.bindings:
 		return b, nil

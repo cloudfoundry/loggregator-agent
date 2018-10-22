@@ -24,7 +24,6 @@ type Config struct {
 	APICertFile        string        `env:"API_CERT_FILE_PATH,   required, report"`
 	APIKeyFile         string        `env:"API_KEY_FILE_PATH,    required, report"`
 	APICommonName      string        `env:"API_COMMON_NAME,      required, report"`
-	APISkipCertVerify  bool          `env:"API_SKIP_CERT_VERIFY, report"`
 	APIPollingInterval time.Duration `env:"API_POLLING_INTERVAL, report"`
 	APIBatchSize       int           `env:"API_BATCH_SIZE, report"`
 
@@ -34,6 +33,10 @@ type Config struct {
 	DownstreamIngressAddrs []string `env:"DOWNSTREAM_INGRESS_ADDRS, report"`
 
 	DebugPort uint16 `env:"DEBUG_PORT, report"`
+
+	// DrainSkipCertVerify will skip SSL hostname validation on external
+	// syslog drains.
+	DrainSkipCertVerify bool `env:"DRAIN_SKIP_CERT_VERIFY, report"`
 
 	GRPC GRPC
 }
