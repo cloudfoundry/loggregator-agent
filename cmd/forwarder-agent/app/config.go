@@ -11,9 +11,9 @@ import (
 // with mTLS certs and as a client.
 type GRPC struct {
 	Port         uint16   `env:"AGENT_PORT, report"`
-	CAFile       string   `env:"AGENT_CA_FILE, required, report"`
-	CertFile     string   `env:"AGENT_CERT_FILE, required, report"`
-	KeyFile      string   `env:"AGENT_KEY_FILE, required, report"`
+	CAFile       string   `env:"AGENT_CA_FILE_PATH, required, report"`
+	CertFile     string   `env:"AGENT_CERT_FILE_PATH, required, report"`
+	KeyFile      string   `env:"AGENT_KEY_FILE_PATH, required, report"`
 	CipherSuites []string `env:"AGENT_CIPHER_SUITES, report"`
 }
 

@@ -80,9 +80,9 @@ var _ = Describe("Main", func() {
 			"DEBUG_PORT=7392",
 			fmt.Sprintf("API_URL=%s", cupsProvider.URL),
 			fmt.Sprintf("AGENT_PORT=%d", grpcPort),
-			fmt.Sprintf("AGENT_CA_FILE=%s", testhelper.Cert("loggregator-ca.crt")),
-			fmt.Sprintf("AGENT_CERT_FILE=%s", testhelper.Cert("metron.crt")),
-			fmt.Sprintf("AGENT_KEY_FILE=%s", testhelper.Cert("metron.key")),
+			fmt.Sprintf("AGENT_CA_FILE_PATH=%s", testhelper.Cert("loggregator-ca.crt")),
+			fmt.Sprintf("AGENT_CERT_FILE_PATH=%s", testhelper.Cert("metron.crt")),
+			fmt.Sprintf("AGENT_KEY_FILE_PATH=%s", testhelper.Cert("metron.key")),
 		)
 		defer session.Kill()
 
@@ -137,9 +137,9 @@ var _ = Describe("Main", func() {
 			fmt.Sprintf("API_URL=%s", cupsProvider.URL),
 			"DOWNSTREAM_INGRESS_ADDRS="+strings.Join([]string{downstream1.addr, downstream2.addr}, ","),
 			fmt.Sprintf("AGENT_PORT=%d", grpcPort),
-			fmt.Sprintf("AGENT_CA_FILE=%s", testhelper.Cert("loggregator-ca.crt")),
-			fmt.Sprintf("AGENT_CERT_FILE=%s", testhelper.Cert("metron.crt")),
-			fmt.Sprintf("AGENT_KEY_FILE=%s", testhelper.Cert("metron.key")),
+			fmt.Sprintf("AGENT_CA_FILE_PATH=%s", testhelper.Cert("loggregator-ca.crt")),
+			fmt.Sprintf("AGENT_CERT_FILE_PATH=%s", testhelper.Cert("metron.crt")),
+			fmt.Sprintf("AGENT_KEY_FILE_PATH=%s", testhelper.Cert("metron.key")),
 		)
 		defer session.Kill()
 
@@ -195,9 +195,9 @@ var _ = Describe("Main", func() {
 			"DRAIN_SKIP_CERT_VERIFY=true",
 			fmt.Sprintf("API_URL=%s", cupsProvider.URL),
 			fmt.Sprintf("AGENT_PORT=%d", grpcPort),
-			fmt.Sprintf("AGENT_CA_FILE=%s", testhelper.Cert("loggregator-ca.crt")),
-			fmt.Sprintf("AGENT_CERT_FILE=%s", testhelper.Cert("metron.crt")),
-			fmt.Sprintf("AGENT_KEY_FILE=%s", testhelper.Cert("metron.key")),
+			fmt.Sprintf("AGENT_CA_FILE_PATH=%s", testhelper.Cert("loggregator-ca.crt")),
+			fmt.Sprintf("AGENT_CERT_FILE_PATH=%s", testhelper.Cert("metron.crt")),
+			fmt.Sprintf("AGENT_KEY_FILE_PATH=%s", testhelper.Cert("metron.key")),
 		)
 		defer session.Kill()
 
@@ -210,7 +210,7 @@ var _ = Describe("Main", func() {
 		ingressClient, err := loggregator.NewIngressClient(
 			tlsConfig,
 			loggregator.WithAddr(fmt.Sprintf("127.0.0.1:%d", grpcPort)),
-			// loggregator.WithLogger(log.New(GinkgoWriter, "[TEST INGRESS CLIENT] ", 0)),
+			loggregator.WithLogger(log.New(GinkgoWriter, "[TEST INGRESS CLIENT] ", 0)),
 			loggregator.WithBatchMaxSize(1),
 		)
 		Expect(err).ToNot(HaveOccurred())
