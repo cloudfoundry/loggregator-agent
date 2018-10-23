@@ -22,15 +22,14 @@ import (
 
 // ForwarderAgent manages starting the forwarder agent service.
 type ForwarderAgent struct {
-	debugPort        uint16
-	pollingInterval  time.Duration
-	drainCountMetric func(float64)
-	m                Metrics
-	bf               BindingFetcher
-	grpc             GRPC
-	downstreamAddrs  []string
-	skipCertVerify   bool
-	log              *log.Logger
+	debugPort       uint16
+	pollingInterval time.Duration
+	m               Metrics
+	bf              BindingFetcher
+	grpc            GRPC
+	downstreamAddrs []string
+	skipCertVerify  bool
+	log             *log.Logger
 }
 
 type Metrics interface {
@@ -54,15 +53,14 @@ func NewForwarderAgent(
 	log *log.Logger,
 ) *ForwarderAgent {
 	return &ForwarderAgent{
-		debugPort:        debugPort,
-		pollingInterval:  pi,
-		drainCountMetric: m.NewGauge("drainCount"),
-		bf:               bf,
-		grpc:             grpc,
-		m:                m,
-		downstreamAddrs:  downstreamAddrs,
-		skipCertVerify:   skipCertVerify,
-		log:              log,
+		debugPort:       debugPort,
+		pollingInterval: pi,
+		bf:              bf,
+		grpc:            grpc,
+		m:               m,
+		downstreamAddrs: downstreamAddrs,
+		skipCertVerify:  skipCertVerify,
+		log:             log,
 	}
 }
 
@@ -79,7 +77,6 @@ func (s ForwarderAgent) Run(blocking bool) {
 }
 
 func (s ForwarderAgent) run() {
-	go s.reportBindings()
 	go http.ListenAndServe(fmt.Sprintf("127.0.0.1:%d", s.debugPort), nil)
 
 	ingressDropped := s.m.NewCounter("IngressDropped")
@@ -171,13 +168,4 @@ func (s ForwarderAgent) run() {
 		grpc.Creds(serverCreds),
 	)
 	srv.Start()
-}
-
-func (s ForwarderAgent) reportBindings() {
-	t := time.NewTicker(s.pollingInterval)
-
-	for range t.C {
-		bindings, _ := s.bf.FetchBindings()
-		s.drainCountMetric(float64(len(bindings)))
-	}
 }

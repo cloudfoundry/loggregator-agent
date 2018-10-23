@@ -86,42 +86,25 @@ var _ = Describe("Main", func() {
 		)
 		defer session.Kill()
 
+		var body string
 		Eventually(func() int {
 			resp, err := http.Get("http://127.0.0.1:7392/debug/vars")
 			if err != nil {
 				return -1
 			}
 
-			return resp.StatusCode
-		}).Should(Equal(http.StatusOK))
-
-		f := func() string {
-			resp, err := http.Get("http://127.0.0.1:7392/debug/vars")
-			Expect(err).ToNot(HaveOccurred())
-			Expect(resp.StatusCode).To(Equal(http.StatusOK))
-
-			body, err := ioutil.ReadAll(resp.Body)
-			Expect(err).ToNot(HaveOccurred())
-			return string(body)
-		}
-		Eventually(f, 3*time.Second, 500*time.Millisecond).Should(ContainSubstring(`"drainCount": 2`))
-		var resp *http.Response
-		Eventually(func() int {
-			var err error
-			resp, err = http.Get("http://127.0.0.1:7392/debug/vars")
-			if err != nil {
-				return -1
+			if resp.StatusCode == http.StatusOK {
+				b, err := ioutil.ReadAll(resp.Body)
+				if err != nil {
+					return -1
+				}
+				body = string(b)
 			}
 
-			resp = resp
-
 			return resp.StatusCode
 		}).Should(Equal(http.StatusOK))
 
-		body, err := ioutil.ReadAll(resp.Body)
-		Expect(err).ToNot(HaveOccurred())
-
-		Expect(string(body)).To(ContainSubstring("drainCount"))
+		Expect(body).To(ContainSubstring(`"DrainCount": 2`))
 	})
 
 	It("forwards all envelopes downstream", func() {
