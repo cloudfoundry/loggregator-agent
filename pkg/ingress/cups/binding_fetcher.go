@@ -8,9 +8,16 @@ import (
 	"net/url"
 	"strings"
 	"sync"
+	"time"
 
 	"code.cloudfoundry.org/loggregator-agent/pkg/egress/syslog"
 )
+
+// Metrics is the client used to expose gauge and counter metrics.
+type Metrics interface {
+	NewGauge(string) func(float64)
+	NewCounter(name string) func(uint64)
+}
 
 // Getter is configured to fetch HTTP responses
 type Getter interface {
@@ -22,6 +29,11 @@ type BindingFetcher struct {
 	getter     Getter
 	mu         sync.RWMutex
 	drainCount int
+
+	refreshCount        func(uint64)
+	refreshFailureCount func(uint64)
+	requestCount        func(float64)
+	maxLatency          func(float64)
 }
 
 type response struct {
@@ -33,9 +45,13 @@ type response struct {
 }
 
 // NewBindingFetcher returns a new BindingFetcher
-func NewBindingFetcher(g Getter) *BindingFetcher {
+func NewBindingFetcher(g Getter, m Metrics) *BindingFetcher {
 	return &BindingFetcher{
-		getter: g,
+		getter:              g,
+		refreshCount:        m.NewCounter("BindingRefreshCount"),
+		refreshFailureCount: m.NewCounter("BindingRefreshFailureCount"),
+		requestCount:        m.NewGauge("RequestCountForLastBindingRefresh"),
+		maxLatency:          m.NewGauge("MaxLatencyForLastBindingRefresh"),
 	}
 }
 
@@ -45,24 +61,43 @@ func (f *BindingFetcher) FetchBindings() ([]syslog.Binding, error) {
 	bindings := []syslog.Binding{}
 	nextID := 0
 
+	var requestCount int
+	var maxLatency int64
+	defer func() {
+		f.refreshCount(1)
+		f.requestCount(float64(requestCount))
+		f.maxLatency(float64(maxLatency))
+	}()
+
 	for {
+		requestCount++
+		start := time.Now()
 		resp, err := f.getter.Get(nextID)
+		d := time.Since(start)
 		if err != nil {
+			f.refreshFailureCount(1)
 			return nil, err
 		}
 
+		if d.Nanoseconds() > maxLatency {
+			maxLatency = d.Nanoseconds()
+		}
+
 		if resp.StatusCode != http.StatusOK {
+			f.refreshFailureCount(1)
 			return nil, fmt.Errorf("received %d status code from syslog drain binding API", resp.StatusCode)
 		}
 
 		body, err := ioutil.ReadAll(resp.Body)
 		if err != nil {
+			f.refreshFailureCount(1)
 			return nil, err
 		}
 		defer resp.Body.Close()
 
 		var r response
 		if err = json.Unmarshal(body, &r); err != nil {
+			f.refreshFailureCount(1)
 			return nil, fmt.Errorf("invalid API response body")
 		}
 

@@ -105,6 +105,10 @@ var _ = Describe("Main", func() {
 		}).Should(Equal(http.StatusOK))
 
 		Expect(body).To(ContainSubstring(`"DrainCount": 2`))
+		Expect(body).To(ContainSubstring(`"BindingRefreshCount"`))
+		Expect(body).To(ContainSubstring(`"BindingRefreshFailureCount"`))
+		Expect(body).To(ContainSubstring(`"RequestCountForLastBindingRefresh"`))
+		Expect(body).To(ContainSubstring(`"MaxLatencyForLastBindingRefresh"`))
 	})
 
 	It("forwards all envelopes downstream", func() {

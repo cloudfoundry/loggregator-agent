@@ -36,11 +36,12 @@ func main() {
 		BatchSize: 1000,
 	}
 
-	bf := cups.NewBindingFetcher(apiClient)
+	metrics := metrics.New(expvar.NewMap("ForwarderAgent"))
+	bf := cups.NewBindingFetcher(apiClient, metrics)
 
 	app.NewForwarderAgent(
 		cfg.DebugPort,
-		metrics.New(expvar.NewMap("ForwarderAgent")),
+		metrics,
 		bf,
 		cfg.APIPollingInterval,
 		cfg.GRPC,
