@@ -20,6 +20,7 @@ import (
 	"code.cloudfoundry.org/loggregator-agent/internal/testhelper"
 	"code.cloudfoundry.org/loggregator-agent/pkg/plumbing"
 	"code.cloudfoundry.org/rfc5424"
+	"github.com/gogo/protobuf/proto"
 	"github.com/onsi/gomega/gexec"
 	"google.golang.org/grpc"
 
@@ -168,8 +169,12 @@ var _ = Describe("Main", func() {
 			}
 		}()
 
-		Eventually(downstream1.envelopes, 5).Should(Receive(Equal(e)))
-		Eventually(downstream2.envelopes, 5).Should(Receive(Equal(e)))
+		var e1, e2 *loggregator_v2.Envelope
+		Eventually(downstream1.envelopes, 5).Should(Receive(&e1))
+		Eventually(downstream2.envelopes, 5).Should(Receive(&e2))
+
+		Expect(proto.Equal(e1, e)).To(BeTrue())
+		Expect(proto.Equal(e2, e)).To(BeTrue())
 	})
 
 	It("forwards envelopes to syslog drains", func() {
