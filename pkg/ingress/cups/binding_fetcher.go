@@ -66,7 +66,7 @@ func (f *BindingFetcher) FetchBindings() ([]syslog.Binding, error) {
 	defer func() {
 		f.refreshCount(1)
 		f.requestCount(float64(requestCount))
-		f.maxLatency(float64(maxLatency))
+		f.maxLatency(float64(maxLatency) / float64(time.Millisecond))
 	}()
 
 	for {
