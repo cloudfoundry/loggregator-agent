@@ -105,7 +105,7 @@ var _ = Describe("BindingFetcher", func() {
 		Expect(err).ToNot(HaveOccurred())
 
 		Expect(
-			metrics.GetMetric("MaxLatencyForLastBindingRefresh").GaugeValue(),
+			metrics.GetMetric("MaxLatencyForLastBindingRefreshMS").GaugeValue(),
 		).To(BeNumerically(">", 0))
 	})
 

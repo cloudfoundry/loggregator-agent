@@ -52,7 +52,7 @@ func NewBindingFetcher(g Getter, m Metrics) *BindingFetcher {
 		refreshCount:        m.NewCounter("BindingRefreshCount"),
 		refreshFailureCount: m.NewCounter("BindingRefreshFailureCount"),
 		requestCount:        m.NewGauge("RequestCountForLastBindingRefresh"),
-		maxLatency:          m.NewGauge("MaxLatencyForLastBindingRefresh"),
+		maxLatency:          m.NewGauge("MaxLatencyForLastBindingRefreshMS"),
 	}
 }
 

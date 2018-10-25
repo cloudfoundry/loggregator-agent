@@ -109,7 +109,7 @@ var _ = Describe("Main", func() {
 		Expect(body).To(ContainSubstring(`"BindingRefreshCount"`))
 		Expect(body).To(ContainSubstring(`"BindingRefreshFailureCount"`))
 		Expect(body).To(ContainSubstring(`"RequestCountForLastBindingRefresh"`))
-		Expect(body).To(ContainSubstring(`"MaxLatencyForLastBindingRefresh"`))
+		Expect(body).To(ContainSubstring(`"MaxLatencyForLastBindingRefreshMS"`))
 	})
 
 	It("forwards all envelopes downstream", func() {
