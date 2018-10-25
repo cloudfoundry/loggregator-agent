@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"strings"
 
+	"code.cloudfoundry.org/loggregator-agent/internal/testhelper"
 	"code.cloudfoundry.org/loggregator-agent/pkg/egress/syslog"
 	"code.cloudfoundry.org/loggregator-agent/pkg/ingress/cups"
 	. "github.com/onsi/ginkgo"
@@ -16,11 +17,13 @@ var _ = Describe("BindingFetcher", func() {
 	var (
 		getter  *SpyGetter
 		fetcher *cups.BindingFetcher
+		metrics *testhelper.SpyMetricClient
 	)
 
 	BeforeEach(func() {
 		getter = &SpyGetter{}
-		fetcher = cups.NewBindingFetcher(getter)
+		metrics = testhelper.NewMetricClient()
+		fetcher = cups.NewBindingFetcher(getter, metrics)
 	})
 
 	Context("when the status code is 200 and the body is valid json", func() {
@@ -77,6 +80,24 @@ var _ = Describe("BindingFetcher", func() {
 			Expect(getter.getCalled).To(Equal(2))
 			Expect(getter.getNextID[0]).To(Equal(0))
 			Expect(getter.getNextID[1]).To(Equal(50))
+		})
+
+		It("tracks the number of binding refreshes", func() {
+			_, err := fetcher.FetchBindings()
+			Expect(err).ToNot(HaveOccurred())
+
+			Expect(
+				metrics.GetMetric("BindingRefreshCount").Delta(),
+			).To(Equal(uint64(1)))
+		})
+
+		It("tracks the number of requests binding", func() {
+			_, err := fetcher.FetchBindings()
+			Expect(err).ToNot(HaveOccurred())
+
+			Expect(
+				metrics.GetMetric("RequestCountForLastBindingRefresh").GaugeValue(),
+			).To(Equal(2.0))
 		})
 
 		Context("when the status code is 200 and the body is invalid json", func() {

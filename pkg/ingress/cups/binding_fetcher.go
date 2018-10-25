@@ -12,6 +12,12 @@ import (
 	"code.cloudfoundry.org/loggregator-agent/pkg/egress/syslog"
 )
 
+// Metrics is the client used to expose gauge and counter metrics.
+type Metrics interface {
+	NewGauge(string) func(float64)
+	NewCounter(name string) func(uint64)
+}
+
 // Getter is configured to fetch HTTP responses
 type Getter interface {
 	Get(nextID int) (resp *http.Response, err error)
@@ -22,6 +28,10 @@ type BindingFetcher struct {
 	getter     Getter
 	mu         sync.RWMutex
 	drainCount int
+
+	refreshCount func(uint64)
+	requestCount func(float64)
+	maxLatency   func(float64)
 }
 
 type response struct {
@@ -33,9 +43,12 @@ type response struct {
 }
 
 // NewBindingFetcher returns a new BindingFetcher
-func NewBindingFetcher(g Getter) *BindingFetcher {
+func NewBindingFetcher(g Getter, m Metrics) *BindingFetcher {
 	return &BindingFetcher{
-		getter: g,
+		getter:       g,
+		refreshCount: m.NewCounter("BindingRefreshCount"),
+		requestCount: m.NewGauge("RequestCountForLastBindingRefresh"),
+		maxLatency:   m.NewGauge("MaxLatencyForLastBindingRefresh"),
 	}
 }
 
@@ -45,7 +58,14 @@ func (f *BindingFetcher) FetchBindings() ([]syslog.Binding, error) {
 	bindings := []syslog.Binding{}
 	nextID := 0
 
+	f.refreshCount(1)
+
+	var requestCount int
+	defer func() {
+		f.requestCount(float64(requestCount))
+	}()
 	for {
+		requestCount++
 		resp, err := f.getter.Get(nextID)
 		if err != nil {
 			return nil, err
