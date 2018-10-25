@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
+	"math"
 	"net/http"
 	"net/url"
 	"strings"
@@ -66,7 +67,7 @@ func (f *BindingFetcher) FetchBindings() ([]syslog.Binding, error) {
 	defer func() {
 		f.refreshCount(1)
 		f.requestCount(float64(requestCount))
-		f.maxLatency(float64(maxLatency) / float64(time.Millisecond))
+		f.maxLatency(toMilliseconds(maxLatency))
 	}()
 
 	for {
@@ -128,4 +129,16 @@ func (f *BindingFetcher) FetchBindings() ([]syslog.Binding, error) {
 		}
 		nextID = r.NextID
 	}
+}
+
+// toMilliseconds truncates the calculated milliseconds float to microsecond
+// precision.
+func toMilliseconds(num int64) float64 {
+	f := float64(num) / float64(time.Millisecond)
+	output := math.Pow(10, float64(3))
+	return float64(roundFloat64(f*output)) / output
+}
+
+func roundFloat64(num float64) int {
+	return int(num + math.Copysign(0.5, num))
 }

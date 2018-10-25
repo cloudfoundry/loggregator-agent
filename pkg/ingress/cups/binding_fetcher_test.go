@@ -5,6 +5,7 @@ import (
 	"io/ioutil"
 	"net/http"
 	"strings"
+	"time"
 
 	"code.cloudfoundry.org/loggregator-agent/internal/testhelper"
 	"code.cloudfoundry.org/loggregator-agent/pkg/egress/syslog"
@@ -192,6 +193,9 @@ func (s *SpyGetter) Get(nextID int) (*http.Response, error) {
 	if s.getError != nil {
 		return nil, s.getError
 	}
+
+	// This is to ensure that the truncated max latency is at least 1 microsecond
+	time.Sleep(time.Microsecond)
 
 	return resp, nil
 }
