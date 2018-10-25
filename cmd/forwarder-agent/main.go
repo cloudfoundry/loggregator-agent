@@ -37,7 +37,7 @@ func main() {
 	}
 
 	metrics := metrics.New(expvar.NewMap("ForwarderAgent"))
-	bf := cups.NewBindingFetcher(apiClient, metrics)
+	bf := cups.NewBindingFetcher(cfg.BindingPerAppLimit, apiClient, metrics)
 
 	app.NewForwarderAgent(
 		cfg.DebugPort,

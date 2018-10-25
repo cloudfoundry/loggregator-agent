@@ -26,6 +26,7 @@ type Config struct {
 	APICommonName      string        `env:"API_COMMON_NAME,      required, report"`
 	APIPollingInterval time.Duration `env:"API_POLLING_INTERVAL, report"`
 	APIBatchSize       int           `env:"API_BATCH_SIZE, report"`
+	BindingPerAppLimit int           `env:"BINDING_PER_APP_LIMIT, report"`
 
 	// DownstreamIngressAddrs will receive each envelope. It is assumed to
 	// adhere to the Loggregator Ingress Service and use the provided TLS
@@ -50,6 +51,7 @@ func LoadConfig() Config {
 		GRPC: GRPC{
 			Port: 3458,
 		},
+		BindingPerAppLimit: 5,
 	}
 	if err := envstruct.Load(&cfg); err != nil {
 		panic(fmt.Sprintf("Failed to load config from environment: %s", err))

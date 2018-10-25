@@ -24,22 +24,29 @@ var _ = Describe("BindingFetcher", func() {
 	BeforeEach(func() {
 		getter = &SpyGetter{}
 		metrics = testhelper.NewMetricClient()
-		fetcher = cups.NewBindingFetcher(getter, metrics)
+		fetcher = cups.NewBindingFetcher(3, getter, metrics)
 	})
 
 	BeforeEach(func() {
 		getter.getResponses = []*http.Response{
 			&http.Response{
 				StatusCode: http.StatusOK,
+
+				// The zzz-not-included should be left out because the limit
+				// is 3. Therefore after sorting and limiting, those are
+				// omitted.
 				Body: ioutil.NopCloser(strings.NewReader(`
 							{
 							  "results": {
 								"9be15160-4845-4f05-b089-40e827ba61f1": {
 								  "drains": [
 									"syslog://some.url",
+									"syslog-v3://v3.zzz-not-included.url",
 									"syslog://some.other.url",
 									"syslog-v3://v3.other.url",
-									"https-v3://v3.other.url"
+									"syslog-v3://v3.zzz-not-included-again.url",
+									"https-v3://v3.other.url",
+									"syslog-v3://v3.other-included.url"
 								  ],
 								  "hostname": "org.space.logspinner"
 								}
@@ -56,23 +63,29 @@ var _ = Describe("BindingFetcher", func() {
 		}
 	})
 
-	It("returns v3 bindings", func() {
+	It("returns limited v3 bindings", func() {
 		bindings, err := fetcher.FetchBindings()
 		Expect(err).ToNot(HaveOccurred())
-		Expect(bindings).To(HaveLen(2))
+		Expect(bindings).To(HaveLen(3))
 
 		appID := "9be15160-4845-4f05-b089-40e827ba61f1"
-		Expect(bindings).To(ConsistOf(
+		Expect(bindings).To(Equal([]syslog.Binding{
+			syslog.Binding{
+				AppId:    appID,
+				Hostname: "org.space.logspinner",
+				Drain:    "https://v3.other.url",
+			},
+			syslog.Binding{
+				AppId:    appID,
+				Hostname: "org.space.logspinner",
+				Drain:    "syslog://v3.other-included.url",
+			},
 			syslog.Binding{
 				AppId:    appID,
 				Hostname: "org.space.logspinner",
 				Drain:    "syslog://v3.other.url",
 			},
-			syslog.Binding{
-				AppId:    appID,
-				Hostname: "org.space.logspinner",
-				Drain:    "https://v3.other.url",
-			}))
+		}))
 	})
 
 	It("fetches all the pages", func() {

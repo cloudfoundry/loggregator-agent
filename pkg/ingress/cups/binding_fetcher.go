@@ -7,6 +7,7 @@ import (
 	"math"
 	"net/http"
 	"net/url"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -30,6 +31,7 @@ type BindingFetcher struct {
 	getter     Getter
 	mu         sync.RWMutex
 	drainCount int
+	limit      int
 
 	refreshCount        func(uint64)
 	refreshFailureCount func(uint64)
@@ -46,8 +48,9 @@ type response struct {
 }
 
 // NewBindingFetcher returns a new BindingFetcher
-func NewBindingFetcher(g Getter, m Metrics) *BindingFetcher {
+func NewBindingFetcher(limit int, g Getter, m Metrics) *BindingFetcher {
 	return &BindingFetcher{
+		limit:               limit,
 		getter:              g,
 		refreshCount:        m.NewCounter("BindingRefreshCount"),
 		refreshFailureCount: m.NewCounter("BindingRefreshFailureCount"),
@@ -104,7 +107,15 @@ func (f *BindingFetcher) FetchBindings() ([]syslog.Binding, error) {
 
 		for appID, bindingData := range r.Results {
 			hostname := bindingData.Hostname
+			var count int
+
+			sort.Strings(bindingData.Drains)
+
 			for _, drainURL := range bindingData.Drains {
+				if count >= f.limit {
+					break
+				}
+
 				// TODO: remove prefix when forwarder-agent is no longer
 				// feature-flagged
 				u, err := url.Parse(drainURL)
@@ -112,15 +123,18 @@ func (f *BindingFetcher) FetchBindings() ([]syslog.Binding, error) {
 					continue
 				}
 
-				if strings.HasSuffix(u.Scheme, "-v3") {
-					u.Scheme = strings.TrimSuffix(u.Scheme, "-v3")
-
-					bindings = append(bindings, syslog.Binding{
-						Hostname: hostname,
-						Drain:    u.String(),
-						AppId:    appID,
-					})
+				if !strings.HasSuffix(u.Scheme, "-v3") {
+					continue
 				}
+				count++
+
+				u.Scheme = strings.TrimSuffix(u.Scheme, "-v3")
+
+				bindings = append(bindings, syslog.Binding{
+					Hostname: hostname,
+					Drain:    u.String(),
+					AppId:    appID,
+				})
 			}
 		}
 
