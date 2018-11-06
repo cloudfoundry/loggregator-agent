@@ -21,7 +21,7 @@ var _ = Describe("Agent Health Endpoint", func() {
 		)
 		defer agentCleanup()
 
-		resp, err := http.Get(fmt.Sprintf("http://127.0.0.1:%d/debug/vars", agentPorts.Health))
+		resp, err := http.Get(fmt.Sprintf("http://127.0.0.1:%d/debug/vars", agentPorts.PProf))
 		Expect(err).ToNot(HaveOccurred())
 		defer resp.Body.Close()
 		Expect(resp.StatusCode).To(Equal(http.StatusOK))

@@ -2,10 +2,8 @@ package app
 
 import (
 	"expvar"
-	"fmt"
 	"log"
 	"net"
-	"net/http"
 
 	"code.cloudfoundry.org/loggregator-agent/pkg/metrics"
 	"code.cloudfoundry.org/loggregator-agent/pkg/plumbing"
@@ -75,17 +73,4 @@ func (a *Agent) Start() {
 
 	appV2 := NewV2App(a.config, clientCreds, serverCreds, metricClient)
 	go appV2.Start()
-
-	go a.runHealthEndpoint()
-}
-
-func (a *Agent) runHealthEndpoint() {
-	addr := fmt.Sprintf("127.0.0.1:%d", a.config.HealthEndpointPort)
-	lis, err := net.Listen("tcp", addr)
-	if err != nil {
-		log.Fatalf("Unable to setup Health endpoint (%s): %s", addr, err)
-	}
-	log.Printf("health bound to: %s", lis.Addr())
-
-	http.Serve(lis, nil)
 }

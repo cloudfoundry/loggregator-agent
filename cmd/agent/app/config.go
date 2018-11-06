@@ -28,7 +28,6 @@ type Config struct {
 	Tags                            map[string]string `env:"AGENT_TAGS"`
 	DisableUDP                      bool              `env:"AGENT_DISABLE_UDP"`
 	IncomingUDPPort                 int               `env:"AGENT_INCOMING_UDP_PORT"`
-	HealthEndpointPort              uint              `env:"AGENT_HEALTH_ENDPOINT_PORT"`
 	MetricBatchIntervalMilliseconds uint              `env:"AGENT_METRIC_BATCH_INTERVAL_MILLISECONDS"`
 	MetricSourceID                  string            `env:"AGENT_METRIC_SOURCE_ID"`
 	PProfPort                       uint32            `env:"AGENT_PPROF_PORT"`
@@ -43,7 +42,7 @@ func LoadConfig() (*Config, error) {
 		MetricBatchIntervalMilliseconds: 60000,
 		MetricSourceID:                  "metron",
 		IncomingUDPPort:                 3457,
-		HealthEndpointPort:              14824,
+		PProfPort:                       14824,
 		GRPC: GRPC{
 			Port: 3458,
 		},

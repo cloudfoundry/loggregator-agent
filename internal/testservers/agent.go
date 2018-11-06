@@ -43,7 +43,6 @@ func BuildAgentConfig(dopplerURI string, dopplerGRPCPort int) app.Config {
 type AgentPorts struct {
 	GRPC   int
 	UDP    int
-	Health int
 	PProf  int
 }
 
@@ -65,7 +64,6 @@ func StartAgent(conf app.Config) (cleanup func(), mp AgentPorts) {
 	By("waiting for agent to listen")
 	mp.GRPC = waitForPortBinding("grpc", agentSession.Err)
 	mp.UDP = waitForPortBinding("udp", agentSession.Err)
-	mp.Health = waitForPortBinding("health", agentSession.Err)
 	mp.PProf = waitForPortBinding("pprof", agentSession.Err)
 
 	cleanup = func() {
