@@ -4,14 +4,14 @@ import (
 	"log"
 	"time"
 
-	"code.cloudfoundry.org/loggregator-agent/cmd/forwarder-agent/app"
+	"code.cloudfoundry.org/loggregator-agent/cmd/syslog-agent/app"
 	"code.cloudfoundry.org/loggregator-agent/internal/testhelper"
 	"code.cloudfoundry.org/loggregator-agent/pkg/egress/syslog"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 )
 
-var _ = Describe("ForwarderAgent", func() {
+var _ = Describe("SyslogAgent", func() {
 	var (
 		bf   *stubBindingFetcher
 		sm   *spyMetrics
@@ -34,7 +34,7 @@ var _ = Describe("ForwarderAgent", func() {
 			{"app-3", "host-3", "syslog://drain.url.com"},
 		}
 
-		fa := app.NewForwarderAgent(
+		fa := app.NewSyslogAgent(
 			0,
 			sm,
 			bf,
@@ -45,7 +45,6 @@ var _ = Describe("ForwarderAgent", func() {
 				CertFile: testhelper.Cert("metron.crt"),
 				KeyFile:  testhelper.Cert("metron.key"),
 			},
-			nil,
 			false,
 			log.New(GinkgoWriter, "", 0),
 		)
@@ -67,7 +66,7 @@ var _ = Describe("ForwarderAgent", func() {
 			{"app-3", "host-3", "syslog://drain.url.com"},
 		}
 
-		fa := app.NewForwarderAgent(
+		fa := app.NewSyslogAgent(
 			0,
 			sm,
 			bf,
@@ -78,7 +77,6 @@ var _ = Describe("ForwarderAgent", func() {
 				CertFile: testhelper.Cert("metron.crt"),
 				KeyFile:  testhelper.Cert("metron.key"),
 			},
-			nil,
 			false,
 			log.New(GinkgoWriter, "", 0),
 		)
