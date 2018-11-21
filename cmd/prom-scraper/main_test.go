@@ -36,7 +36,7 @@ var _ = Describe("Main", func() {
 				"CLIENT_CERT_PATH="+testhelper.Cert("prom-scraper.crt"),
 				"CA_CERT_PATH="+testhelper.Cert("loggregator-ca.crt"),
 				"LOGGREGATOR_AGENT_ADDR="+spyAgent.addr,
-				"METRICS_URL="+promServer.URL,
+				"METRICS_URLS="+promServer.URL,
 				"SOURCE_ID=some-id",
 				"SCRAPE_INTERVAL=100ms",
 			)
@@ -77,7 +77,7 @@ var _ = Describe("Main", func() {
 				"CLIENT_CERT_PATH="+testhelper.Cert("prom-scraper.crt"),
 				"CA_CERT_PATH="+testhelper.Cert("loggregator-ca.crt"),
 				"LOGGREGATOR_AGENT_ADDR="+spyAgent.addr,
-				"METRICS_URL="+promServer.URL+","+promServer2.URL,
+				"METRICS_URLS="+promServer.URL+","+promServer2.URL,
 				"SOURCE_ID=some-id",
 				"SCRAPE_INTERVAL=100ms",
 			)
