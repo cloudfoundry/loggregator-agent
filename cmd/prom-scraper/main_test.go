@@ -24,36 +24,75 @@ var _ = Describe("Main", func() {
 		session *gexec.Session
 	)
 
-	BeforeEach(func() {
-		spyAgent = newSpyAgent()
-		promServer = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
-			w.Write([]byte(promOutput))
-		}))
+	Describe("when configured with a single metrics_url", func() {
+		BeforeEach(func() {
+			spyAgent = newSpyAgent()
+			promServer = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+				w.Write([]byte(promOutput))
+			}))
 
-		session = startScraper(
-			"CLIENT_KEY_PATH="+testhelper.Cert("prom-scraper.key"),
-			"CLIENT_CERT_PATH="+testhelper.Cert("prom-scraper.crt"),
-			"CA_CERT_PATH="+testhelper.Cert("loggregator-ca.crt"),
-			"LOGGREGATOR_AGENT_ADDR="+spyAgent.addr,
-			"METRICS_URL="+promServer.URL,
-			"SOURCE_ID=some-id",
-			"SCRAPE_INTERVAL=100ms",
+			session = startScraper(
+				"CLIENT_KEY_PATH="+testhelper.Cert("prom-scraper.key"),
+				"CLIENT_CERT_PATH="+testhelper.Cert("prom-scraper.crt"),
+				"CA_CERT_PATH="+testhelper.Cert("loggregator-ca.crt"),
+				"LOGGREGATOR_AGENT_ADDR="+spyAgent.addr,
+				"METRICS_URL="+promServer.URL,
+				"SOURCE_ID=some-id",
+				"SCRAPE_INTERVAL=100ms",
+			)
+		})
+
+		AfterEach(func() {
+			session.Kill()
+			gexec.CleanupBuildArtifacts()
+		})
+
+		It("scrapes a prometheus endpoint and sends those metrics to a loggregator agent", func() {
+			Eventually(spyAgent.Envelopes).Should(And(
+				ContainElement(buildEnvelope("node_timex_pps_calibration_total", 1)),
+				ContainElement(buildEnvelope("node_timex_pps_error_total", 2)),
+				ContainElement(buildEnvelope("node_timex_pps_frequency_hertz", 3)),
+				ContainElement(buildEnvelope("node_timex_pps_jitter_seconds", 4)),
+				ContainElement(buildEnvelope("node_timex_pps_jitter_total", 5)),
+			))
+		})
+	})
+
+	Describe("when configured with multiple metrics_urls", func() {
+		var (
+			promServer2 *httptest.Server
 		)
-	})
 
-	AfterEach(func() {
-		session.Kill()
-		gexec.CleanupBuildArtifacts()
-	})
+		BeforeEach(func() {
+			spyAgent = newSpyAgent()
+			promServer = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+				w.Write([]byte(promOutput))
+			}))
+			promServer2 = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+				w.Write([]byte(promOutput2))
+			}))
 
-	It("scrapes a prometheus endpoint and send those metrics to loggregator agent", func() {
-		Eventually(spyAgent.Envelopes).Should(And(
-			ContainElement(buildEnvelope("node_timex_pps_calibration_total", 1)),
-			ContainElement(buildEnvelope("node_timex_pps_error_total", 2)),
-			ContainElement(buildEnvelope("node_timex_pps_frequency_hertz", 3)),
-			ContainElement(buildEnvelope("node_timex_pps_jitter_seconds", 4)),
-			ContainElement(buildEnvelope("node_timex_pps_jitter_total", 5)),
-		))
+			session = startScraper(
+				"CLIENT_KEY_PATH="+testhelper.Cert("prom-scraper.key"),
+				"CLIENT_CERT_PATH="+testhelper.Cert("prom-scraper.crt"),
+				"CA_CERT_PATH="+testhelper.Cert("loggregator-ca.crt"),
+				"LOGGREGATOR_AGENT_ADDR="+spyAgent.addr,
+				"METRICS_URL="+promServer.URL+","+promServer2.URL,
+				"SOURCE_ID=some-id",
+				"SCRAPE_INTERVAL=100ms",
+			)
+		})
+
+		It("scrapes multiple prometheus endpoints and sends those metrics to a loggregator agent", func() {
+			Eventually(spyAgent.Envelopes).Should(And(
+				ContainElement(buildEnvelope("node_timex_pps_calibration_total", 1)),
+				ContainElement(buildEnvelope("node_timex_pps_error_total", 2)),
+				ContainElement(buildEnvelope("node_timex_pps_frequency_hertz", 3)),
+				ContainElement(buildEnvelope("node_timex_pps_jitter_seconds", 4)),
+				ContainElement(buildEnvelope("node_timex_pps_jitter_total", 5)),
+				ContainElement(buildEnvelope("node2_counter", 6)),
+			))
+		})
 	})
 })
 
@@ -103,6 +142,14 @@ node_timex_pps_jitter_seconds 4
 # HELP node_timex_pps_jitter_total Pulse per second count of jitter limit exceeded events.
 # TYPE node_timex_pps_jitter_total counter
 node_timex_pps_jitter_total 5
+`
+)
+
+const (
+	promOutput2 = `
+# HELP node2_counter A second counter from another metrics url
+# TYPE node2_counter counter
+node2_counter 6
 `
 )
 

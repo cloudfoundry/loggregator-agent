@@ -35,16 +35,22 @@ func main() {
 		log.Fatal(err)
 	}
 
-	scraper := scraper.New(
-		cfg.SourceID,
-		cfg.MetricsURL.String(),
-		client,
-		http.DefaultClient,
-	)
+	var scrapers []*scraper.Scraper
+
+	for _, metricUrl := range cfg.MetricsURL {
+		scrapers = append(scrapers, scraper.New(
+			cfg.SourceID,
+			metricUrl.String(),
+			client,
+			http.DefaultClient,
+		))
+	}
 
 	for range time.Tick(cfg.ScrapeInterval) {
-		if err := scraper.Scrape(); err != nil {
-			log.Printf("failed to scrape: %s", err)
+		for _, scraper := range scrapers {
+			if err := scraper.Scrape(); err != nil {
+				log.Printf("failed to scrape: %s", err)
+			}
 		}
 	}
 }
