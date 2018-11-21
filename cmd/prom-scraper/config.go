@@ -16,7 +16,7 @@ type config struct {
 
 	LoggregatorIngressAddr string        `env:"LOGGREGATOR_AGENT_ADDR, report, required"`
 	SourceID               string        `env:"SOURCE_ID, report, required"`
-	MetricsURL             []*url.URL    `env:"METRICS_URL, report, required"`
+	MetricsUrls            []*url.URL    `env:"METRICS_URLS, report, required"`
 	ScrapeInterval         time.Duration `env:"SCRAPE_INTERVAL, report"`
 }
 

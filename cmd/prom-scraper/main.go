@@ -37,7 +37,7 @@ func main() {
 
 	var scrapers []*scraper.Scraper
 
-	for _, metricUrl := range cfg.MetricsURL {
+	for _, metricUrl := range cfg.MetricsUrls {
 		scrapers = append(scrapers, scraper.New(
 			cfg.SourceID,
 			metricUrl.String(),
