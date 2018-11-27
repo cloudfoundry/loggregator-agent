@@ -103,7 +103,7 @@ var _ = Describe("Main", func() {
 		}).Should(Equal(http.StatusOK))
 
 		Expect(body).To(ContainSubstring(`"IngressDropped"`))
-		Expect(body).To(ContainSubstring(`"DrainCount": 2`))
+		Expect(body).To(ContainSubstring(`"DrainCount"`))
 		Expect(body).To(ContainSubstring(`"BindingRefreshCount"`))
 		Expect(body).To(ContainSubstring(`"BindingRefreshFailureCount"`))
 		Expect(body).To(ContainSubstring(`"RequestCountForLastBindingRefresh"`))
