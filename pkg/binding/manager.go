@@ -55,7 +55,11 @@ func (m *Manager) Run() {
 	m.drainCountMetric(float64(len(bindings)))
 	m.updateDrains(bindings)
 	for range t.C {
-		bindings, _ := m.bf.FetchBindings()
+		bindings, err := m.bf.FetchBindings()
+		if err != nil {
+			m.log.Printf("failed to fetch bindings: %s", err)
+			continue
+		}
 		m.drainCountMetric(float64(len(bindings)))
 		m.updateDrains(bindings)
 	}

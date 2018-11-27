@@ -139,43 +139,30 @@ var _ = Describe("Manager", func() {
 		Expect(env).To(Equal(e))
 	})
 
-	// It("should not create duplicate drains", func() {
-	// 	bf.bindings <- []syslog.Binding{
-	// 		{"app-1", "host-1", "syslog://drain.url.com"},
-	// 		{"app-2", "host-2", "syslog://drain.url.com"},
-	// 		{"app-3", "host-3", "syslog://drain.url.com"},
-	// 	}
+	It("maintains current state on error", func() {
+		bf.bindings <- []syslog.Binding{
+			{"app-1", "host-1", "syslog://drain.url.com"},
+		}
 
-	// 	m := binding.NewManager(
-	// 		bf,
-	// 		c,
-	// 		sm,
-	// 		10*time.Millisecond,
-	// 	)
-	// 	go m.Run()
+		m := binding.NewManager(
+			bf,
+			c,
+			sm,
+			10*time.Millisecond,
+			log.New(GinkgoWriter, "", 0),
+		)
+		go m.Run()
 
-	// 	var appDrains []syslog.Writer
-	// 	Eventually(func() int {
-	// 		appDrains = m.GetDrains("app-1")
-	// 		return len(appDrains)
-	// 	}).Should(Equal(1))
+		Eventually(func() int {
+			return len(m.GetDrains("app-1"))
+		}).Should(Equal(1))
 
-	// 	e := &loggregator_v2.Envelope{
-	// 		Timestamp: time.Now().UnixNano(),
-	// 		SourceId:  "app-1",
-	// 		Message: &loggregator_v2.Envelope_Log{
-	// 			Log: &loggregator_v2.Log{
-	// 				Payload: []byte("hello"),
-	// 			},
-	// 		},
-	// 	}
+		bf.errors <- errors.New("boom")
 
-	// 	appDrains[0].Write(e)
-
-	// 	var env *loggregator_v2.Envelope
-	// 	Eventually(appDrains[0].(*spyDrain).envelopes).Should(Receive(&env))
-	// 	Expect(env).To(Equal(e))
-	// })
+		Consistently(func() int {
+			return len(m.GetDrains("app-1"))
+		}).Should(Equal(1))
+	})
 })
 
 type spyDrain struct {
@@ -217,11 +204,13 @@ func (c *spyConnector) Connect(ctx context.Context, b syslog.Binding) (syslog.Wr
 
 type stubBindingFetcher struct {
 	bindings chan []syslog.Binding
+	errors   chan error
 }
 
 func newStubBindingFetcher() *stubBindingFetcher {
 	return &stubBindingFetcher{
 		bindings: make(chan []syslog.Binding, 100),
+		errors:   make(chan error, 100),
 	}
 }
 
@@ -229,8 +218,8 @@ func (s *stubBindingFetcher) FetchBindings() ([]syslog.Binding, error) {
 	select {
 	case b := <-s.bindings:
 		return b, nil
-	default:
-		return nil, nil
+	case err := <-s.errors:
+		return nil, err
 	}
 }
 
