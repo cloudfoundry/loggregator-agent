@@ -3,30 +3,25 @@ package app
 import (
 	"fmt"
 	"log"
-	"time"
 
 	"net/http"
 	_ "net/http/pprof"
 
 	gendiodes "code.cloudfoundry.org/go-diodes"
-	"code.cloudfoundry.org/loggregator-agent/pkg/binding"
 	"code.cloudfoundry.org/loggregator-agent/pkg/diodes"
 	"code.cloudfoundry.org/loggregator-agent/pkg/egress/syslog"
 	"code.cloudfoundry.org/loggregator-agent/pkg/ingress/v2"
 	"code.cloudfoundry.org/loggregator-agent/pkg/plumbing"
-	"code.cloudfoundry.org/loggregator-agent/pkg/timeoutwaitgroup"
 	"google.golang.org/grpc"
 )
 
 // SyslogAgent manages starting the syslog agent service.
 type SyslogAgent struct {
-	debugPort       uint16
-	pollingInterval time.Duration
-	m               Metrics
-	bf              BindingFetcher
-	grpc            GRPC
-	skipCertVerify  bool
-	log             *log.Logger
+	debugPort      uint16
+	m              Metrics
+	bindingManager BindingManager
+	grpc           GRPC
+	log            *log.Logger
 }
 
 type Metrics interface {
@@ -34,28 +29,25 @@ type Metrics interface {
 	NewCounter(name string) func(uint64)
 }
 
-type BindingFetcher interface {
-	FetchBindings() ([]syslog.Binding, error)
+type BindingManager interface {
+	Run()
+	GetDrains(string) []syslog.Writer
 }
 
 // NewSyslogAgent intializes and returns a new syslog agent.
 func NewSyslogAgent(
 	debugPort uint16,
 	m Metrics,
-	bf BindingFetcher,
-	pi time.Duration,
+	bm BindingManager,
 	grpc GRPC,
-	skipCertVerify bool,
 	log *log.Logger,
 ) *SyslogAgent {
 	return &SyslogAgent{
-		debugPort:       debugPort,
-		pollingInterval: pi,
-		bf:              bf,
-		grpc:            grpc,
-		m:               m,
-		skipCertVerify:  skipCertVerify,
-		log:             log,
+		debugPort:      debugPort,
+		bindingManager: bm,
+		grpc:           grpc,
+		m:              m,
+		log:            log,
 	}
 }
 
@@ -79,39 +71,19 @@ func (s SyslogAgent) run() {
 		ingressDropped(uint64(missed))
 	}))
 
-	constructors := map[string]syslog.WriterConstructor{
-		"https":      syslog.NewHTTPSWriter,
-		"syslog-tls": syslog.NewTLSWriter,
-		"syslog":     syslog.NewTCPWriter,
-	}
-
-	connector := syslog.NewSyslogConnector(
-		syslog.NetworkTimeoutConfig{
-			Keepalive:    10 * time.Second,
-			DialTimeout:  10 * time.Second,
-			WriteTimeout: 10 * time.Second,
-		},
-		s.skipCertVerify,
-		timeoutwaitgroup.New(time.Minute),
-		syslog.WithConstructors(constructors),
-	)
-
-	bindingManager := binding.NewManager(
-		s.bf,
-		connector,
-		s.m,
-		s.pollingInterval,
-		s.log,
-	)
-	go bindingManager.Run()
-
+	drainIngress := s.m.NewCounter("DrainIngress")
+	go s.bindingManager.Run()
 	go func() {
 		for {
 			e := diode.Next()
 
-			drainWriters := bindingManager.GetDrains(e.SourceId)
+			drainWriters := s.bindingManager.GetDrains(e.SourceId)
 			for _, w := range drainWriters {
-				w.Write(e)
+				drainIngress(1)
+
+				// Ignore this because we typically wrap everything in a diode
+				// writer which doesn't return an error
+				_ = w.Write(e)
 			}
 		}
 	}()

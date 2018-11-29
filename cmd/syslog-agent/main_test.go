@@ -103,11 +103,15 @@ var _ = Describe("Main", func() {
 		}).Should(Equal(http.StatusOK))
 
 		Expect(body).To(ContainSubstring(`"IngressDropped"`))
+		Expect(body).To(ContainSubstring(`"IngressV2"`))
 		Expect(body).To(ContainSubstring(`"DrainCount"`))
 		Expect(body).To(ContainSubstring(`"BindingRefreshCount"`))
 		Expect(body).To(ContainSubstring(`"BindingRefreshFailureCount"`))
 		Expect(body).To(ContainSubstring(`"RequestCountForLastBindingRefresh"`))
 		Expect(body).To(ContainSubstring(`"MaxLatencyForLastBindingRefreshMS"`))
+		Expect(body).To(ContainSubstring(`"DrainIngress"`))
+		Expect(body).To(ContainSubstring(`"EgressDropped"`))
+		Expect(body).To(ContainSubstring(`"Egress"`))
 	})
 
 	It("forwards envelopes to syslog drains", func() {

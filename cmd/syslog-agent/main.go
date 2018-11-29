@@ -7,9 +7,12 @@ import (
 	"time"
 
 	"code.cloudfoundry.org/loggregator-agent/cmd/syslog-agent/app"
+	"code.cloudfoundry.org/loggregator-agent/pkg/binding"
+	"code.cloudfoundry.org/loggregator-agent/pkg/egress/syslog"
 	"code.cloudfoundry.org/loggregator-agent/pkg/ingress/api"
 	"code.cloudfoundry.org/loggregator-agent/pkg/ingress/cups"
 	"code.cloudfoundry.org/loggregator-agent/pkg/metrics"
+	"code.cloudfoundry.org/loggregator-agent/pkg/timeoutwaitgroup"
 )
 
 func main() {
@@ -35,16 +38,33 @@ func main() {
 		BatchSize: 1000,
 	}
 
-	metrics := metrics.New(expvar.NewMap("SyslogAgent"))
-	bf := cups.NewBindingFetcher(cfg.BindingPerAppLimit, apiClient, metrics)
+	m := metrics.New(expvar.NewMap("SyslogAgent"))
+
+	connector := syslog.NewSyslogConnector(
+		syslog.NetworkTimeoutConfig{
+			Keepalive:    10 * time.Second,
+			DialTimeout:  10 * time.Second,
+			WriteTimeout: 10 * time.Second,
+		},
+		cfg.DrainSkipCertVerify,
+		timeoutwaitgroup.New(time.Minute),
+		syslog.NewWriterFactory(m),
+		m,
+	)
+
+	bindingManager := binding.NewManager(
+		cups.NewBindingFetcher(cfg.BindingPerAppLimit, apiClient, m),
+		connector,
+		m,
+		cfg.APIPollingInterval,
+		log,
+	)
 
 	app.NewSyslogAgent(
 		cfg.DebugPort,
-		metrics,
-		bf,
-		cfg.APIPollingInterval,
+		m,
+		bindingManager,
 		cfg.GRPC,
-		cfg.DrainSkipCertVerify,
 		log,
 	).Run(true)
 }

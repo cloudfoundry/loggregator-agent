@@ -1,8 +1,8 @@
 package syslog_test
 
 import (
+	"errors"
 	"io"
-	"sync/atomic"
 	"time"
 
 	"golang.org/x/net/context"
@@ -16,35 +16,28 @@ import (
 
 var _ = Describe("SyslogConnector", func() {
 	var (
-		ctx          context.Context
-		spyWaitGroup *SpyWaitGroup
-		netConf      syslog.NetworkTimeoutConfig
+		ctx           context.Context
+		spyWaitGroup  *SpyWaitGroup
+		netConf       syslog.NetworkTimeoutConfig
+		writerFactory *stubWriterFactory
+		sm            *spyMetrics
 	)
 
 	BeforeEach(func() {
+		sm = newSpyMetrics()
 		ctx, _ = context.WithCancel(context.Background())
 		spyWaitGroup = &SpyWaitGroup{}
+		writerFactory = &stubWriterFactory{}
 	})
 
 	It("connects to the passed syslog protocol", func() {
-		var called bool
-		constructor := func(
-			*syslog.URLBinding,
-			syslog.NetworkTimeoutConfig,
-			bool,
-			func(uint64),
-		) syslog.WriteCloser {
-			called = true
-			return &SleepWriterCloser{metric: func(uint64) {}}
-		}
-
+		writerFactory.writer = &SleepWriterCloser{metric: func(uint64) {}}
 		connector := syslog.NewSyslogConnector(
 			netConf,
 			true,
 			spyWaitGroup,
-			syslog.WithConstructors(map[string]syslog.WriterConstructor{
-				"foo": constructor,
-			}),
+			writerFactory,
+			sm,
 		)
 
 		binding := syslog.Binding{
@@ -52,29 +45,21 @@ var _ = Describe("SyslogConnector", func() {
 		}
 		_, err := connector.Connect(ctx, binding)
 		Expect(err).ToNot(HaveOccurred())
-		Expect(called).To(BeTrue())
+		Expect(writerFactory.called).To(BeTrue())
 	})
 
 	It("returns a writer that doesn't block even if the constructor's writer blocks", func() {
-		slowConstructor := func(
-			*syslog.URLBinding,
-			syslog.NetworkTimeoutConfig,
-			bool,
-			func(uint64),
-		) syslog.WriteCloser {
-			return &SleepWriterCloser{
-				metric:   func(uint64) {},
-				duration: time.Hour,
-			}
+		writerFactory.writer = &SleepWriterCloser{
+			metric:   func(uint64) {},
+			duration: time.Hour,
 		}
 
 		connector := syslog.NewSyslogConnector(
 			netConf,
 			true,
 			spyWaitGroup,
-			syslog.WithConstructors(map[string]syslog.WriterConstructor{
-				"slow": slowConstructor,
-			}),
+			writerFactory,
+			sm,
 		)
 
 		binding := syslog.Binding{
@@ -88,11 +73,14 @@ var _ = Describe("SyslogConnector", func() {
 		Expect(err).ToNot(HaveOccurred())
 	})
 
-	It("returns an error for an unsupported syslog protocol", func() {
+	It("returns an error when the writer factory returns an error", func() {
+		writerFactory.err = errors.New("unsupported protocol")
 		connector := syslog.NewSyslogConnector(
 			netConf,
 			true,
 			spyWaitGroup,
+			writerFactory,
+			sm,
 		)
 
 		binding := syslog.Binding{
@@ -107,6 +95,8 @@ var _ = Describe("SyslogConnector", func() {
 			netConf,
 			true,
 			spyWaitGroup,
+			writerFactory,
+			sm,
 		)
 
 		binding := syslog.Binding{
@@ -123,6 +113,8 @@ var _ = Describe("SyslogConnector", func() {
 			netConf,
 			true,
 			spyWaitGroup,
+			writerFactory,
+			sm,
 			syslog.WithLogClient(logClient, "3"),
 		)
 
@@ -138,77 +130,21 @@ var _ = Describe("SyslogConnector", func() {
 		Expect(logClient.sourceType()).To(HaveKey("LGR"))
 	})
 
-	It("emits a metric when sending outbound messages", func() {
-		writerConstructor := func(
-			_ *syslog.URLBinding,
-			_ syslog.NetworkTimeoutConfig,
-			_ bool,
-			m func(uint64),
-		) syslog.WriteCloser {
-			return &SleepWriterCloser{metric: m, duration: 0}
-		}
-
-		var total uint64
-		egressMetric := func(delta uint64) {
-			atomic.AddUint64(&total, delta)
-		}
-
-		connector := syslog.NewSyslogConnector(
-			netConf,
-			true,
-			spyWaitGroup,
-			syslog.WithConstructors(map[string]syslog.WriterConstructor{
-				"protocol": writerConstructor,
-			}),
-			syslog.WithEgressMetrics(map[string]func(uint64){
-				"protocol": egressMetric,
-			}),
-		)
-
-		binding := syslog.Binding{
-			Drain: "protocol://",
-		}
-		writer, err := connector.Connect(ctx, binding)
-		Expect(err).ToNot(HaveOccurred())
-
-		for i := 0; i < 500; i++ {
-			writer.Write(&loggregator_v2.Envelope{
-				SourceId: "test-source-id",
-			})
-		}
-
-		Eventually(func() uint64 {
-			return atomic.LoadUint64(&total)
-		}).Should(Equal(uint64(500)))
-	})
-
 	Describe("dropping messages", func() {
-		var droppingConstructor = func(
-			*syslog.URLBinding,
-			syslog.NetworkTimeoutConfig,
-			bool,
-			func(uint64),
-		) syslog.WriteCloser {
-			return &SleepWriterCloser{
+		BeforeEach(func() {
+			writerFactory.writer = &SleepWriterCloser{
 				metric:   func(uint64) {},
 				duration: time.Millisecond,
 			}
-		}
+		})
 
 		It("emits a metric on dropped messages", func() {
-			var total uint64
-			droppedMetric := func(d uint64) { atomic.AddUint64(&total, d) }
-
 			connector := syslog.NewSyslogConnector(
 				netConf,
 				true,
 				spyWaitGroup,
-				syslog.WithConstructors(map[string]syslog.WriterConstructor{
-					"dropping": droppingConstructor,
-				}),
-				syslog.WithDroppedMetrics(map[string]func(uint64){
-					"dropping": droppedMetric,
-				}),
+				writerFactory,
+				sm,
 			)
 
 			binding := syslog.Binding{Drain: "dropping://"}
@@ -224,27 +160,23 @@ var _ = Describe("SyslogConnector", func() {
 				}
 			}(writer)
 
-			Eventually(func() uint64 { return atomic.LoadUint64(&total) }).Should(BeNumerically(">", 10000))
+			var mv float64
+			Eventually(sm.metricValues).Should(Receive(&mv))
+			Expect(mv).To(BeNumerically(">=", 10000))
 		})
 
 		It("emits a LGR and SYS log to the log client about logs that have been dropped", func() {
-			droppedMetric := func(uint64) {}
-			binding := syslog.Binding{AppId: "app-id", Drain: "dropping://"}
 			logClient := newSpyLogClient()
-
 			connector := syslog.NewSyslogConnector(
 				netConf,
 				true,
 				spyWaitGroup,
-				syslog.WithConstructors(map[string]syslog.WriterConstructor{
-					"dropping": droppingConstructor,
-				}),
-				syslog.WithDroppedMetrics(map[string]func(uint64){
-					"dropping": droppedMetric,
-				}),
+				writerFactory,
+				sm,
 				syslog.WithLogClient(logClient, "3"),
 			)
 
+			binding := syslog.Binding{AppId: "app-id", Drain: "dropping://"}
 			writer, err := connector.Connect(ctx, binding)
 			Expect(err).ToNot(HaveOccurred())
 
@@ -275,10 +207,8 @@ var _ = Describe("SyslogConnector", func() {
 				netConf,
 				true,
 				spyWaitGroup,
-				syslog.WithConstructors(map[string]syslog.WriterConstructor{
-					"dropping": droppingConstructor,
-				}),
-				syslog.WithDroppedMetrics(map[string]func(uint64){}),
+				writerFactory,
+				sm,
 			)
 
 			writer, err := connector.Connect(ctx, binding)
@@ -295,6 +225,21 @@ var _ = Describe("SyslogConnector", func() {
 		})
 	})
 })
+
+type stubWriterFactory struct {
+	called bool
+	writer syslog.WriteCloser
+	err    error
+}
+
+func (f *stubWriterFactory) NewWriter(
+	urlBinding *syslog.URLBinding,
+	netConf syslog.NetworkTimeoutConfig,
+	skipCertVerify bool,
+) (syslog.WriteCloser, error) {
+	f.called = true
+	return f.writer, f.err
+}
 
 type SleepWriterCloser struct {
 	duration time.Duration

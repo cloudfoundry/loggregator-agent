@@ -1,7 +1,6 @@
 package syslog
 
 import (
-	"errors"
 	"fmt"
 	"io"
 	"log"
@@ -43,18 +42,21 @@ type nullLogClient struct{}
 func (nullLogClient) EmitLog(message string, opts ...loggregator.EmitLogOption) {
 }
 
+type writerFactory interface {
+	NewWriter(*URLBinding, NetworkTimeoutConfig, bool) (WriteCloser, error)
+}
+
 // SyslogConnector creates the various egress syslog writers.
 type SyslogConnector struct {
 	skipCertVerify bool
 	keepalive      time.Duration
 	ioTimeout      time.Duration
 	dialTimeout    time.Duration
-	constructors   map[string]WriterConstructor
-	droppedMetrics map[string]func(uint64)
-	egressMetrics  map[string]func(uint64)
 	logClient      LogClient
 	wg             WaitGroup
 	sourceIndex    string
+	writerFactory  writerFactory
+	m              metrics
 }
 
 // NewSyslogConnector configures and returns a new SyslogConnector.
@@ -62,6 +64,8 @@ func NewSyslogConnector(
 	netConf NetworkTimeoutConfig,
 	skipCertVerify bool,
 	wg WaitGroup,
+	f writerFactory,
+	m metrics,
 	opts ...ConnectorOption,
 ) *SyslogConnector {
 	sc := &SyslogConnector{
@@ -71,9 +75,8 @@ func NewSyslogConnector(
 		skipCertVerify: skipCertVerify,
 		wg:             wg,
 		logClient:      nullLogClient{},
-		constructors:   make(map[string]WriterConstructor),
-		droppedMetrics: make(map[string]func(uint64)),
-		egressMetrics:  make(map[string]func(uint64)),
+		writerFactory:  f,
+		m:              m,
 	}
 	for _, o := range opts {
 		o(sc)
@@ -92,31 +95,6 @@ type WriterConstructor func(
 
 // ConnectorOption allows a syslog connector to be customized.
 type ConnectorOption func(*SyslogConnector)
-
-// WithConstructors allows users to configure the constructors which will
-// create syslog network connections. The string key in the constructors map
-// should name the protocol.
-func WithConstructors(constructors map[string]WriterConstructor) ConnectorOption {
-	return func(sc *SyslogConnector) {
-		sc.constructors = constructors
-	}
-}
-
-// WithDroppedMetrics allows users to configure the dropped metrics which will
-// be emitted when a syslog writer drops messages
-func WithDroppedMetrics(metrics map[string]func(uint64)) ConnectorOption {
-	return func(sc *SyslogConnector) {
-		sc.droppedMetrics = metrics
-	}
-}
-
-// WithEgressMetrics allows users to configure the dropped metrics which will
-// be emitted when a syslog writer drops messages
-func WithEgressMetrics(metrics map[string]func(uint64)) ConnectorOption {
-	return func(sc *SyslogConnector) {
-		sc.egressMetrics = metrics
-	}
-}
 
 // WithLogClient returns a ConnectorOption that will set up logging for any
 // information about a binding.
@@ -139,34 +117,21 @@ func (w *SyslogConnector) Connect(ctx context.Context, b Binding) (Writer, error
 		return nil, err
 	}
 
-	droppedMetric, ok := w.droppedMetrics[urlBinding.Scheme()]
-	if !ok {
-		droppedMetric = func(uint64) {}
-	}
-
-	egressMetric, ok := w.egressMetrics[urlBinding.Scheme()]
-	if !ok {
-		egressMetric = func(uint64) {}
-	}
-
-	constructor, ok := w.constructors[urlBinding.Scheme()]
-	if !ok {
-		return nil, errors.New("unsupported protocol")
-	}
 	netConf := NetworkTimeoutConfig{
 		Keepalive:    w.keepalive,
 		DialTimeout:  w.dialTimeout,
 		WriteTimeout: w.ioTimeout,
 	}
-	writer := constructor(
-		urlBinding,
-		netConf,
-		w.skipCertVerify,
-		egressMetric,
-	)
+
+	writer, err := w.writerFactory.NewWriter(urlBinding, netConf, w.skipCertVerify)
+	if err != nil {
+		return nil, err
+	}
 
 	anonymousUrl := *urlBinding.URL
 	anonymousUrl.User = nil
+
+	droppedMetric := w.m.NewCounter("EgressDropped")
 
 	dw := NewDiodeWriter(ctx, writer, diodes.AlertFunc(func(missed int) {
 		droppedMetric(uint64(missed))
