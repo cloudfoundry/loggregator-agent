@@ -3,6 +3,7 @@ package binding
 import (
 	"context"
 	"log"
+	"math/rand"
 	"sync"
 	"time"
 
@@ -49,7 +50,13 @@ func NewManager(bf Fetcher, connector Connector, m Metrics, pi time.Duration, lo
 }
 
 func (m *Manager) Run() {
-	t := time.NewTicker(m.pollingInterval)
+	offset := time.Duration(
+		rand.Intn(
+			int(m.pollingInterval.Nanoseconds()),
+		),
+	) * time.Nanosecond
+
+	t := time.NewTicker(m.pollingInterval + offset)
 
 	bindings, _ := m.bf.FetchBindings()
 	m.drainCountMetric(float64(len(bindings)))
