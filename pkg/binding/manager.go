@@ -102,6 +102,7 @@ func (m *Manager) updateDrains(bindings []syslog.Binding) {
 		}
 	}
 
+	// Delete all bindings that are not in updated list of bindings.
 	// TODO: this is not optimal, consider lazily storing bindings
 	for appID, bindingWriterMap := range m.sourceDrainMap {
 		for b, _ := range bindingWriterMap {

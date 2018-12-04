@@ -84,34 +84,33 @@ var _ = Describe("Main", func() {
 		)
 		defer session.Kill()
 
-		var body string
-		Eventually(func() int {
+		f := func() string {
 			resp, err := http.Get("http://127.0.0.1:7392/debug/vars")
 			if err != nil {
-				return -1
+				return ""
 			}
 
 			if resp.StatusCode == http.StatusOK {
 				b, err := ioutil.ReadAll(resp.Body)
 				if err != nil {
-					return -1
+					return ""
 				}
-				body = string(b)
+				return string(b)
 			}
 
-			return resp.StatusCode
-		}).Should(Equal(http.StatusOK))
+			return ""
+		}
 
-		Expect(body).To(ContainSubstring(`"IngressDropped"`))
-		Expect(body).To(ContainSubstring(`"IngressV2"`))
-		Expect(body).To(ContainSubstring(`"DrainCount"`))
-		Expect(body).To(ContainSubstring(`"BindingRefreshCount"`))
-		Expect(body).To(ContainSubstring(`"BindingRefreshFailureCount"`))
-		Expect(body).To(ContainSubstring(`"RequestCountForLastBindingRefresh"`))
-		Expect(body).To(ContainSubstring(`"MaxLatencyForLastBindingRefreshMS"`))
-		Expect(body).To(ContainSubstring(`"DrainIngress"`))
-		Expect(body).To(ContainSubstring(`"EgressDropped"`))
-		Expect(body).To(ContainSubstring(`"Egress"`))
+		Eventually(f).Should(ContainSubstring(`"IngressDropped"`))
+		Eventually(f).Should(ContainSubstring(`"IngressV2"`))
+		Eventually(f).Should(ContainSubstring(`"DrainCount"`))
+		Eventually(f).Should(ContainSubstring(`"BindingRefreshCount"`))
+		Eventually(f).Should(ContainSubstring(`"BindingRefreshFailureCount"`))
+		Eventually(f).Should(ContainSubstring(`"RequestCountForLastBindingRefresh"`))
+		Eventually(f).Should(ContainSubstring(`"MaxLatencyForLastBindingRefreshMS"`))
+		Eventually(f).Should(ContainSubstring(`"DrainIngress"`))
+		Eventually(f).Should(ContainSubstring(`"EgressDropped"`))
+		Eventually(f).Should(ContainSubstring(`"Egress"`))
 	})
 
 	It("forwards envelopes to syslog drains", func() {
