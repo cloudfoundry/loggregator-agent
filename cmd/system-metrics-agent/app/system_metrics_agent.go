@@ -1,15 +1,20 @@
 package app
 
 import (
+	"fmt"
 	"log"
+	"net"
+	"net/http"
+	_ "net/http/pprof"
 
 	loggregator "code.cloudfoundry.org/go-loggregator"
 	"code.cloudfoundry.org/loggregator-agent/pkg/collector"
 )
 
 type SystemMetricsAgent struct {
-	cfg Config
-	log *log.Logger
+	cfg      Config
+	log      *log.Logger
+	debugLis net.Listener
 }
 
 func NewSystemMetricsAgent(cfg Config, log *log.Logger) *SystemMetricsAgent {
@@ -20,6 +25,12 @@ func NewSystemMetricsAgent(cfg Config, log *log.Logger) *SystemMetricsAgent {
 }
 
 func (a *SystemMetricsAgent) Run(blocking bool) {
+	var err error
+	a.debugLis, err = net.Listen("tcp", fmt.Sprintf("127.0.0.1:%d", a.cfg.DebugPort))
+	if err != nil {
+		a.log.Panicf("failed to start debug listener: %s", err)
+	}
+
 	if blocking {
 		a.run()
 		return
@@ -28,10 +39,17 @@ func (a *SystemMetricsAgent) Run(blocking bool) {
 	go a.run()
 }
 
-func (a *SystemMetricsAgent) Stop() {
+func (a *SystemMetricsAgent) DebugAddr() string {
+	if a.debugLis == nil {
+		return ""
+	}
+
+	return a.debugLis.Addr().String()
 }
 
 func (a *SystemMetricsAgent) run() {
+	go http.Serve(a.debugLis, nil)
+
 	ic, err := loggregator.NewIngressClient(
 		a.cfg.TLS.Config(),
 		loggregator.WithAddr(a.cfg.LoggregatorAddr),

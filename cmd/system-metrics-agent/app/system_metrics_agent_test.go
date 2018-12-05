@@ -4,6 +4,7 @@ import (
 	"context"
 	"log"
 	"net"
+	"net/http"
 	"time"
 
 	"code.cloudfoundry.org/go-loggregator/rpc/loggregator_v2"
@@ -17,9 +18,14 @@ import (
 )
 
 var _ = Describe("SystemMetricsAgent", func() {
-	It("sends system metrics on an interval", func() {
-		loggr := newSpyLoggregator()
-		a := app.NewSystemMetricsAgent(
+	var (
+		loggr *spyLoggregator
+		agent *app.SystemMetricsAgent
+	)
+
+	BeforeEach(func() {
+		loggr = newSpyLoggregator()
+		agent = app.NewSystemMetricsAgent(
 			app.Config{
 				LoggregatorAddr: loggr.addr,
 				MetricInterval:  100 * time.Millisecond,
@@ -31,11 +37,21 @@ var _ = Describe("SystemMetricsAgent", func() {
 			},
 			log.New(GinkgoWriter, "", log.LstdFlags),
 		)
-		a.Run(false)
-		defer a.Stop()
+	})
+
+	It("sends system metrics on an interval", func() {
+		agent.Run(false)
 
 		var env *loggregator_v2.Envelope
 		Eventually(loggr.envelopes, 5).Should(Receive(&env))
+	})
+
+	It("has an http listener for PProf", func() {
+		agent.Run(false)
+
+		resp, err := http.Get("http://" + agent.DebugAddr() + "/debug/pprof/")
+		Expect(err).ToNot(HaveOccurred())
+		Expect(resp.StatusCode).To(Equal(http.StatusOK))
 	})
 })
 
