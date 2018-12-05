@@ -28,7 +28,7 @@ var _ = Describe("SystemMetricsAgent", func() {
 		agent = app.NewSystemMetricsAgent(
 			app.Config{
 				LoggregatorAddr: loggr.addr,
-				MetricInterval:  100 * time.Millisecond,
+				SampleInterval:  100 * time.Millisecond,
 				TLS: app.TLS{
 					CAPath:   testhelper.Cert("loggregator-ca.crt"),
 					CertPath: testhelper.Cert("metron.crt"),

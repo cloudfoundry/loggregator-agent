@@ -12,7 +12,7 @@ import (
 // Config holds the configuration for the system metrics agent.
 type Config struct {
 	LoggregatorAddr string        `env:"LOGGREGATOR_ADDR, required, report"`
-	MetricInterval  time.Duration `env:"METRIC_INTERVAL,            report"`
+	SampleInterval  time.Duration `env:"SAMPLE_INTERVAL,            report"`
 
 	DebugPort uint16 `env:"DEBUG_PORT, report"`
 
@@ -21,7 +21,7 @@ type Config struct {
 
 func LoadConfig() Config {
 	cfg := Config{
-		MetricInterval: time.Minute,
+		SampleInterval: time.Minute,
 	}
 
 	if err := envstruct.Load(&cfg); err != nil {

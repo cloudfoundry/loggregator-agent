@@ -62,7 +62,7 @@ func (a *SystemMetricsAgent) run() {
 	collector.NewProcessor(
 		collector.Collect,
 		ic.Emit,
-		a.cfg.MetricInterval,
+		a.cfg.SampleInterval,
 		a.log,
 	).Run()
 }
