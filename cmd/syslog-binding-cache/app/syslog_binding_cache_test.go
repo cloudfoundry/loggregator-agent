@@ -52,9 +52,16 @@ var _ = Describe("SyslogBindingCache", func() {
 			APICertFile:        testhelper.Cert("capi-ca.crt"),
 			APIKeyFile:         testhelper.Cert("capi-ca.key"),
 			APICommonName:      "capiCA",
+			CacheCAFile:        testhelper.Cert("binding-cache-ca.crt"),
+			CacheCertFile:      testhelper.Cert("binding-cache-ca.crt"),
+			CacheKeyFile:       testhelper.Cert("binding-cache-ca.key"),
+			CacheCommonName:    "bindingCacheCA",
 		}
 		sbc = app.NewSyslogBindingCache(config, logger)
-		sbc.Run(false)
+		go sbc.Run()
+
+		//wait for the server to start
+		Eventually(sbc.Addr).ShouldNot(Equal(""))
 	})
 
 	AfterEach(func() {
@@ -170,10 +177,10 @@ func findBinding(bindings []binding.Binding, appID string) binding.Binding {
 
 func newTLSClient() *http.Client {
 	tlsConfig, err := plumbing.NewClientMutualTLSConfig(
-		testhelper.Cert("capi-ca.crt"),
-		testhelper.Cert("capi-ca.key"),
-		testhelper.Cert("capi-ca.crt"),
-		"capiCA",
+		testhelper.Cert("binding-cache-ca.crt"),
+		testhelper.Cert("binding-cache-ca.key"),
+		testhelper.Cert("binding-cache-ca.crt"),
+		"bindingCacheCA",
 	)
 	if err != nil {
 		log.Panicf("failed to load http client certificates: %s", err)

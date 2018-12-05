@@ -1,17 +1,13 @@
 package cups
 
 import (
-	"encoding/json"
-	"fmt"
-	"io/ioutil"
 	"math"
-	"net/http"
 	"net/url"
 	"sort"
 	"strings"
-	"sync"
 	"time"
 
+	"code.cloudfoundry.org/loggregator-agent/pkg/binding"
 	"code.cloudfoundry.org/loggregator-agent/pkg/egress/syslog"
 )
 
@@ -23,136 +19,83 @@ type Metrics interface {
 
 // Getter is configured to fetch HTTP responses
 type Getter interface {
-	Get(nextID int) (resp *http.Response, err error)
+	Get() []binding.Binding
 }
 
 // BindingFetcher uses a Getter to fetch and decode Bindings
 type BindingFetcher struct {
-	getter     Getter
-	mu         sync.RWMutex
-	drainCount int
-	limit      int
-
-	refreshCount        func(uint64)
-	refreshFailureCount func(uint64)
-	requestCount        func(float64)
-	maxLatency          func(float64)
-}
-
-type response struct {
-	Results map[string]struct {
-		Drains   []string
-		Hostname string
-	}
-	NextID int `json:"next_id"`
+	refreshCount func(uint64)
+	maxLatency   func(float64)
+	limit        int
+	getter       Getter
 }
 
 // NewBindingFetcher returns a new BindingFetcher
 func NewBindingFetcher(limit int, g Getter, m Metrics) *BindingFetcher {
 	return &BindingFetcher{
-		limit:               limit,
-		getter:              g,
-		refreshCount:        m.NewCounter("BindingRefreshCount"),
-		refreshFailureCount: m.NewCounter("BindingRefreshFailureCount"),
-		requestCount:        m.NewGauge("RequestCountForLastBindingRefresh"),
-		maxLatency:          m.NewGauge("MaxLatencyForLastBindingRefreshMS"),
+		limit:        limit,
+		getter:       g,
+		refreshCount: m.NewCounter("BindingRefreshCount"),
+		maxLatency:   m.NewGauge("LatencyForLastBindingRefreshMS"),
 	}
 }
 
 // FetchBindings reaches out to the syslog drain binding provider via the Getter and decodes
 // the response. If it does not get a 200, it returns an error.
 func (f *BindingFetcher) FetchBindings() ([]syslog.Binding, error) {
-	bindings := []syslog.Binding{}
-	nextID := 0
-
-	var requestCount int
-	var maxLatency int64
+	var latency int64
 	defer func() {
 		f.refreshCount(1)
-		f.requestCount(float64(requestCount))
-		f.maxLatency(toMilliseconds(maxLatency))
+		f.maxLatency(toMilliseconds(latency))
 	}()
 
-	for {
-		requestCount++
-		start := time.Now()
-		resp, err := f.getter.Get(nextID)
-		d := time.Since(start)
-		if err != nil {
-			f.refreshFailureCount(1)
-			return nil, err
-		}
+	start := time.Now()
+	bindings := f.getter.Get()
+	d := time.Since(start)
+	latency = d.Nanoseconds()
 
-		if d.Nanoseconds() > maxLatency {
-			maxLatency = d.Nanoseconds()
-		}
+	syslogBindings := toSyslogBindings(bindings)
 
-		if resp.StatusCode != http.StatusOK {
-			f.refreshFailureCount(1)
-			return nil, fmt.Errorf("received %d status code from syslog drain binding API", resp.StatusCode)
-		}
+	if f.limit > len(syslogBindings) {
+		return syslogBindings, nil
+	}
+	return syslogBindings[:f.limit], nil
+}
 
-		body, err := ioutil.ReadAll(resp.Body)
-		if err != nil {
-			f.refreshFailureCount(1)
-			return nil, err
-		}
-		defer resp.Body.Close()
+func toSyslogBindings(bs []binding.Binding) []syslog.Binding {
+	var bindings []syslog.Binding
+	for _, b := range bs {
+		sort.Strings(b.Drains)
+		for _, d := range b.Drains {
+			// TODO: remove prefix when forwarder-agent is no longer
+			// feature-flagged
+			u, err := url.Parse(d)
+			if err != nil {
+				continue
+			}
 
-		var r response
-		if err = json.Unmarshal(body, &r); err != nil {
-			f.refreshFailureCount(1)
-			return nil, fmt.Errorf("invalid API response body")
-		}
-
-		for appID, bindingData := range r.Results {
-			hostname := bindingData.Hostname
-			var count int
-
-			sort.Strings(bindingData.Drains)
-
-			for _, drainURL := range bindingData.Drains {
-				if count >= f.limit {
-					break
-				}
-
-				// TODO: remove prefix when forwarder-agent is no longer
-				// feature-flagged
-				u, err := url.Parse(drainURL)
-				if err != nil {
-					continue
-				}
-
-				if !strings.HasSuffix(u.Scheme, "-v3") {
-					continue
-				}
-				count++
-
+			if strings.HasSuffix(u.Scheme, "-v3") {
 				u.Scheme = strings.TrimSuffix(u.Scheme, "-v3")
-
-				bindings = append(bindings, syslog.Binding{
-					Hostname: hostname,
+				binding := syslog.Binding{
+					AppId:    b.AppID,
+					Hostname: b.Hostname,
 					Drain:    u.String(),
-					AppId:    appID,
-				})
+				}
+				bindings = append(bindings, binding)
 			}
 		}
-
-		if r.NextID == 0 {
-			return bindings, nil
-		}
-		nextID = r.NextID
 	}
+	return bindings
 }
 
 // toMilliseconds truncates the calculated milliseconds float to microsecond
 // precision.
 func toMilliseconds(num int64) float64 {
-	f := float64(num) / float64(time.Millisecond)
-	output := math.Pow(10, float64(3))
-	return float64(roundFloat64(f*output)) / output
+	millis := float64(num) / float64(time.Millisecond)
+	microsPerMilli := 1000.0
+	return roundFloat64(millis*microsPerMilli) / microsPerMilli
 }
 
-func roundFloat64(num float64) int {
-	return int(num + math.Copysign(0.5, num))
+func roundFloat64(num float64) float64 {
+	return float64(int(num + math.Copysign(0.5, num)))
 }

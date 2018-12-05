@@ -3,15 +3,18 @@ package main
 import (
 	"expvar"
 	"log"
+	"net"
+	"net/http"
 	"os"
 	"time"
 
 	"code.cloudfoundry.org/loggregator-agent/cmd/syslog-agent/app"
 	"code.cloudfoundry.org/loggregator-agent/pkg/binding"
+	"code.cloudfoundry.org/loggregator-agent/pkg/cache"
 	"code.cloudfoundry.org/loggregator-agent/pkg/egress/syslog"
-	"code.cloudfoundry.org/loggregator-agent/pkg/ingress/api"
 	"code.cloudfoundry.org/loggregator-agent/pkg/ingress/cups"
 	"code.cloudfoundry.org/loggregator-agent/pkg/metrics"
+	"code.cloudfoundry.org/loggregator-agent/pkg/plumbing"
 	"code.cloudfoundry.org/loggregator-agent/pkg/timeoutwaitgroup"
 )
 
@@ -20,25 +23,9 @@ func main() {
 	log.Println("starting syslog-agent")
 	defer log.Println("stopping syslog-agent")
 
-	cfg := app.LoadConfig()
-
-	apiTLSConfig, err := api.NewMutualTLSConfig(
-		cfg.APICertFile,
-		cfg.APIKeyFile,
-		cfg.APICAFile,
-		cfg.APICommonName,
-	)
-	if err != nil {
-		log.Fatalf("Invalid TLS config: %s", err)
-	}
-
-	apiClient := api.Client{
-		Client:    api.NewHTTPSClient(apiTLSConfig, 5*time.Second),
-		Addr:      cfg.APIURL,
-		BatchSize: 1000,
-	}
-
 	m := metrics.New(expvar.NewMap("SyslogAgent"))
+
+	cfg := app.LoadConfig()
 
 	connector := syslog.NewSyslogConnector(
 		syslog.NetworkTimeoutConfig{
@@ -52,11 +39,12 @@ func main() {
 		m,
 	)
 
+	cacheClient := cache.NewClient(cfg.CacheURL, newTLSHTTPClient(cfg))
 	bindingManager := binding.NewManager(
-		cups.NewBindingFetcher(cfg.BindingPerAppLimit, apiClient, m),
+		cups.NewBindingFetcher(cfg.BindingsPerAppLimit, cacheClient, m),
 		connector,
 		m,
-		cfg.APIPollingInterval,
+		cfg.CachePollingInterval,
 		log,
 	)
 
@@ -66,5 +54,37 @@ func main() {
 		bindingManager,
 		cfg.GRPC,
 		log,
-	).Run(true)
+	).Run()
+}
+
+//TODO:// We do this twice, make a helper
+func newTLSHTTPClient(cfg app.Config) *http.Client {
+	//TODO: We have several ways to create TSL configs, which is correct?
+	tlsConfig, err := plumbing.NewClientMutualTLSConfig(
+		cfg.CacheCertFile,
+		cfg.CacheKeyFile,
+		cfg.CacheCAFile,
+		cfg.CacheCommonName,
+	)
+	if err != nil {
+		log.Panicf("failed to load API client certificates: %s", err)
+	}
+
+	transport := &http.Transport{
+		Proxy: http.ProxyFromEnvironment,
+		DialContext: (&net.Dialer{
+			Timeout:   5 * time.Second,
+			KeepAlive: 30 * time.Second,
+			DualStack: true,
+		}).DialContext,
+		MaxIdleConns:          100,
+		IdleConnTimeout:       90 * time.Second,
+		TLSHandshakeTimeout:   10 * time.Second,
+		ExpectContinueTimeout: 1 * time.Second,
+		TLSClientConfig:       tlsConfig,
+	}
+
+	return &http.Client{
+		Transport: transport,
+	}
 }

@@ -18,6 +18,8 @@ import (
 	loggregator "code.cloudfoundry.org/go-loggregator"
 	"code.cloudfoundry.org/go-loggregator/rpc/loggregator_v2"
 	"code.cloudfoundry.org/loggregator-agent/internal/testhelper"
+	"code.cloudfoundry.org/loggregator-agent/pkg/binding"
+	"code.cloudfoundry.org/loggregator-agent/pkg/plumbing"
 	"code.cloudfoundry.org/rfc5424"
 	"github.com/onsi/gomega/gexec"
 
@@ -29,7 +31,7 @@ var _ = Describe("Main", func() {
 	var (
 		syslogHTTPS  *syslogHTTPSServer
 		syslogTLS    *syslogTCPServer
-		cupsProvider *httptest.Server
+		cupsProvider *fakeBindingCache
 		grpcPort     = 30000
 	)
 
@@ -37,30 +39,32 @@ var _ = Describe("Main", func() {
 		syslogHTTPS = newSyslogHTTPSServer()
 		syslogTLS = newSyslogTLSServer()
 
-		cupsProvider = httptest.NewServer(
-			&fakeCC{
-				results: results{
-					"v2-drain": appBindings{
-						Hostname: "org.space.name",
-						Drains: []string{
-							syslogHTTPS.server.URL,
-						},
+		cupsProvider = &fakeBindingCache{
+			results: []binding.Binding{
+				{
+					AppID:    "v2-drain",
+					Hostname: "org.space.name",
+					Drains: []string{
+						syslogHTTPS.server.URL,
 					},
-					"some-id": appBindings{
-						Hostname: "org.space.name",
-						Drains: []string{
-							strings.Replace(syslogHTTPS.server.URL, "https", "https-v3", 1),
-						},
+				},
+				{
+					AppID:    "some-id",
+					Hostname: "org.space.name",
+					Drains: []string{
+						strings.Replace(syslogHTTPS.server.URL, "https", "https-v3", 1),
 					},
-					"some-id-tls": appBindings{
-						Hostname: "org.space.name",
-						Drains: []string{
-							"syslog-tls-v3://" + syslogTLS.lis.Addr().String(),
-						},
+				},
+				{
+					AppID:    "some-id-tls",
+					Hostname: "org.space.name",
+					Drains: []string{
+						"syslog-tls-v3://" + syslogTLS.lis.Addr().String(),
 					},
 				},
 			},
-		)
+		}
+		cupsProvider.startTLS()
 	})
 
 	AfterEach(func() {
@@ -70,13 +74,15 @@ var _ = Describe("Main", func() {
 
 	It("has a health endpoint", func() {
 		session := startSyslogAgent(
-			fmt.Sprintf("API_CA_FILE_PATH=%s", testhelper.Cert("capi-ca.crt")),
-			fmt.Sprintf("API_CERT_FILE_PATH=%s", testhelper.Cert("forwarder.crt")),
-			fmt.Sprintf("API_COMMON_NAME=%s", "capiCA"),
-			fmt.Sprintf("API_KEY_FILE_PATH=%s", testhelper.Cert("forwarder.key")),
-			"API_POLLING_INTERVAL=10ms",
+			fmt.Sprintf("CACHE_URL=%s", cupsProvider.URL),
+			fmt.Sprintf("CACHE_CA_FILE_PATH=%s", testhelper.Cert("binding-cache-ca.crt")),
+			fmt.Sprintf("CACHE_CERT_FILE_PATH=%s", testhelper.Cert("binding-cache-ca.crt")),
+			fmt.Sprintf("CACHE_KEY_FILE_PATH=%s", testhelper.Cert("binding-cache-ca.key")),
+			fmt.Sprintf("CACHE_COMMON_NAME=%s", "bindingCacheCA"),
+
+			"CACHE_POLLING_INTERVAL=10ms",
 			"DEBUG_PORT=7392",
-			fmt.Sprintf("API_URL=%s", cupsProvider.URL),
+
 			fmt.Sprintf("AGENT_PORT=%d", grpcPort),
 			fmt.Sprintf("AGENT_CA_FILE_PATH=%s", testhelper.Cert("loggregator-ca.crt")),
 			fmt.Sprintf("AGENT_CERT_FILE_PATH=%s", testhelper.Cert("metron.crt")),
@@ -105,9 +111,7 @@ var _ = Describe("Main", func() {
 		Eventually(f).Should(ContainSubstring(`"IngressV2"`))
 		Eventually(f).Should(ContainSubstring(`"DrainCount"`))
 		Eventually(f).Should(ContainSubstring(`"BindingRefreshCount"`))
-		Eventually(f).Should(ContainSubstring(`"BindingRefreshFailureCount"`))
-		Eventually(f).Should(ContainSubstring(`"RequestCountForLastBindingRefresh"`))
-		Eventually(f).Should(ContainSubstring(`"MaxLatencyForLastBindingRefreshMS"`))
+		Eventually(f).Should(ContainSubstring(`"LatencyForLastBindingRefreshMS"`))
 		Eventually(f).Should(ContainSubstring(`"DrainIngress"`))
 		Eventually(f).Should(ContainSubstring(`"EgressDropped"`))
 		Eventually(f).Should(ContainSubstring(`"Egress"`))
@@ -115,13 +119,15 @@ var _ = Describe("Main", func() {
 
 	It("forwards envelopes to syslog drains", func() {
 		session := startSyslogAgent(
-			fmt.Sprintf("API_CA_FILE_PATH=%s", testhelper.Cert("capi-ca.crt")),
-			fmt.Sprintf("API_CERT_FILE_PATH=%s", testhelper.Cert("forwarder.crt")),
-			fmt.Sprintf("API_COMMON_NAME=%s", "capiCA"),
-			fmt.Sprintf("API_KEY_FILE_PATH=%s", testhelper.Cert("forwarder.key")),
-			"API_POLLING_INTERVAL=10ms",
+			fmt.Sprintf("CACHE_URL=%s", cupsProvider.URL),
+			fmt.Sprintf("CACHE_CA_FILE_PATH=%s", testhelper.Cert("binding-cache-ca.crt")),
+			fmt.Sprintf("CACHE_CERT_FILE_PATH=%s", testhelper.Cert("binding-cache-ca.crt")),
+			fmt.Sprintf("CACHE_KEY_FILE_PATH=%s", testhelper.Cert("binding-cache-ca.key")),
+			fmt.Sprintf("CACHE_COMMON_NAME=%s", "bindingCacheCA"),
+
+			"CACHE_POLLING_INTERVAL=10ms",
 			"DRAIN_SKIP_CERT_VERIFY=true",
-			fmt.Sprintf("API_URL=%s", cupsProvider.URL),
+
 			fmt.Sprintf("AGENT_PORT=%d", grpcPort),
 			fmt.Sprintf("AGENT_CA_FILE_PATH=%s", testhelper.Cert("loggregator-ca.crt")),
 			fmt.Sprintf("AGENT_CERT_FILE_PATH=%s", testhelper.Cert("metron.crt")),
@@ -212,27 +218,27 @@ func startSyslogAgent(envs ...string) *gexec.Session {
 	return session
 }
 
-type results map[string]appBindings
-
-type appBindings struct {
-	Drains   []string `json:"drains"`
-	Hostname string   `json:"hostname"`
+type fakeBindingCache struct {
+	*httptest.Server
+	called  bool
+	results []binding.Binding
 }
 
-type fakeCC struct {
-	count           int
-	called          bool
-	withEmptyResult bool
-	results         results
+func (f *fakeBindingCache) startTLS() {
+	tlsConfig, err := plumbing.NewServerMutualTLSConfig(
+		testhelper.Cert("binding-cache-ca.crt"),
+		testhelper.Cert("binding-cache-ca.key"),
+		testhelper.Cert("binding-cache-ca.crt"),
+	)
+	Expect(err).ToNot(HaveOccurred())
+
+	f.Server = httptest.NewUnstartedServer(f)
+	f.Server.TLS = tlsConfig
+	f.Server.StartTLS()
 }
 
-func (f *fakeCC) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	if r.URL.Path != "/internal/v4/syslog_drain_urls" {
-		w.WriteHeader(500)
-		return
-	}
-
-	if r.URL.Query().Get("batch_size") != "1000" {
+func (f *fakeBindingCache) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	if r.URL.Path != "/bindings" {
 		w.WriteHeader(500)
 		return
 	}
@@ -240,52 +246,14 @@ func (f *fakeCC) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	f.serveWithResults(w, r)
 }
 
-func (f *fakeCC) serveWithResults(w http.ResponseWriter, r *http.Request) {
-	resultData, err := json.Marshal(struct {
-		Results results `json:"results"`
-	}{
-		Results: f.results,
-	})
+func (f *fakeBindingCache) serveWithResults(w http.ResponseWriter, r *http.Request) {
+	resultData, err := json.Marshal(&f.results)
 	if err != nil {
 		w.WriteHeader(500)
 		return
 	}
 
-	if f.count > 0 {
-		resultData = []byte(`{"results": {}}`)
-	}
-
 	w.Write(resultData)
-	if f.withEmptyResult {
-		f.count++
-	}
-}
-
-type spyLoggregatorV2Ingress struct {
-	addr      string
-	close     func()
-	envelopes chan *loggregator_v2.Envelope
-}
-
-func (s *spyLoggregatorV2Ingress) Sender(loggregator_v2.Ingress_SenderServer) error {
-	panic("not implemented")
-}
-
-func (s *spyLoggregatorV2Ingress) Send(context.Context, *loggregator_v2.EnvelopeBatch) (*loggregator_v2.SendResponse, error) {
-	panic("not implemented")
-}
-
-func (s *spyLoggregatorV2Ingress) BatchSender(srv loggregator_v2.Ingress_BatchSenderServer) error {
-	for {
-		batch, err := srv.Recv()
-		if err != nil {
-			return err
-		}
-
-		for _, e := range batch.Batch {
-			s.envelopes <- e
-		}
-	}
 }
 
 type syslogHTTPSServer struct {
