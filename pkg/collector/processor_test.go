@@ -26,10 +26,15 @@ var _ = Describe("Processor", func() {
 		go processor.Run()
 
 		stub.inStats <- collector.SystemStat{
-			MemKB:       1025,
-			MemPercent:  10.01,
+			MemKB:      1025,
+			MemPercent: 10.01,
+
 			SwapKB:      2049,
 			SwapPercent: 20.01,
+
+			Load1M:  1.1,
+			Load5M:  5.5,
+			Load15M: 15.15,
 		}
 
 		var env *loggregator_v2.Envelope
@@ -38,7 +43,7 @@ var _ = Describe("Processor", func() {
 		Expect(env.Timestamp).ToNot(BeZero())
 		Expect(env.Tags["origin"]).To(Equal("system-metrics-agent"))
 
-		Expect(env.GetGauge().Metrics).To(HaveLen(4))
+		Expect(env.GetGauge().Metrics).To(HaveLen(7))
 		Expect(proto.Equal(
 			env.GetGauge().Metrics["system.mem.kb"],
 			&loggregator_v2.GaugeValue{Unit: "KiB", Value: 1025.0},
@@ -59,6 +64,20 @@ var _ = Describe("Processor", func() {
 			&loggregator_v2.GaugeValue{Unit: "Percent", Value: 20.01},
 		)).To(BeTrue())
 
+		Expect(proto.Equal(
+			env.GetGauge().Metrics["system.load.1m"],
+			&loggregator_v2.GaugeValue{Unit: "Load", Value: 1.1},
+		)).To(BeTrue())
+
+		Expect(proto.Equal(
+			env.GetGauge().Metrics["system.load.5m"],
+			&loggregator_v2.GaugeValue{Unit: "Load", Value: 5.5},
+		)).To(BeTrue())
+
+		Expect(proto.Equal(
+			env.GetGauge().Metrics["system.load.15m"],
+			&loggregator_v2.GaugeValue{Unit: "Load", Value: 15.15},
+		)).To(BeTrue())
 	})
 })
 

@@ -25,4 +25,13 @@ var _ = Describe("Collect", func() {
 		_ = stats.SwapPercent
 		_ = stats.SwapKB
 	})
+
+	It("returns load metrics", func() {
+		stats, err := collector.Collect()
+		Expect(err).ToNot(HaveOccurred())
+
+		Expect(stats.Load1M).To(BeNumerically(">", 0))
+		Expect(stats.Load5M).To(BeNumerically(">", 0))
+		Expect(stats.Load15M).To(BeNumerically(">", 0))
+	})
 })

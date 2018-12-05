@@ -72,6 +72,18 @@ func buildGauge(stat SystemStat) *loggregator_v2.Gauge {
 				Unit:  "Percent",
 				Value: stat.SwapPercent,
 			},
+			"system.load.1m": &loggregator_v2.GaugeValue{
+				Unit:  "Load",
+				Value: stat.Load1M,
+			},
+			"system.load.5m": &loggregator_v2.GaugeValue{
+				Unit:  "Load",
+				Value: stat.Load5M,
+			},
+			"system.load.15m": &loggregator_v2.GaugeValue{
+				Unit:  "Load",
+				Value: stat.Load15M,
+			},
 		},
 	}
 }
