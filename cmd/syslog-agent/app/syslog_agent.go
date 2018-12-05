@@ -51,19 +51,7 @@ func NewSyslogAgent(
 	}
 }
 
-// Run starts all the sub-processes of the syslog agent. If blocking is
-// true this method will block otherwise it will return immediately and run
-// the syslog agent a goroutine.
-func (s SyslogAgent) Run(blocking bool) {
-	if blocking {
-		s.run()
-		return
-	}
-
-	go s.run()
-}
-
-func (s SyslogAgent) run() {
+func (s SyslogAgent) Run() {
 	go http.ListenAndServe(fmt.Sprintf("127.0.0.1:%d", s.debugPort), nil)
 
 	ingressDropped := s.m.NewCounter("IngressDropped")

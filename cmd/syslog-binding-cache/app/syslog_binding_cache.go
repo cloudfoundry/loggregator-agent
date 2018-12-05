@@ -26,7 +26,7 @@ func NewSyslogBindingCache(config Config, log *log.Logger) *SyslogBindingCache {
 	}
 }
 
-func (sbc *SyslogBindingCache) Run(blocking bool) {
+func (sbc *SyslogBindingCache) Run() {
 	store := binding.NewStore()
 	poller := binding.NewPoller(sbc.apiClient(), sbc.config.APIPollingInterval, store)
 
@@ -47,9 +47,9 @@ func (sbc *SyslogBindingCache) Run(blocking bool) {
 	}
 
 	tlsConfig, err := plumbing.NewServerMutualTLSConfig(
-		sbc.config.APICertFile,
-		sbc.config.APIKeyFile,
-		sbc.config.APICAFile,
+		sbc.config.CacheCertFile,
+		sbc.config.CacheKeyFile,
+		sbc.config.CacheCAFile,
 		opts...,
 	)
 	if err != nil {
@@ -61,12 +61,7 @@ func (sbc *SyslogBindingCache) Run(blocking bool) {
 		TLSConfig: tlsConfig,
 	}
 
-	if blocking {
-		server.ServeTLS(lis, "", "")
-		return
-	}
-
-	go server.ServeTLS(lis, "", "")
+	server.ServeTLS(lis, "", "")
 }
 
 func (sbc *SyslogBindingCache) Addr() string {
@@ -74,6 +69,7 @@ func (sbc *SyslogBindingCache) Addr() string {
 }
 
 func (sbc *SyslogBindingCache) apiClient() api.Client {
+	//TODO: do we have a helper function for this? api.NewHTTPSClient
 	tlsConfig, err := plumbing.NewClientMutualTLSConfig(
 		sbc.config.APICertFile,
 		sbc.config.APIKeyFile,

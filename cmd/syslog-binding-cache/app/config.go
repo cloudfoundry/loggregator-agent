@@ -18,6 +18,11 @@ type Config struct {
 	APIBatchSize       int           `env:"API_BATCH_SIZE, report"`
 	CipherSuites       []string      `env:"CIPHER_SUITES, report"`
 
+	CacheCAFile     string `env:"CACHE_CA_FILE_PATH,     required, report"`
+	CacheCertFile   string `env:"CACHE_CERT_FILE_PATH,   required, report"`
+	CacheKeyFile    string `env:"CACHE_KEY_FILE_PATH,    required, report"`
+	CacheCommonName string `env:"CACHE_COMMON_NAME,      required, report"`
+
 	DebugPort uint16 `env:"DEBUG_PORT, report"`
 	HTTPAddr  string `env:"HTTP_ADDR,  required, report"`
 }
