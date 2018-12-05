@@ -20,21 +20,29 @@ type SystemStat struct {
 	Load15M float64
 }
 
-func Collect() (SystemStat, error) {
+func Collect(opts ...CollectOption) (SystemStat, error) {
+	cfg := CollectConfig{
+		rawCollector: defaultRawCollector{},
+	}
+
+	for _, o := range opts {
+		o(&cfg)
+	}
+
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	m, err := mem.VirtualMemoryWithContext(ctx)
+	m, err := cfg.rawCollector.VirtualMemoryWithContext(ctx)
 	if err != nil {
 		return SystemStat{}, err
 	}
 
-	s, err := mem.SwapMemoryWithContext(ctx)
+	s, err := cfg.rawCollector.SwapMemoryWithContext(ctx)
 	if err != nil {
 		return SystemStat{}, err
 	}
 
-	l, err := load.AvgWithContext(ctx)
+	l, err := cfg.rawCollector.AvgWithContext(ctx)
 	if err != nil {
 		return SystemStat{}, err
 	}
@@ -50,4 +58,36 @@ func Collect() (SystemStat, error) {
 		Load5M:  l.Load5,
 		Load15M: l.Load15,
 	}, nil
+}
+
+type RawCollector interface {
+	VirtualMemoryWithContext(context.Context) (*mem.VirtualMemoryStat, error)
+	SwapMemoryWithContext(context.Context) (*mem.SwapMemoryStat, error)
+	AvgWithContext(context.Context) (*load.AvgStat, error)
+}
+
+type CollectConfig struct {
+	rawCollector RawCollector
+}
+
+type CollectOption func(*CollectConfig)
+
+func WithRawCollector(c RawCollector) CollectOption {
+	return func(cs *CollectConfig) {
+		cs.rawCollector = c
+	}
+}
+
+type defaultRawCollector struct{}
+
+func (s defaultRawCollector) VirtualMemoryWithContext(ctx context.Context) (*mem.VirtualMemoryStat, error) {
+	return mem.VirtualMemoryWithContext(ctx)
+}
+
+func (s defaultRawCollector) SwapMemoryWithContext(ctx context.Context) (*mem.SwapMemoryStat, error) {
+	return mem.SwapMemoryWithContext(ctx)
+}
+
+func (s defaultRawCollector) AvgWithContext(ctx context.Context) (*load.AvgStat, error) {
+	return load.AvgWithContext(ctx)
 }

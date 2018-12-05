@@ -7,7 +7,7 @@ import (
 	"code.cloudfoundry.org/go-loggregator/rpc/loggregator_v2"
 )
 
-type InputFunc func() (SystemStat, error)
+type InputFunc func(...CollectOption) (SystemStat, error)
 type OutputFunc func(*loggregator_v2.Envelope)
 
 type Processor struct {

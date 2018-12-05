@@ -96,7 +96,7 @@ func newStubInputOutput() *stubInputOutput {
 	}
 }
 
-func (s *stubInputOutput) input() (collector.SystemStat, error) {
+func (s *stubInputOutput) input(...collector.CollectOption) (collector.SystemStat, error) {
 	atomic.AddInt64(&s.inCount, 1)
 
 	return <-s.inStats, nil
