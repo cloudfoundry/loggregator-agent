@@ -58,7 +58,7 @@ var _ = Describe("SyslogBindingCache", func() {
 			CacheCommonName:    "bindingCacheCA",
 		}
 		sbc = app.NewSyslogBindingCache(config, logger)
-		go sbc.Run()
+		sbc.Run(false)
 
 		//wait for the server to start
 		Eventually(sbc.Addr).ShouldNot(Equal(""))

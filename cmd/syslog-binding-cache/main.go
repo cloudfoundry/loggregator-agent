@@ -13,6 +13,5 @@ func main() {
 	defer log.Println("stopping syslog-binding-cache")
 
 	cfg := app.LoadConfig()
-	cache := app.NewSyslogBindingCache(cfg, log)
-	cache.Run()
+	app.NewSyslogBindingCache(cfg, log).Run(true)
 }

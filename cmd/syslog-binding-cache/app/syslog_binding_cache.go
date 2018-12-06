@@ -14,7 +14,7 @@ import (
 )
 
 type SyslogBindingCache struct {
-	addr   string
+	lis    net.Listener
 	config Config
 	log    *log.Logger
 }
@@ -26,15 +26,25 @@ func NewSyslogBindingCache(config Config, log *log.Logger) *SyslogBindingCache {
 	}
 }
 
-func (sbc *SyslogBindingCache) Run() {
-	store := binding.NewStore()
-	poller := binding.NewPoller(sbc.apiClient(), sbc.config.APIPollingInterval, store)
-
+func (sbc *SyslogBindingCache) Run(blocking bool) {
 	lis, err := net.Listen("tcp", sbc.config.HTTPAddr)
 	if err != nil {
 		sbc.log.Panicf("error creating listener: %s", err)
 	}
-	sbc.addr = lis.Addr().String()
+
+	sbc.lis = lis
+
+	if blocking {
+		sbc.run()
+		return
+	}
+
+	go sbc.run()
+}
+
+func (sbc *SyslogBindingCache) run() {
+	store := binding.NewStore()
+	poller := binding.NewPoller(sbc.apiClient(), sbc.config.APIPollingInterval, store)
 
 	go poller.Poll()
 
@@ -61,11 +71,15 @@ func (sbc *SyslogBindingCache) Run() {
 		TLSConfig: tlsConfig,
 	}
 
-	server.ServeTLS(lis, "", "")
+	server.ServeTLS(sbc.lis, "", "")
 }
 
 func (sbc *SyslogBindingCache) Addr() string {
-	return sbc.addr
+	if sbc.lis == nil {
+		return ""
+	}
+
+	return sbc.lis.Addr().String()
 }
 
 func (sbc *SyslogBindingCache) apiClient() api.Client {
