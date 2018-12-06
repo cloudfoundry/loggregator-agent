@@ -74,7 +74,12 @@ var _ = Describe("SyslogBindingCache", func() {
 	})
 
 	It("has an HTTP endpoint that returns bindings", func() {
-		client := newTLSClient()
+		client := plumbing.NewTLSHTTPClient(
+			testhelper.Cert("binding-cache-ca.crt"),
+			testhelper.Cert("binding-cache-ca.key"),
+			testhelper.Cert("binding-cache-ca.crt"),
+			"bindingCacheCA",
+		)
 		resp, err := client.Get("https://" + sbc.Addr() + "/bindings")
 		Expect(err).ToNot(HaveOccurred())
 
@@ -173,24 +178,4 @@ func findBinding(bindings []binding.Binding, appID string) binding.Binding {
 		}
 	}
 	panic(fmt.Sprintf("unable to find binding with appID %s", appID))
-}
-
-func newTLSClient() *http.Client {
-	tlsConfig, err := plumbing.NewClientMutualTLSConfig(
-		testhelper.Cert("binding-cache-ca.crt"),
-		testhelper.Cert("binding-cache-ca.key"),
-		testhelper.Cert("binding-cache-ca.crt"),
-		"bindingCacheCA",
-	)
-	if err != nil {
-		log.Panicf("failed to load http client certificates: %s", err)
-	}
-
-	transport := &http.Transport{
-		TLSClientConfig: tlsConfig,
-	}
-
-	return &http.Client{
-		Transport: transport,
-	}
 }
