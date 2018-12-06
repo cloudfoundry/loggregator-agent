@@ -13,7 +13,7 @@ import (
 	"time"
 
 	"code.cloudfoundry.org/go-loggregator/rpc/loggregator_v2"
-	"code.cloudfoundry.org/loggregator-agent/pkg/ingress/api"
+	"code.cloudfoundry.org/loggregator-agent/pkg/plumbing"
 )
 
 type HTTPSWriter struct {
@@ -89,7 +89,7 @@ func (*HTTPSWriter) Close() error {
 }
 
 func httpClient(netConf NetworkTimeoutConfig, skipCertVerify bool) *http.Client {
-	tlsConfig := api.NewTLSConfig()
+	tlsConfig := plumbing.NewTLSConfig()
 	tlsConfig.InsecureSkipVerify = skipCertVerify
 
 	tr := &http.Transport{

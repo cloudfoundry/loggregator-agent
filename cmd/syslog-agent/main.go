@@ -3,8 +3,6 @@ package main
 import (
 	"expvar"
 	"log"
-	"net"
-	"net/http"
 	"os"
 	"time"
 
@@ -39,7 +37,13 @@ func main() {
 		m,
 	)
 
-	cacheClient := cache.NewClient(cfg.CacheURL, newTLSHTTPClient(cfg))
+	tlsClient := plumbing.NewTLSHTTPClient(
+		cfg.CacheCertFile,
+		cfg.CacheKeyFile,
+		cfg.CacheCAFile,
+		cfg.CacheCommonName,
+	)
+	cacheClient := cache.NewClient(cfg.CacheURL, tlsClient)
 	bindingManager := binding.NewManager(
 		cups.NewBindingFetcher(cfg.BindingsPerAppLimit, cacheClient, m),
 		connector,
@@ -55,36 +59,4 @@ func main() {
 		cfg.GRPC,
 		log,
 	).Run()
-}
-
-//TODO:// We do this twice, make a helper
-func newTLSHTTPClient(cfg app.Config) *http.Client {
-	//TODO: We have several ways to create TSL configs, which is correct?
-	tlsConfig, err := plumbing.NewClientMutualTLSConfig(
-		cfg.CacheCertFile,
-		cfg.CacheKeyFile,
-		cfg.CacheCAFile,
-		cfg.CacheCommonName,
-	)
-	if err != nil {
-		log.Panicf("failed to load API client certificates: %s", err)
-	}
-
-	transport := &http.Transport{
-		Proxy: http.ProxyFromEnvironment,
-		DialContext: (&net.Dialer{
-			Timeout:   5 * time.Second,
-			KeepAlive: 30 * time.Second,
-			DualStack: true,
-		}).DialContext,
-		MaxIdleConns:          100,
-		IdleConnTimeout:       90 * time.Second,
-		TLSHandshakeTimeout:   10 * time.Second,
-		ExpectContinueTimeout: 1 * time.Second,
-		TLSClientConfig:       tlsConfig,
-	}
-
-	return &http.Client{
-		Transport: transport,
-	}
 }
