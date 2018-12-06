@@ -42,6 +42,24 @@ var _ = Describe("Processor", func() {
 				Idle:   10.10,
 				Wait:   22.22,
 			},
+
+			SystemDisk: collector.DiskStat{
+				Percent:      35.0,
+				InodePercent: 45.0,
+				Present:      true,
+			},
+
+			EphemeralDisk: collector.DiskStat{
+				Percent:      55.0,
+				InodePercent: 65.0,
+				Present:      true,
+			},
+
+			PersistentDisk: collector.DiskStat{
+				Percent:      75.0,
+				InodePercent: 85.0,
+				Present:      true,
+			},
 		}
 
 		var env *loggregator_v2.Envelope
@@ -51,7 +69,7 @@ var _ = Describe("Processor", func() {
 		Expect(env.Tags["origin"]).To(Equal("system-metrics-agent"))
 
 		metrics := env.GetGauge().Metrics
-		Expect(metrics).To(HaveLen(11))
+		Expect(metrics).To(HaveLen(17))
 
 		Expect(proto.Equal(
 			metrics["system.mem.kb"],
@@ -107,6 +125,60 @@ var _ = Describe("Processor", func() {
 			metrics["system.cpu.wait"],
 			&loggregator_v2.GaugeValue{Unit: "Percent", Value: 22.22},
 		)).To(BeTrue())
+
+		Expect(proto.Equal(
+			metrics["system.disk.system.percent"],
+			&loggregator_v2.GaugeValue{Unit: "Percent", Value: 35.0},
+		)).To(BeTrue())
+
+		Expect(proto.Equal(
+			metrics["system.disk.system.inode_percent"],
+			&loggregator_v2.GaugeValue{Unit: "Percent", Value: 45.0},
+		)).To(BeTrue())
+
+		Expect(proto.Equal(
+			metrics["system.disk.ephemeral.percent"],
+			&loggregator_v2.GaugeValue{Unit: "Percent", Value: 55.0},
+		)).To(BeTrue())
+
+		Expect(proto.Equal(
+			metrics["system.disk.ephemeral.inode_percent"],
+			&loggregator_v2.GaugeValue{Unit: "Percent", Value: 65.0},
+		)).To(BeTrue())
+
+		Expect(proto.Equal(
+			metrics["system.disk.persistent.percent"],
+			&loggregator_v2.GaugeValue{Unit: "Percent", Value: 75.0},
+		)).To(BeTrue())
+
+		Expect(proto.Equal(
+			metrics["system.disk.persistent.inode_percent"],
+			&loggregator_v2.GaugeValue{Unit: "Percent", Value: 85.0},
+		)).To(BeTrue())
+	})
+
+	It("does not have disk metrics if disk is not present", func() {
+		stub := newStubInputOutput()
+		processor := collector.NewProcessor(
+			stub.input,
+			stub.output,
+			10*time.Millisecond,
+			log.New(GinkgoWriter, "", log.LstdFlags),
+		)
+
+		go processor.Run()
+
+		stub.inStats <- collector.SystemStat{}
+
+		var env *loggregator_v2.Envelope
+		Eventually(stub.outEnvs).Should(Receive(&env))
+
+		Expect(env.GetGauge().Metrics).ToNot(HaveKey("system.disk.system.percent"))
+		Expect(env.GetGauge().Metrics).ToNot(HaveKey("system.disk.system.inode_percent"))
+		Expect(env.GetGauge().Metrics).ToNot(HaveKey("system.disk.ephemeral.percent"))
+		Expect(env.GetGauge().Metrics).ToNot(HaveKey("system.disk.ephemeral.inode_percent"))
+		Expect(env.GetGauge().Metrics).ToNot(HaveKey("system.disk.persistent.percent"))
+		Expect(env.GetGauge().Metrics).ToNot(HaveKey("system.disk.persistent.inode_percent"))
 	})
 })
 

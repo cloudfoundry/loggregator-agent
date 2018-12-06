@@ -3,10 +3,13 @@ package collector_test
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log"
+	"syscall"
 
 	"code.cloudfoundry.org/loggregator-agent/pkg/collector"
 	"github.com/shirou/gopsutil/cpu"
+	"github.com/shirou/gopsutil/disk"
 	"github.com/shirou/gopsutil/load"
 	"github.com/shirou/gopsutil/mem"
 
@@ -63,6 +66,54 @@ var _ = Describe("Collector", func() {
 		Expect(stats.Wait).To(Equal(40.0))
 	})
 
+	It("returns disk metrics", func() {
+		stats, err := c.Collect()
+		Expect(err).ToNot(HaveOccurred())
+
+		Expect(stats.SystemDisk.Percent).To(Equal(65.0))
+		Expect(stats.SystemDisk.InodePercent).To(Equal(75.0))
+		Expect(stats.SystemDisk.Present).To(BeTrue())
+		Expect(stats.EphemeralDisk.Percent).To(Equal(85.0))
+		Expect(stats.EphemeralDisk.InodePercent).To(Equal(95.0))
+		Expect(stats.EphemeralDisk.Present).To(BeTrue())
+		Expect(stats.PersistentDisk.Percent).To(Equal(105.0))
+		Expect(stats.PersistentDisk.InodePercent).To(Equal(115.0))
+		Expect(stats.PersistentDisk.Present).To(BeTrue())
+	})
+
+	It("shows the system disk is not present if directory does not exist", func() {
+		src.systemDiskUsageError = syscall.ENOENT
+
+		stats, err := c.Collect()
+		Expect(err).ToNot(HaveOccurred())
+
+		Expect(stats.SystemDisk.Percent).To(Equal(0.0))
+		Expect(stats.SystemDisk.InodePercent).To(Equal(0.0))
+		Expect(stats.SystemDisk.Present).To(BeFalse())
+	})
+
+	It("shows the ephemeral disk is not present if directory does not exist", func() {
+		src.ephemeralDiskUsageError = syscall.ENOENT
+
+		stats, err := c.Collect()
+		Expect(err).ToNot(HaveOccurred())
+
+		Expect(stats.EphemeralDisk.Percent).To(Equal(0.0))
+		Expect(stats.EphemeralDisk.InodePercent).To(Equal(0.0))
+		Expect(stats.EphemeralDisk.Present).To(BeFalse())
+	})
+
+	It("shows the persistent disk is not present if directory does not exist", func() {
+		src.persistentDiskUsageError = syscall.ENOENT
+
+		stats, err := c.Collect()
+		Expect(err).ToNot(HaveOccurred())
+
+		Expect(stats.PersistentDisk.Percent).To(Equal(0.0))
+		Expect(stats.PersistentDisk.InodePercent).To(Equal(0.0))
+		Expect(stats.PersistentDisk.Present).To(BeFalse())
+	})
+
 	It("panics on initialization when failing to get initial cpu times", func() {
 		src.cpuTimesErr = errors.New("an error")
 
@@ -101,15 +152,39 @@ var _ = Describe("Collector", func() {
 		_, err := c.Collect()
 		Expect(err).To(HaveOccurred())
 	})
+
+	It("returns an error when getting system disk usage fails", func() {
+		src.systemDiskUsageError = errors.New("an error")
+
+		_, err := c.Collect()
+		Expect(err).To(HaveOccurred())
+	})
+
+	It("returns an error when getting ephemeral disk usage fails", func() {
+		src.ephemeralDiskUsageError = errors.New("an error")
+
+		_, err := c.Collect()
+		Expect(err).To(HaveOccurred())
+	})
+
+	It("returns an error when getting persistent disk usage fails", func() {
+		src.persistentDiskUsageError = errors.New("an error")
+
+		_, err := c.Collect()
+		Expect(err).To(HaveOccurred())
+	})
 })
 
 type stubRawCollector struct {
 	timesCallCount float64
 
-	virtualMemoryErr error
-	swapMemoryErr    error
-	cpuLoadErr       error
-	cpuTimesErr      error
+	virtualMemoryErr         error
+	swapMemoryErr            error
+	cpuLoadErr               error
+	cpuTimesErr              error
+	systemDiskUsageError     error
+	ephemeralDiskUsageError  error
+	persistentDiskUsageError error
 }
 
 func (s *stubRawCollector) VirtualMemoryWithContext(context.Context) (*mem.VirtualMemoryStat, error) {
@@ -169,4 +244,38 @@ func (s *stubRawCollector) TimesWithContext(context.Context, bool) ([]cpu.TimesS
 			Stolen:    1000.0,
 		},
 	}, nil
+}
+
+func (s *stubRawCollector) UsageWithContext(_ context.Context, path string) (*disk.UsageStat, error) {
+	switch path {
+	case "/":
+		if s.systemDiskUsageError != nil {
+			return nil, s.systemDiskUsageError
+		}
+
+		return &disk.UsageStat{
+			UsedPercent:       65.0,
+			InodesUsedPercent: 75.0,
+		}, nil
+	case "/var/vcap/data":
+		if s.ephemeralDiskUsageError != nil {
+			return nil, s.ephemeralDiskUsageError
+		}
+
+		return &disk.UsageStat{
+			UsedPercent:       85.0,
+			InodesUsedPercent: 95.0,
+		}, nil
+	case "/var/vcap/store":
+		if s.persistentDiskUsageError != nil {
+			return nil, s.persistentDiskUsageError
+		}
+
+		return &disk.UsageStat{
+			UsedPercent:       105.0,
+			InodesUsedPercent: 115.0,
+		}, nil
+	}
+
+	panic(fmt.Sprintf("requested usage for forbidden path: %s", path))
 }

@@ -3,11 +3,19 @@ package collector
 import (
 	"context"
 	"log"
+	"os"
 	"time"
 
 	"github.com/shirou/gopsutil/cpu"
+	"github.com/shirou/gopsutil/disk"
 	"github.com/shirou/gopsutil/load"
 	"github.com/shirou/gopsutil/mem"
+)
+
+const (
+	systemDiskPath     = "/"
+	ephemeralDiskPath  = "/var/vcap/data"
+	persistentDiskPath = "/var/vcap/store"
 )
 
 type SystemStat struct {
@@ -22,6 +30,10 @@ type SystemStat struct {
 	Load1M  float64
 	Load5M  float64
 	Load15M float64
+
+	SystemDisk     DiskStat
+	EphemeralDisk  DiskStat
+	PersistentDisk DiskStat
 }
 
 type CPUStat struct {
@@ -29,6 +41,12 @@ type CPUStat struct {
 	System float64
 	Wait   float64
 	Idle   float64
+}
+
+type DiskStat struct {
+	Percent      float64
+	InodePercent float64
+	Present      bool
 }
 
 type Collector struct {
@@ -80,8 +98,24 @@ func (c Collector) Collect() (SystemStat, error) {
 	if err != nil {
 		return SystemStat{}, err
 	}
+
 	cpu := calculateCPUStat(c.prevTimesStat, ts[0])
 	c.prevTimesStat = ts[0]
+
+	sdisk, err := c.diskStat(ctx, systemDiskPath)
+	if err != nil {
+		return SystemStat{}, err
+	}
+
+	edisk, err := c.diskStat(ctx, ephemeralDiskPath)
+	if err != nil {
+		return SystemStat{}, err
+	}
+
+	pdisk, err := c.diskStat(ctx, persistentDiskPath)
+	if err != nil {
+		return SystemStat{}, err
+	}
 
 	return SystemStat{
 		CPUStat: cpu,
@@ -95,6 +129,27 @@ func (c Collector) Collect() (SystemStat, error) {
 		Load1M:  l.Load1,
 		Load5M:  l.Load5,
 		Load15M: l.Load15,
+
+		SystemDisk:     sdisk,
+		EphemeralDisk:  edisk,
+		PersistentDisk: pdisk,
+	}, nil
+}
+
+func (c Collector) diskStat(ctx context.Context, path string) (DiskStat, error) {
+	disk, err := c.rawCollector.UsageWithContext(ctx, path)
+	if err != nil && os.IsNotExist(err) {
+		return DiskStat{}, nil
+	}
+
+	if err != nil {
+		return DiskStat{}, err
+	}
+
+	return DiskStat{
+		Percent:      disk.UsedPercent,
+		InodePercent: disk.InodesUsedPercent,
+		Present:      true,
 	}, nil
 }
 
@@ -114,6 +169,7 @@ type RawCollector interface {
 	SwapMemoryWithContext(context.Context) (*mem.SwapMemoryStat, error)
 	AvgWithContext(context.Context) (*load.AvgStat, error)
 	TimesWithContext(context.Context, bool) ([]cpu.TimesStat, error)
+	UsageWithContext(context.Context, string) (*disk.UsageStat, error)
 }
 
 type CollectorOption func(*Collector)
@@ -140,4 +196,8 @@ func (s defaultRawCollector) AvgWithContext(ctx context.Context) (*load.AvgStat,
 
 func (s defaultRawCollector) TimesWithContext(ctx context.Context, perCPU bool) ([]cpu.TimesStat, error) {
 	return cpu.TimesWithContext(ctx, perCPU)
+}
+
+func (s defaultRawCollector) UsageWithContext(ctx context.Context, path string) (*disk.UsageStat, error) {
+	return disk.UsageWithContext(ctx, path)
 }
