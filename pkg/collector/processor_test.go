@@ -35,6 +35,13 @@ var _ = Describe("Processor", func() {
 			Load1M:  1.1,
 			Load5M:  5.5,
 			Load15M: 15.15,
+
+			CPUStat: collector.CPUStat{
+				User:   25.25,
+				System: 52.52,
+				Idle:   10.10,
+				Wait:   22.22,
+			},
 		}
 
 		var env *loggregator_v2.Envelope
@@ -43,40 +50,62 @@ var _ = Describe("Processor", func() {
 		Expect(env.Timestamp).ToNot(BeZero())
 		Expect(env.Tags["origin"]).To(Equal("system-metrics-agent"))
 
-		Expect(env.GetGauge().Metrics).To(HaveLen(7))
+		metrics := env.GetGauge().Metrics
+		Expect(metrics).To(HaveLen(11))
+
 		Expect(proto.Equal(
-			env.GetGauge().Metrics["system.mem.kb"],
+			metrics["system.mem.kb"],
 			&loggregator_v2.GaugeValue{Unit: "KiB", Value: 1025.0},
 		)).To(BeTrue())
 
 		Expect(proto.Equal(
-			env.GetGauge().Metrics["system.mem.percent"],
+			metrics["system.mem.percent"],
 			&loggregator_v2.GaugeValue{Unit: "Percent", Value: 10.01},
 		)).To(BeTrue())
 
 		Expect(proto.Equal(
-			env.GetGauge().Metrics["system.swap.kb"],
+			metrics["system.swap.kb"],
 			&loggregator_v2.GaugeValue{Unit: "KiB", Value: 2049.0},
 		)).To(BeTrue())
 
 		Expect(proto.Equal(
-			env.GetGauge().Metrics["system.swap.percent"],
+			metrics["system.swap.percent"],
 			&loggregator_v2.GaugeValue{Unit: "Percent", Value: 20.01},
 		)).To(BeTrue())
 
 		Expect(proto.Equal(
-			env.GetGauge().Metrics["system.load.1m"],
+			metrics["system.load.1m"],
 			&loggregator_v2.GaugeValue{Unit: "Load", Value: 1.1},
 		)).To(BeTrue())
 
 		Expect(proto.Equal(
-			env.GetGauge().Metrics["system.load.5m"],
+			metrics["system.load.5m"],
 			&loggregator_v2.GaugeValue{Unit: "Load", Value: 5.5},
 		)).To(BeTrue())
 
 		Expect(proto.Equal(
-			env.GetGauge().Metrics["system.load.15m"],
+			metrics["system.load.15m"],
 			&loggregator_v2.GaugeValue{Unit: "Load", Value: 15.15},
+		)).To(BeTrue())
+
+		Expect(proto.Equal(
+			metrics["system.cpu.user"],
+			&loggregator_v2.GaugeValue{Unit: "Percent", Value: 25.25},
+		)).To(BeTrue())
+
+		Expect(proto.Equal(
+			metrics["system.cpu.sys"],
+			&loggregator_v2.GaugeValue{Unit: "Percent", Value: 52.52},
+		)).To(BeTrue())
+
+		Expect(proto.Equal(
+			metrics["system.cpu.idle"],
+			&loggregator_v2.GaugeValue{Unit: "Percent", Value: 10.10},
+		)).To(BeTrue())
+
+		Expect(proto.Equal(
+			metrics["system.cpu.wait"],
+			&loggregator_v2.GaugeValue{Unit: "Percent", Value: 22.22},
 		)).To(BeTrue())
 	})
 })
@@ -96,7 +125,7 @@ func newStubInputOutput() *stubInputOutput {
 	}
 }
 
-func (s *stubInputOutput) input(...collector.CollectOption) (collector.SystemStat, error) {
+func (s *stubInputOutput) input() (collector.SystemStat, error) {
 	atomic.AddInt64(&s.inCount, 1)
 
 	return <-s.inStats, nil

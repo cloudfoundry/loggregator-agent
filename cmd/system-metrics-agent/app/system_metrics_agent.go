@@ -59,8 +59,10 @@ func (a *SystemMetricsAgent) run() {
 		a.log.Panicf("failed to initialize ingress client: %s", err)
 	}
 
+	c := collector.New(a.log)
+
 	collector.NewProcessor(
-		collector.Collect,
+		c.Collect,
 		ic.Emit,
 		a.cfg.SampleInterval,
 		a.log,

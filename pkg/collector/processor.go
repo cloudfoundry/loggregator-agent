@@ -7,7 +7,7 @@ import (
 	"code.cloudfoundry.org/go-loggregator/rpc/loggregator_v2"
 )
 
-type InputFunc func(...CollectOption) (SystemStat, error)
+type InputFunc func() (SystemStat, error)
 type OutputFunc func(*loggregator_v2.Envelope)
 
 type Processor struct {
@@ -83,6 +83,22 @@ func buildGauge(stat SystemStat) *loggregator_v2.Gauge {
 			"system.load.15m": &loggregator_v2.GaugeValue{
 				Unit:  "Load",
 				Value: stat.Load15M,
+			},
+			"system.cpu.user": &loggregator_v2.GaugeValue{
+				Unit:  "Percent",
+				Value: stat.User,
+			},
+			"system.cpu.sys": &loggregator_v2.GaugeValue{
+				Unit:  "Percent",
+				Value: stat.System,
+			},
+			"system.cpu.idle": &loggregator_v2.GaugeValue{
+				Unit:  "Percent",
+				Value: stat.Idle,
+			},
+			"system.cpu.wait": &loggregator_v2.GaugeValue{
+				Unit:  "Percent",
+				Value: stat.Wait,
 			},
 		},
 	}
