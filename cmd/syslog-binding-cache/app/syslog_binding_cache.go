@@ -1,10 +1,10 @@
 package app
 
 import (
+	"fmt"
 	"log"
 	"net"
 	"net/http"
-	"time"
 
 	"code.cloudfoundry.org/loggregator-agent/pkg/binding"
 	"code.cloudfoundry.org/loggregator-agent/pkg/cache"
@@ -14,7 +14,6 @@ import (
 )
 
 type SyslogBindingCache struct {
-	lis    net.Listener
 	config Config
 	log    *log.Logger
 }
@@ -26,23 +25,13 @@ func NewSyslogBindingCache(config Config, log *log.Logger) *SyslogBindingCache {
 	}
 }
 
-func (sbc *SyslogBindingCache) Run(blocking bool) {
-	lis, err := net.Listen("tcp", sbc.config.HTTPAddr)
+func (sbc *SyslogBindingCache) Run() {
+	listenAddr := fmt.Sprintf(":%d", sbc.config.CachePort)
+	lis, err := net.Listen("tcp", listenAddr)
 	if err != nil {
 		sbc.log.Panicf("error creating listener: %s", err)
 	}
 
-	sbc.lis = lis
-
-	if blocking {
-		sbc.run()
-		return
-	}
-
-	go sbc.run()
-}
-
-func (sbc *SyslogBindingCache) run() {
 	store := binding.NewStore()
 	poller := binding.NewPoller(sbc.apiClient(), sbc.config.APIPollingInterval, store)
 
@@ -71,47 +60,20 @@ func (sbc *SyslogBindingCache) run() {
 		TLSConfig: tlsConfig,
 	}
 
-	server.ServeTLS(sbc.lis, "", "")
-}
-
-func (sbc *SyslogBindingCache) Addr() string {
-	if sbc.lis == nil {
-		return ""
-	}
-
-	return sbc.lis.Addr().String()
+	server.ServeTLS(lis, "", "")
 }
 
 func (sbc *SyslogBindingCache) apiClient() api.Client {
-	//TODO: do we have a helper function for this? api.NewHTTPSClient
-	tlsConfig, err := plumbing.NewClientMutualTLSConfig(
+	httpClient := plumbing.NewTLSHTTPClient(
 		sbc.config.APICertFile,
 		sbc.config.APIKeyFile,
 		sbc.config.APICAFile,
 		sbc.config.APICommonName,
 	)
-	if err != nil {
-		log.Panicf("failed to load API client certificates: %s", err)
-	}
 
-	transport := &http.Transport{
-		Proxy: http.ProxyFromEnvironment,
-		DialContext: (&net.Dialer{
-			Timeout:   30 * time.Second,
-			KeepAlive: 30 * time.Second,
-			DualStack: true,
-		}).DialContext,
-		MaxIdleConns:          100,
-		IdleConnTimeout:       90 * time.Second,
-		TLSHandshakeTimeout:   10 * time.Second,
-		ExpectContinueTimeout: 1 * time.Second,
-		TLSClientConfig:       tlsConfig,
-	}
 	return api.Client{
-		Addr: sbc.config.APIURL,
-		Client: &http.Client{
-			Transport: transport,
-		},
+		Addr:      sbc.config.APIURL,
+		Client:    httpClient,
 		BatchSize: sbc.config.APIBatchSize,
 	}
 }

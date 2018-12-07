@@ -25,6 +25,8 @@ var _ = Describe("SyslogBindingCache", func() {
 
 		capi *fakeCC
 		sbc  *app.SyslogBindingCache
+
+		cachePort = 40000
 	)
 
 	BeforeEach(func() {
@@ -56,17 +58,17 @@ var _ = Describe("SyslogBindingCache", func() {
 			CacheCertFile:      testhelper.Cert("binding-cache-ca.crt"),
 			CacheKeyFile:       testhelper.Cert("binding-cache-ca.key"),
 			CacheCommonName:    "bindingCacheCA",
+			CachePort:          cachePort,
 		}
 		sbc = app.NewSyslogBindingCache(config, logger)
-		sbc.Run(false)
-
-		//wait for the server to start
-		Eventually(sbc.Addr).ShouldNot(Equal(""))
+		go sbc.Run()
 	})
 
 	AfterEach(func() {
 		capi.CloseClientConnections()
 		capi.Close()
+
+		cachePort++
 	})
 
 	It("polls CAPI on an interval for results", func() {
@@ -80,7 +82,9 @@ var _ = Describe("SyslogBindingCache", func() {
 			testhelper.Cert("binding-cache-ca.crt"),
 			"bindingCacheCA",
 		)
-		resp, err := client.Get("https://" + sbc.Addr() + "/bindings")
+
+		addr := fmt.Sprintf("https://localhost:%d/bindings", cachePort)
+		resp, err := client.Get(addr)
 		Expect(err).ToNot(HaveOccurred())
 
 		Expect(resp.StatusCode).To(Equal(http.StatusOK))
