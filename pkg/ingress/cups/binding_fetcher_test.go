@@ -1,6 +1,7 @@
 package cups_test
 
 import (
+	"errors"
 	"time"
 
 	"code.cloudfoundry.org/loggregator-agent/internal/testhelper"
@@ -109,13 +110,22 @@ var _ = Describe("BindingFetcher", func() {
 			},
 		}))
 	})
+
+	It("returns an error if the Getter returns an error", func() {
+		getter.err = errors.New("boom")
+
+		_, err := fetcher.FetchBindings()
+
+		Expect(err).To(MatchError("boom"))
+	})
 })
 
 type SpyGetter struct {
 	bindings []binding.Binding
+	err      error
 }
 
-func (s *SpyGetter) Get() []binding.Binding {
+func (s *SpyGetter) Get() ([]binding.Binding, error) {
 	time.Sleep(10 * time.Millisecond)
-	return s.bindings
+	return s.bindings, s.err
 }

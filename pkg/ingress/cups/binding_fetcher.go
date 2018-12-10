@@ -19,7 +19,7 @@ type Metrics interface {
 
 // Getter is configured to fetch HTTP responses
 type Getter interface {
-	Get() []binding.Binding
+	Get() ([]binding.Binding, error)
 }
 
 // BindingFetcher uses a Getter to fetch and decode Bindings
@@ -50,7 +50,11 @@ func (f *BindingFetcher) FetchBindings() ([]syslog.Binding, error) {
 	}()
 
 	start := time.Now()
-	bindings := f.getter.Get()
+
+	bindings, err := f.getter.Get()
+	if err != nil {
+		return nil, err
+	}
 	d := time.Since(start)
 	latency = d.Nanoseconds()
 

@@ -51,7 +51,9 @@ var _ = Describe("Client", func() {
 	It("returns empty bindings if an HTTP error occurs", func() {
 		spyHTTPClient.err = errors.New("http error")
 
-		Expect(client.Get()).Should(BeNil())
+		_, err := client.Get()
+
+		Expect(err).To(MatchError("http error"))
 	})
 
 	It("returns empty bindings if cache returns a non-OK status code", func() {
@@ -59,7 +61,10 @@ var _ = Describe("Client", func() {
 			StatusCode: http.StatusInternalServerError,
 			Body:       ioutil.NopCloser(strings.NewReader("")),
 		}
-		Expect(client.Get()).Should(BeNil())
+
+		_, err := client.Get()
+
+		Expect(err).To(MatchError("unexpected http response from binding cache: 500"))
 	})
 })
 

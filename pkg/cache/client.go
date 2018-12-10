@@ -28,11 +28,11 @@ func NewClient(cacheAddr string, h httpGetter) *CacheClient {
 	}
 }
 
-func (c *CacheClient) Get() []binding.Binding {
+func (c *CacheClient) Get() ([]binding.Binding, error) {
 	var bindings []binding.Binding
 	resp, err := c.h.Get(fmt.Sprintf(pathTemplate, c.cacheAddr))
 	if err != nil {
-		return nil
+		return nil, err
 	}
 	defer func() {
 		io.Copy(ioutil.Discard, resp.Body)
@@ -40,16 +40,13 @@ func (c *CacheClient) Get() []binding.Binding {
 	}()
 
 	if resp.StatusCode != http.StatusOK {
-		fmt.Println("Cache1")
-		return nil
+		return nil, fmt.Errorf("unexpected http response from binding cache: %d", resp.StatusCode)
 	}
 
 	err = json.NewDecoder(resp.Body).Decode(&bindings)
 	if err != nil {
-		fmt.Println("Cache2")
-		return nil
+		return nil, err
 	}
 
-	fmt.Printf("%+v\n", bindings)
-	return bindings
+	return bindings, nil
 }
