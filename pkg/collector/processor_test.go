@@ -72,87 +72,87 @@ var _ = Describe("Processor", func() {
 		Expect(metrics).To(HaveLen(17))
 
 		Expect(proto.Equal(
-			metrics["system.mem.kb"],
+			metrics["system_mem_kb"],
 			&loggregator_v2.GaugeValue{Unit: "KiB", Value: 1025.0},
 		)).To(BeTrue())
 
 		Expect(proto.Equal(
-			metrics["system.mem.percent"],
+			metrics["system_mem_percent"],
 			&loggregator_v2.GaugeValue{Unit: "Percent", Value: 10.01},
 		)).To(BeTrue())
 
 		Expect(proto.Equal(
-			metrics["system.swap.kb"],
+			metrics["system_swap_kb"],
 			&loggregator_v2.GaugeValue{Unit: "KiB", Value: 2049.0},
 		)).To(BeTrue())
 
 		Expect(proto.Equal(
-			metrics["system.swap.percent"],
+			metrics["system_swap_percent"],
 			&loggregator_v2.GaugeValue{Unit: "Percent", Value: 20.01},
 		)).To(BeTrue())
 
 		Expect(proto.Equal(
-			metrics["system.load.1m"],
+			metrics["system_load_1m"],
 			&loggregator_v2.GaugeValue{Unit: "Load", Value: 1.1},
 		)).To(BeTrue())
 
 		Expect(proto.Equal(
-			metrics["system.load.5m"],
+			metrics["system_load_5m"],
 			&loggregator_v2.GaugeValue{Unit: "Load", Value: 5.5},
 		)).To(BeTrue())
 
 		Expect(proto.Equal(
-			metrics["system.load.15m"],
+			metrics["system_load_15m"],
 			&loggregator_v2.GaugeValue{Unit: "Load", Value: 15.15},
 		)).To(BeTrue())
 
 		Expect(proto.Equal(
-			metrics["system.cpu.user"],
+			metrics["system_cpu_user"],
 			&loggregator_v2.GaugeValue{Unit: "Percent", Value: 25.25},
 		)).To(BeTrue())
 
 		Expect(proto.Equal(
-			metrics["system.cpu.sys"],
+			metrics["system_cpu_sys"],
 			&loggregator_v2.GaugeValue{Unit: "Percent", Value: 52.52},
 		)).To(BeTrue())
 
 		Expect(proto.Equal(
-			metrics["system.cpu.idle"],
+			metrics["system_cpu_idle"],
 			&loggregator_v2.GaugeValue{Unit: "Percent", Value: 10.10},
 		)).To(BeTrue())
 
 		Expect(proto.Equal(
-			metrics["system.cpu.wait"],
+			metrics["system_cpu_wait"],
 			&loggregator_v2.GaugeValue{Unit: "Percent", Value: 22.22},
 		)).To(BeTrue())
 
 		Expect(proto.Equal(
-			metrics["system.disk.system.percent"],
+			metrics["system_disk_system_percent"],
 			&loggregator_v2.GaugeValue{Unit: "Percent", Value: 35.0},
 		)).To(BeTrue())
 
 		Expect(proto.Equal(
-			metrics["system.disk.system.inode_percent"],
+			metrics["system_disk_system_inode_percent"],
 			&loggregator_v2.GaugeValue{Unit: "Percent", Value: 45.0},
 		)).To(BeTrue())
 
 		Expect(proto.Equal(
-			metrics["system.disk.ephemeral.percent"],
+			metrics["system_disk_ephemeral_percent"],
 			&loggregator_v2.GaugeValue{Unit: "Percent", Value: 55.0},
 		)).To(BeTrue())
 
 		Expect(proto.Equal(
-			metrics["system.disk.ephemeral.inode_percent"],
+			metrics["system_disk_ephemeral_inode_percent"],
 			&loggregator_v2.GaugeValue{Unit: "Percent", Value: 65.0},
 		)).To(BeTrue())
 
 		Expect(proto.Equal(
-			metrics["system.disk.persistent.percent"],
+			metrics["system_disk_persistent_percent"],
 			&loggregator_v2.GaugeValue{Unit: "Percent", Value: 75.0},
 		)).To(BeTrue())
 
 		Expect(proto.Equal(
-			metrics["system.disk.persistent.inode_percent"],
+			metrics["system_disk_persistent_inode_percent"],
 			&loggregator_v2.GaugeValue{Unit: "Percent", Value: 85.0},
 		)).To(BeTrue())
 	})
@@ -173,12 +173,12 @@ var _ = Describe("Processor", func() {
 		var env *loggregator_v2.Envelope
 		Eventually(stub.outEnvs).Should(Receive(&env))
 
-		Expect(env.GetGauge().Metrics).ToNot(HaveKey("system.disk.system.percent"))
-		Expect(env.GetGauge().Metrics).ToNot(HaveKey("system.disk.system.inode_percent"))
-		Expect(env.GetGauge().Metrics).ToNot(HaveKey("system.disk.ephemeral.percent"))
-		Expect(env.GetGauge().Metrics).ToNot(HaveKey("system.disk.ephemeral.inode_percent"))
-		Expect(env.GetGauge().Metrics).ToNot(HaveKey("system.disk.persistent.percent"))
-		Expect(env.GetGauge().Metrics).ToNot(HaveKey("system.disk.persistent.inode_percent"))
+		Expect(env.GetGauge().Metrics).ToNot(HaveKey("system_disk_system_percent"))
+		Expect(env.GetGauge().Metrics).ToNot(HaveKey("system_disk_system_inode_percent"))
+		Expect(env.GetGauge().Metrics).ToNot(HaveKey("system_disk_ephemeral_percent"))
+		Expect(env.GetGauge().Metrics).ToNot(HaveKey("system_disk_ephemeral_inode_percent"))
+		Expect(env.GetGauge().Metrics).ToNot(HaveKey("system_disk_persistent_percent"))
+		Expect(env.GetGauge().Metrics).ToNot(HaveKey("system_disk_persistent_inode_percent"))
 	})
 })
 
