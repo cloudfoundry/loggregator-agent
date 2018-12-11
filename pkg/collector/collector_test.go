@@ -12,6 +12,7 @@ import (
 	"github.com/shirou/gopsutil/disk"
 	"github.com/shirou/gopsutil/load"
 	"github.com/shirou/gopsutil/mem"
+	"github.com/shirou/gopsutil/net"
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
@@ -64,6 +65,24 @@ var _ = Describe("Collector", func() {
 		Expect(stats.System).To(Equal(20.0))
 		Expect(stats.Idle).To(Equal(30.0))
 		Expect(stats.Wait).To(Equal(40.0))
+	})
+
+	It("returns network metrics", func() {
+		stats, err := c.Collect()
+		Expect(err).ToNot(HaveOccurred())
+
+		Expect(stats.Networks).To(HaveLen(1))
+
+		stat := stats.Networks[0]
+		Expect(stat.Name).To(Equal("eth0"))
+		Expect(stat.BytesSent).To(Equal(uint64(10)))
+		Expect(stat.BytesReceived).To(Equal(uint64(20)))
+		Expect(stat.PacketsSent).To(Equal(uint64(30)))
+		Expect(stat.PacketsReceived).To(Equal(uint64(40)))
+		Expect(stat.ErrIn).To(Equal(uint64(50)))
+		Expect(stat.ErrOut).To(Equal(uint64(60)))
+		Expect(stat.DropIn).To(Equal(uint64(70)))
+		Expect(stat.DropOut).To(Equal(uint64(80)))
 	})
 
 	It("returns disk metrics", func() {
@@ -153,6 +172,13 @@ var _ = Describe("Collector", func() {
 		Expect(err).To(HaveOccurred())
 	})
 
+	It("returns an error when getting networks fails", func() {
+		src.ioCountersErr = errors.New("an error")
+
+		_, err := c.Collect()
+		Expect(err).To(HaveOccurred())
+	})
+
 	It("returns an error when getting system disk usage fails", func() {
 		src.systemDiskUsageError = errors.New("an error")
 
@@ -182,6 +208,7 @@ type stubRawCollector struct {
 	swapMemoryErr            error
 	cpuLoadErr               error
 	cpuTimesErr              error
+	ioCountersErr            error
 	systemDiskUsageError     error
 	ephemeralDiskUsageError  error
 	persistentDiskUsageError error
@@ -242,6 +269,37 @@ func (s *stubRawCollector) TimesWithContext(context.Context, bool) ([]cpu.TimesS
 			Guest:     1000.0,
 			GuestNice: 1000.0,
 			Stolen:    1000.0,
+		},
+	}, nil
+}
+
+func (s *stubRawCollector) IOCountersWithContext(context.Context, bool) ([]net.IOCountersStat, error) {
+	if s.ioCountersErr != nil {
+		return nil, s.ioCountersErr
+	}
+
+	return []net.IOCountersStat{
+		{
+			Name:        "blah",
+			BytesSent:   1,
+			BytesRecv:   2,
+			PacketsSent: 3,
+			PacketsRecv: 4,
+			Errin:       5,
+			Errout:      6,
+			Dropin:      7,
+			Dropout:     8,
+		},
+		{
+			Name:        "eth0",
+			BytesSent:   10,
+			BytesRecv:   20,
+			PacketsSent: 30,
+			PacketsRecv: 40,
+			Errin:       50,
+			Errout:      60,
+			Dropin:      70,
+			Dropout:     80,
 		},
 	}, nil
 }

@@ -4,12 +4,14 @@ import (
 	"context"
 	"log"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/shirou/gopsutil/cpu"
 	"github.com/shirou/gopsutil/disk"
 	"github.com/shirou/gopsutil/load"
 	"github.com/shirou/gopsutil/mem"
+	"github.com/shirou/gopsutil/net"
 )
 
 const (
@@ -34,6 +36,8 @@ type SystemStat struct {
 	SystemDisk     DiskStat
 	EphemeralDisk  DiskStat
 	PersistentDisk DiskStat
+
+	Networks []NetworkStat
 }
 
 type CPUStat struct {
@@ -52,6 +56,18 @@ type DiskStat struct {
 type Collector struct {
 	rawCollector  RawCollector
 	prevTimesStat cpu.TimesStat
+}
+
+type NetworkStat struct {
+	Name            string
+	BytesSent       uint64
+	BytesReceived   uint64
+	PacketsSent     uint64
+	PacketsReceived uint64
+	ErrIn           uint64
+	ErrOut          uint64
+	DropIn          uint64
+	DropOut         uint64
 }
 
 func New(log *log.Logger, opts ...CollectorOption) Collector {
@@ -117,6 +133,11 @@ func (c Collector) Collect() (SystemStat, error) {
 		return SystemStat{}, err
 	}
 
+	networks, err := c.networkStat(ctx)
+	if err != nil {
+		return SystemStat{}, err
+	}
+
 	return SystemStat{
 		CPUStat: cpu,
 
@@ -133,6 +154,8 @@ func (c Collector) Collect() (SystemStat, error) {
 		SystemDisk:     sdisk,
 		EphemeralDisk:  edisk,
 		PersistentDisk: pdisk,
+
+		Networks: networks,
 	}, nil
 }
 
@@ -153,6 +176,32 @@ func (c Collector) diskStat(ctx context.Context, path string) (DiskStat, error) 
 	}, nil
 }
 
+func (c Collector) networkStat(ctx context.Context) ([]NetworkStat, error) {
+	counters, err := c.rawCollector.IOCountersWithContext(ctx, true)
+	if err != nil {
+		return nil, err
+	}
+
+	var ns []NetworkStat
+	for _, c := range counters {
+		if strings.HasPrefix(c.Name, "eth") {
+			ns = append(ns, NetworkStat{
+				Name:            c.Name,
+				BytesSent:       c.BytesSent,
+				BytesReceived:   c.BytesRecv,
+				PacketsSent:     c.PacketsSent,
+				PacketsReceived: c.PacketsRecv,
+				ErrIn:           c.Errin,
+				ErrOut:          c.Errout,
+				DropIn:          c.Dropin,
+				DropOut:         c.Dropout,
+			})
+		}
+	}
+
+	return ns, nil
+}
+
 func calculateCPUStat(previous, current cpu.TimesStat) CPUStat {
 	totalDiff := current.Total() - previous.Total()
 
@@ -170,6 +219,7 @@ type RawCollector interface {
 	AvgWithContext(context.Context) (*load.AvgStat, error)
 	TimesWithContext(context.Context, bool) ([]cpu.TimesStat, error)
 	UsageWithContext(context.Context, string) (*disk.UsageStat, error)
+	IOCountersWithContext(context.Context, bool) ([]net.IOCountersStat, error)
 }
 
 type CollectorOption func(*Collector)
@@ -200,4 +250,8 @@ func (s defaultRawCollector) TimesWithContext(ctx context.Context, perCPU bool) 
 
 func (s defaultRawCollector) UsageWithContext(ctx context.Context, path string) (*disk.UsageStat, error) {
 	return disk.UsageWithContext(ctx, path)
+}
+
+func (s defaultRawCollector) IOCountersWithContext(ctx context.Context, pernic bool) ([]net.IOCountersStat, error) {
+	return net.IOCountersWithContext(ctx, pernic)
 }

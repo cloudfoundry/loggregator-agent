@@ -7,6 +7,8 @@ import (
 	"code.cloudfoundry.org/go-loggregator/rpc/loggregator_v2"
 )
 
+const envelopeOrigin = "system-metrics-agent"
+
 type InputFunc func() (SystemStat, error)
 type OutputFunc func(*loggregator_v2.Envelope)
 
@@ -41,15 +43,70 @@ func (p *Processor) Run() {
 			continue
 		}
 
+		ts := time.Now().UnixNano()
 		p.out(&loggregator_v2.Envelope{
-			Timestamp: time.Now().UnixNano(),
+			Timestamp: ts,
 			Message: &loggregator_v2.Envelope_Gauge{
 				Gauge: buildGauge(stat),
 			},
 			Tags: map[string]string{
-				"origin": "system-metrics-agent",
+				"origin": envelopeOrigin,
 			},
 		})
+
+		for _, network := range stat.Networks {
+			p.out(&loggregator_v2.Envelope{
+				Timestamp: ts,
+				Message: &loggregator_v2.Envelope_Gauge{
+					Gauge: buildNetworkGauge(network),
+				},
+				Tags: map[string]string{
+					"network_interface": network.Name,
+					"origin":            envelopeOrigin,
+				},
+			})
+		}
+	}
+}
+
+func buildNetworkGauge(network NetworkStat) *loggregator_v2.Gauge {
+	metrics := map[string]*loggregator_v2.GaugeValue{
+		"system_network_bytes_sent": &loggregator_v2.GaugeValue{
+			Unit:  "Bytes",
+			Value: float64(network.BytesSent),
+		},
+		"system_network_bytes_received": &loggregator_v2.GaugeValue{
+			Unit:  "Bytes",
+			Value: float64(network.BytesReceived),
+		},
+		"system_network_packets_sent": &loggregator_v2.GaugeValue{
+			Unit:  "Packets",
+			Value: float64(network.PacketsSent),
+		},
+		"system_network_packets_received": &loggregator_v2.GaugeValue{
+			Unit:  "Packets",
+			Value: float64(network.PacketsReceived),
+		},
+		"system_network_error_in": &loggregator_v2.GaugeValue{
+			Unit:  "Frames",
+			Value: float64(network.ErrIn),
+		},
+		"system_network_error_out": &loggregator_v2.GaugeValue{
+			Unit:  "Frames",
+			Value: float64(network.ErrOut),
+		},
+		"system_network_drop_in": &loggregator_v2.GaugeValue{
+			Unit:  "Packets",
+			Value: float64(network.DropIn),
+		},
+		"system_network_drop_out": &loggregator_v2.GaugeValue{
+			Unit:  "Packets",
+			Value: float64(network.DropOut),
+		},
+	}
+
+	return &loggregator_v2.Gauge{
+		Metrics: metrics,
 	}
 }
 

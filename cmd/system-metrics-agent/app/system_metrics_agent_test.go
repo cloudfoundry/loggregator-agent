@@ -44,6 +44,7 @@ var _ = Describe("SystemMetricsAgent", func() {
 
 		var env *loggregator_v2.Envelope
 		Eventually(loggr.envelopes, 5).Should(Receive(&env))
+		Expect(env.GetGauge().Metrics).To(HaveKey("system_mem_kb"))
 	})
 
 	It("has an http listener for PProf", func() {

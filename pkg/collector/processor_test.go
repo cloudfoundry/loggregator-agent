@@ -157,6 +157,102 @@ var _ = Describe("Processor", func() {
 		)).To(BeTrue())
 	})
 
+	It("receives stats and sends an envelope on an interval", func() {
+		stub := newStubInputOutput()
+		processor := collector.NewProcessor(
+			stub.input,
+			stub.output,
+			10*time.Millisecond,
+			log.New(GinkgoWriter, "", log.LstdFlags),
+		)
+
+		go processor.Run()
+
+		stub.inStats <- collector.SystemStat{
+			Networks: []collector.NetworkStat{
+				{
+					Name:            "eth0",
+					BytesSent:       1,
+					BytesReceived:   2,
+					PacketsSent:     3,
+					PacketsReceived: 4,
+					ErrIn:           5,
+					ErrOut:          6,
+					DropIn:          7,
+					DropOut:         8,
+				},
+				{
+					Name:            "eth1",
+					BytesSent:       10,
+					BytesReceived:   20,
+					PacketsSent:     30,
+					PacketsReceived: 40,
+					ErrIn:           50,
+					ErrOut:          60,
+					DropIn:          70,
+					DropOut:         80,
+				},
+			},
+		}
+
+		var env *loggregator_v2.Envelope
+		Eventually(stub.outEnvs).Should(Receive(&env))
+		Expect(env.GetGauge().Metrics).To(HaveKey("system_mem_kb"))
+
+		Eventually(stub.outEnvs).Should(Receive(&env))
+		Expect(env.GetTimestamp()).To(BeNumerically(">", 0))
+		Expect(env.GetTags()).To(HaveKeyWithValue("origin", "system-metrics-agent"))
+		Expect(env.GetTags()).To(HaveKeyWithValue("network_interface", "eth0"))
+
+		Eventually(stub.outEnvs).Should(Receive(&env))
+		Expect(env.GetTimestamp()).To(BeNumerically(">", 0))
+		Expect(env.GetTags()).To(HaveKeyWithValue("origin", "system-metrics-agent"))
+		Expect(env.GetTags()).To(HaveKeyWithValue("network_interface", "eth1"))
+
+		metrics := env.GetGauge().Metrics
+		Expect(metrics).To(HaveLen(8))
+
+		Expect(proto.Equal(
+			metrics["system_network_bytes_sent"],
+			&loggregator_v2.GaugeValue{Unit: "Bytes", Value: 10},
+		)).To(BeTrue())
+
+		Expect(proto.Equal(
+			metrics["system_network_bytes_received"],
+			&loggregator_v2.GaugeValue{Unit: "Bytes", Value: 20},
+		)).To(BeTrue())
+
+		Expect(proto.Equal(
+			metrics["system_network_packets_sent"],
+			&loggregator_v2.GaugeValue{Unit: "Packets", Value: 30},
+		)).To(BeTrue())
+
+		Expect(proto.Equal(
+			metrics["system_network_packets_received"],
+			&loggregator_v2.GaugeValue{Unit: "Packets", Value: 40},
+		)).To(BeTrue())
+
+		Expect(proto.Equal(
+			metrics["system_network_error_in"],
+			&loggregator_v2.GaugeValue{Unit: "Frames", Value: 50},
+		)).To(BeTrue())
+
+		Expect(proto.Equal(
+			metrics["system_network_error_out"],
+			&loggregator_v2.GaugeValue{Unit: "Frames", Value: 60},
+		)).To(BeTrue())
+
+		Expect(proto.Equal(
+			metrics["system_network_drop_in"],
+			&loggregator_v2.GaugeValue{Unit: "Packets", Value: 70},
+		)).To(BeTrue())
+
+		Expect(proto.Equal(
+			metrics["system_network_drop_out"],
+			&loggregator_v2.GaugeValue{Unit: "Packets", Value: 80},
+		)).To(BeTrue())
+	})
+
 	It("does not have disk metrics if disk is not present", func() {
 		stub := newStubInputOutput()
 		processor := collector.NewProcessor(
