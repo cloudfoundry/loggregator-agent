@@ -1,19 +1,24 @@
 package app
 
 import (
+	"context"
 	"fmt"
 	"log"
 	"os"
+	"time"
 
 	"net/http"
 	_ "net/http/pprof"
 
 	gendiodes "code.cloudfoundry.org/go-diodes"
 	loggregator "code.cloudfoundry.org/go-loggregator"
+	"code.cloudfoundry.org/go-loggregator/rpc/loggregator_v2"
 	"code.cloudfoundry.org/loggregator-agent/pkg/diodes"
+	"code.cloudfoundry.org/loggregator-agent/pkg/egress"
 	"code.cloudfoundry.org/loggregator-agent/pkg/egress/syslog"
 	"code.cloudfoundry.org/loggregator-agent/pkg/ingress/v2"
 	"code.cloudfoundry.org/loggregator-agent/pkg/plumbing"
+	"code.cloudfoundry.org/loggregator-agent/pkg/timeoutwaitgroup"
 	"google.golang.org/grpc"
 )
 
@@ -33,6 +38,10 @@ type Metrics interface {
 
 type BindingFetcher interface {
 	FetchBindings() ([]syslog.Binding, error)
+}
+
+type Writer interface {
+	Write(*loggregator_v2.Envelope) error
 }
 
 // NewForwarderAgent intializes and returns a new forwarder agent.
@@ -72,33 +81,12 @@ func (s ForwarderAgent) run() {
 		ingressDropped(uint64(missed))
 	}))
 
-	var ingressClients []*loggregator.IngressClient
-	for _, addr := range s.downstreamAddrs {
-		clientCreds, err := loggregator.NewIngressTLSConfig(
-			s.grpc.CAFile,
-			s.grpc.CertFile,
-			s.grpc.KeyFile,
-		)
-		if err != nil {
-			s.log.Fatalf("failed to configure client TLS: %s", err)
-		}
-
-		ingressClient, err := loggregator.NewIngressClient(
-			clientCreds,
-			loggregator.WithLogger(log.New(os.Stderr, fmt.Sprintf("[INGRESS CLIENT] -> %s: ", addr), log.LstdFlags)),
-			loggregator.WithAddr(addr),
-		)
-		if err != nil {
-			s.log.Fatalf("failed to create ingress client for %s: %s", addr, err)
-		}
-		ingressClients = append(ingressClients, ingressClient)
-	}
-
+	clients := ingressClients(s.downstreamAddrs, s.grpc, s.log)
 	go func() {
 		for {
 			e := diode.Next()
-			for _, c := range ingressClients {
-				c.Emit(e)
+			for _, c := range clients {
+				c.Write(e)
 			}
 		}
 	}()
@@ -125,4 +113,50 @@ func (s ForwarderAgent) run() {
 		grpc.Creds(serverCreds),
 	)
 	srv.Start()
+}
+
+type clientWriter struct {
+	c *loggregator.IngressClient
+}
+
+func (c clientWriter) Write(e *loggregator_v2.Envelope) error {
+	c.c.Emit(e)
+	return nil
+}
+
+func (c clientWriter) Close() error {
+	return c.c.CloseSend()
+}
+
+func ingressClients(downstreamAddrs []string, grpc GRPC, l *log.Logger) []Writer {
+	var ingressClients []Writer
+	for _, addr := range downstreamAddrs {
+		clientCreds, err := loggregator.NewIngressTLSConfig(
+			grpc.CAFile,
+			grpc.CertFile,
+			grpc.KeyFile,
+		)
+		if err != nil {
+			l.Fatalf("failed to configure client TLS: %s", err)
+		}
+
+		il := log.New(os.Stderr, fmt.Sprintf("[INGRESS CLIENT] -> %s: ", addr), log.LstdFlags)
+		ingressClient, err := loggregator.NewIngressClient(
+			clientCreds,
+			loggregator.WithLogger(il),
+			loggregator.WithAddr(addr),
+		)
+		if err != nil {
+			l.Fatalf("failed to create ingress client for %s: %s", addr, err)
+		}
+
+		ctx := context.Background()
+		wc := clientWriter{ingressClient}
+		dw := egress.NewDiodeWriter(ctx, wc, gendiodes.AlertFunc(func(missed int) {
+			il.Printf("Dropped %d logs for url %s", missed, addr)
+		}), timeoutwaitgroup.New(time.Minute))
+
+		ingressClients = append(ingressClients, dw)
+	}
+	return ingressClients
 }

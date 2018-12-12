@@ -122,6 +122,62 @@ var _ = Describe("Main", func() {
 		Expect(proto.Equal(e1, e)).To(BeTrue())
 		Expect(proto.Equal(e2, e)).To(BeTrue())
 	})
+
+	It("continues writing to other consumers if one is slow", func() {
+		downstreamNormal := startSpyLoggregatorV2Ingress()
+		downstreamBlocking := startSpyLoggregatorV2BlockingIngress()
+
+		session := startForwarderAgent(
+			"DOWNSTREAM_INGRESS_ADDRS="+strings.Join([]string{downstreamBlocking.addr, downstreamNormal.addr}, ","),
+			fmt.Sprintf("AGENT_PORT=%d", grpcPort),
+			fmt.Sprintf("AGENT_CA_FILE_PATH=%s", testhelper.Cert("loggregator-ca.crt")),
+			fmt.Sprintf("AGENT_CERT_FILE_PATH=%s", testhelper.Cert("metron.crt")),
+			fmt.Sprintf("AGENT_KEY_FILE_PATH=%s", testhelper.Cert("metron.key")),
+		)
+		defer session.Kill()
+
+		tlsConfig, err := loggregator.NewIngressTLSConfig(
+			testhelper.Cert("loggregator-ca.crt"),
+			testhelper.Cert("metron.crt"),
+			testhelper.Cert("metron.key"),
+		)
+		Expect(err).ToNot(HaveOccurred())
+		ingressClient, err := loggregator.NewIngressClient(
+			tlsConfig,
+			loggregator.WithAddr(fmt.Sprintf("127.0.0.1:%d", grpcPort)),
+			loggregator.WithLogger(log.New(GinkgoWriter, "[TEST INGRESS CLIENT] ", 0)),
+			loggregator.WithBatchMaxSize(1),
+		)
+		Expect(err).ToNot(HaveOccurred())
+
+		e := &loggregator_v2.Envelope{
+			Timestamp: time.Now().UnixNano(),
+			SourceId:  "some-id",
+			Message: &loggregator_v2.Envelope_Log{
+				Log: &loggregator_v2.Log{
+					Payload: []byte("hello"),
+				},
+			},
+		}
+
+		ctx, cancel := context.WithCancel(context.Background())
+		defer cancel()
+		go func() {
+			ticker := time.NewTicker(1 * time.Millisecond)
+			for {
+				select {
+				case <-ticker.C:
+					ingressClient.Emit(e)
+				case <-ctx.Done():
+					return
+				}
+			}
+		}()
+
+		Eventually(func() int {
+			return len(downstreamNormal.envelopes)
+		}, 5).Should(BeNumerically(">=", 3000))
+	})
 })
 
 func startForwarderAgent(envs ...string) *gexec.Session {
@@ -138,6 +194,33 @@ func startForwarderAgent(envs ...string) *gexec.Session {
 	}
 
 	return session
+}
+
+func startSpyLoggregatorV2Ingress() *spyLoggregatorV2Ingress {
+	s := &spyLoggregatorV2Ingress{
+		envelopes: make(chan *loggregator_v2.Envelope, 10000),
+	}
+
+	serverCreds, err := plumbing.NewServerCredentials(
+		testhelper.Cert("metron.crt"),
+		testhelper.Cert("metron.key"),
+		testhelper.Cert("loggregator-ca.crt"),
+	)
+
+	lis, err := net.Listen("tcp", ":0")
+	ExpectWithOffset(1, err).ToNot(HaveOccurred())
+
+	grpcServer := grpc.NewServer(grpc.Creds(serverCreds))
+	loggregator_v2.RegisterIngressServer(grpcServer, s)
+
+	s.close = func() {
+		lis.Close()
+	}
+	s.addr = lis.Addr().String()
+
+	go grpcServer.Serve(lis)
+
+	return s
 }
 
 type spyLoggregatorV2Ingress struct {
@@ -167,10 +250,8 @@ func (s *spyLoggregatorV2Ingress) BatchSender(srv loggregator_v2.Ingress_BatchSe
 	}
 }
 
-func startSpyLoggregatorV2Ingress() *spyLoggregatorV2Ingress {
-	s := &spyLoggregatorV2Ingress{
-		envelopes: make(chan *loggregator_v2.Envelope, 100),
-	}
+func startSpyLoggregatorV2BlockingIngress() *spyLoggregatorV2BlockingIngress {
+	s := &spyLoggregatorV2BlockingIngress{}
 
 	serverCreds, err := plumbing.NewServerCredentials(
 		testhelper.Cert("metron.crt"),
@@ -192,4 +273,29 @@ func startSpyLoggregatorV2Ingress() *spyLoggregatorV2Ingress {
 	go grpcServer.Serve(lis)
 
 	return s
+}
+
+type spyLoggregatorV2BlockingIngress struct {
+	addr  string
+	close func()
+}
+
+func (s *spyLoggregatorV2BlockingIngress) Sender(loggregator_v2.Ingress_SenderServer) error {
+	panic("not implemented")
+}
+
+func (s *spyLoggregatorV2BlockingIngress) Send(context.Context, *loggregator_v2.EnvelopeBatch) (*loggregator_v2.SendResponse, error) {
+	panic("not implemented")
+}
+
+func (s *spyLoggregatorV2BlockingIngress) BatchSender(srv loggregator_v2.Ingress_BatchSenderServer) error {
+	c := make(chan struct{})
+	for {
+		_, err := srv.Recv()
+		if err != nil {
+			return err
+		}
+
+		<-c
+	}
 }
