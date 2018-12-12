@@ -1,6 +1,10 @@
 package syslog
 
-import "errors"
+import (
+	"errors"
+
+	"code.cloudfoundry.org/loggregator-agent/pkg/egress"
+)
 
 type metrics interface {
 	NewCounter(string) func(uint64)
@@ -20,7 +24,7 @@ func (f WriterFactory) NewWriter(
 	urlBinding *URLBinding,
 	netConf NetworkTimeoutConfig,
 	skipCertVerify bool,
-) (WriteCloser, error) {
+) (egress.WriteCloser, error) {
 	switch urlBinding.URL.Scheme {
 	case "https":
 		return NewHTTPSWriter(

@@ -1,6 +1,8 @@
-package syslog
+package egress
 
 import (
+	"io"
+
 	"golang.org/x/net/context"
 
 	gendiodes "code.cloudfoundry.org/go-diodes"
@@ -11,6 +13,15 @@ import (
 type WaitGroup interface {
 	Add(delta int)
 	Done()
+}
+
+type Writer interface {
+	Write(*loggregator_v2.Envelope) error
+}
+
+type WriteCloser interface {
+	Write(*loggregator_v2.Envelope) error
+	io.Closer
 }
 
 type DiodeWriter struct {
@@ -57,13 +68,13 @@ func (d *DiodeWriter) start() {
 		}
 
 		err := d.wc.Write(e)
-		if err != nil && contextDone(d.ctx) {
+		if err != nil && ContextDone(d.ctx) {
 			return
 		}
 	}
 }
 
-func contextDone(ctx context.Context) bool {
+func ContextDone(ctx context.Context) bool {
 	select {
 	case <-ctx.Done():
 		return true

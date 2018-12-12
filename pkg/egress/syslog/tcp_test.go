@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"code.cloudfoundry.org/go-loggregator/rpc/loggregator_v2"
+	"code.cloudfoundry.org/loggregator-agent/pkg/egress"
 	"code.cloudfoundry.org/loggregator-agent/pkg/egress/syslog"
 
 	. "github.com/onsi/ginkgo"
@@ -42,7 +43,7 @@ var _ = Describe("TCPWriter", func() {
 
 	Describe("Write()", func() {
 		var (
-			writer        syslog.WriteCloser
+			writer        egress.WriteCloser
 			egressTotal   uint64
 			egressCounter func(uint64)
 		)
@@ -220,7 +221,7 @@ var _ = Describe("TCPWriter", func() {
 
 	Describe("Cancel Context", func() {
 		var (
-			writer syslog.WriteCloser
+			writer egress.WriteCloser
 			conn   net.Conn
 		)
 

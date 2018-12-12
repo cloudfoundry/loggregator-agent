@@ -4,6 +4,8 @@ import (
 	"crypto/tls"
 	"net"
 	"time"
+
+	"code.cloudfoundry.org/loggregator-agent/pkg/egress"
 )
 
 // TLSWriter represents a syslog writer that connects over unencrypted TCP.
@@ -23,7 +25,7 @@ func NewTLSWriter(
 	netConf NetworkTimeoutConfig,
 	skipCertVerify bool,
 	egressMetric func(uint64),
-) WriteCloser {
+) egress.WriteCloser {
 
 	dialer := &net.Dialer{
 		Timeout:   netConf.DialTimeout,

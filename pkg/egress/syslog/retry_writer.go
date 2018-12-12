@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"code.cloudfoundry.org/go-loggregator/rpc/loggregator_v2"
+	"code.cloudfoundry.org/loggregator-agent/pkg/egress"
 )
 
 // RetryWrapper wraps a WriterConstructer, allowing it to retry writes.
@@ -21,7 +22,7 @@ func RetryWrapper(
 		netConf NetworkTimeoutConfig,
 		skipCertVerify bool,
 		egressMetric func(uint64),
-	) WriteCloser {
+	) egress.WriteCloser {
 		writer := wc(
 			binding,
 			netConf,
@@ -45,7 +46,7 @@ type RetryDuration func(attempt int) time.Duration
 
 // RetryWriter wraps a WriteCloser and will retry writes if the first fails.
 type RetryWriter struct {
-	writer        WriteCloser
+	writer        egress.WriteCloser
 	retryDuration RetryDuration
 	maxRetries    int
 	binding       *URLBinding
@@ -65,7 +66,7 @@ func (r *RetryWriter) Write(e *loggregator_v2.Envelope) error {
 			return nil
 		}
 
-		if contextDone(r.binding.Context) {
+		if egress.ContextDone(r.binding.Context) {
 			return err
 		}
 

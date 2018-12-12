@@ -9,6 +9,7 @@ import (
 
 	loggregator "code.cloudfoundry.org/go-loggregator"
 	v2 "code.cloudfoundry.org/go-loggregator/rpc/loggregator_v2"
+	"code.cloudfoundry.org/loggregator-agent/pkg/egress"
 	"code.cloudfoundry.org/loggregator-agent/pkg/egress/syslog"
 	"golang.org/x/net/context"
 
@@ -254,14 +255,14 @@ func buildRetryWriter(
 	delayMultiplier time.Duration,
 	logClient syslog.LogClient,
 	sourceIndex string,
-) syslog.WriteCloser {
+) egress.WriteCloser {
 	constructor := syslog.RetryWrapper(
 		func(
 			binding *syslog.URLBinding,
 			netConf syslog.NetworkTimeoutConfig,
 			skipCertVerify bool,
 			syslogMetric func(uint64),
-		) syslog.WriteCloser {
+		) egress.WriteCloser {
 			return w
 		},
 		syslog.RetryDuration(buildDelay(delayMultiplier)),

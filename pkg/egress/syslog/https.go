@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"code.cloudfoundry.org/go-loggregator/rpc/loggregator_v2"
+	"code.cloudfoundry.org/loggregator-agent/pkg/egress"
 	"code.cloudfoundry.org/loggregator-agent/pkg/plumbing"
 )
 
@@ -29,7 +30,7 @@ func NewHTTPSWriter(
 	netConf NetworkTimeoutConfig,
 	skipCertVerify bool,
 	egressMetric func(delta uint64),
-) WriteCloser {
+) egress.WriteCloser {
 
 	client := httpClient(netConf, skipCertVerify)
 

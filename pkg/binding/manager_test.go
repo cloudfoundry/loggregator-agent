@@ -9,6 +9,7 @@ import (
 
 	"code.cloudfoundry.org/go-loggregator/rpc/loggregator_v2"
 	"code.cloudfoundry.org/loggregator-agent/pkg/binding"
+	"code.cloudfoundry.org/loggregator-agent/pkg/egress"
 	"code.cloudfoundry.org/loggregator-agent/pkg/egress/syslog"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
@@ -82,16 +83,16 @@ var _ = Describe("Manager", func() {
 		Expect(<-sm.metricValues).To(BeNumerically("==", 2))
 		Expect(<-sm.metricValues).To(BeNumerically("==", 3))
 
-		Eventually(func() []syslog.Writer {
+		Eventually(func() []egress.Writer {
 			return m.GetDrains("app-2")
 		}).Should(HaveLen(1))
-		Eventually(func() []syslog.Writer {
+		Eventually(func() []egress.Writer {
 			return m.GetDrains("app-3")
 		}).Should(HaveLen(1))
 		Expect(c.ConnectionCount()).Should(BeNumerically("==", 3))
 
 		// Also remove old drains when updating
-		Eventually(func() []syslog.Writer {
+		Eventually(func() []egress.Writer {
 			return m.GetDrains("app-1")
 		}).Should(HaveLen(0))
 
@@ -116,7 +117,7 @@ var _ = Describe("Manager", func() {
 		)
 		go m.Run()
 
-		var appDrains []syslog.Writer
+		var appDrains []egress.Writer
 		Eventually(func() int {
 			appDrains = m.GetDrains("app-1")
 			return len(appDrains)
@@ -196,7 +197,7 @@ func (c *spyConnector) ConnectionCount() int64 {
 	return atomic.LoadInt64(&c.connectionCount)
 }
 
-func (c *spyConnector) Connect(ctx context.Context, b syslog.Binding) (syslog.Writer, error) {
+func (c *spyConnector) Connect(ctx context.Context, b syslog.Binding) (egress.Writer, error) {
 	c.bindingContextMap[b] = ctx
 	atomic.AddInt64(&c.connectionCount, 1)
 	return newSpyDrain(), nil

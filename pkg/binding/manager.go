@@ -7,6 +7,7 @@ import (
 	"sync"
 	"time"
 
+	"code.cloudfoundry.org/loggregator-agent/pkg/egress"
 	"code.cloudfoundry.org/loggregator-agent/pkg/egress/syslog"
 )
 
@@ -20,12 +21,12 @@ type Metrics interface {
 }
 
 type Connector interface {
-	Connect(context.Context, syslog.Binding) (syslog.Writer, error)
+	Connect(context.Context, syslog.Binding) (egress.Writer, error)
 }
 
 type drainHolder struct {
 	cancel      func()
-	drainWriter syslog.Writer
+	drainWriter egress.Writer
 }
 
 type Manager struct {
@@ -120,12 +121,12 @@ func (m *Manager) updateDrains(bindings []syslog.Binding) {
 	}
 }
 
-func (m *Manager) GetDrains(sourceID string) []syslog.Writer {
+func (m *Manager) GetDrains(sourceID string) []egress.Writer {
 	m.Lock()
 	defer m.Unlock()
 
 	existing := m.sourceDrainMap[sourceID]
-	drains := make([]syslog.Writer, 0, len(existing))
+	drains := make([]egress.Writer, 0, len(existing))
 	for _, dh := range existing {
 		drains = append(drains, dh.drainWriter)
 	}

@@ -2,7 +2,6 @@ package syslog
 
 import (
 	"fmt"
-	"io"
 	"log"
 	"time"
 
@@ -10,19 +9,8 @@ import (
 
 	"code.cloudfoundry.org/go-diodes"
 	loggregator "code.cloudfoundry.org/go-loggregator"
-	"code.cloudfoundry.org/go-loggregator/rpc/loggregator_v2"
+	"code.cloudfoundry.org/loggregator-agent/pkg/egress"
 )
-
-// Write is the interface for all diode writers.
-type Writer interface {
-	Write(*loggregator_v2.Envelope) error
-}
-
-// WriteCloser is the interface for all syslog writers.
-type WriteCloser interface {
-	Writer
-	io.Closer
-}
 
 type Binding struct {
 	AppId    string `json:"appId,omitempty"`
@@ -43,7 +31,7 @@ func (nullLogClient) EmitLog(message string, opts ...loggregator.EmitLogOption) 
 }
 
 type writerFactory interface {
-	NewWriter(*URLBinding, NetworkTimeoutConfig, bool) (WriteCloser, error)
+	NewWriter(*URLBinding, NetworkTimeoutConfig, bool) (egress.WriteCloser, error)
 }
 
 // SyslogConnector creates the various egress syslog writers.
@@ -53,7 +41,7 @@ type SyslogConnector struct {
 	ioTimeout      time.Duration
 	dialTimeout    time.Duration
 	logClient      LogClient
-	wg             WaitGroup
+	wg             egress.WaitGroup
 	sourceIndex    string
 	writerFactory  writerFactory
 	m              metrics
@@ -63,7 +51,7 @@ type SyslogConnector struct {
 func NewSyslogConnector(
 	netConf NetworkTimeoutConfig,
 	skipCertVerify bool,
-	wg WaitGroup,
+	wg egress.WaitGroup,
 	f writerFactory,
 	m metrics,
 	opts ...ConnectorOption,
@@ -91,7 +79,7 @@ type WriterConstructor func(
 	netConf NetworkTimeoutConfig,
 	skipCertVerify bool,
 	egressMetric func(uint64),
-) WriteCloser
+) egress.WriteCloser
 
 // ConnectorOption allows a syslog connector to be customized.
 type ConnectorOption func(*SyslogConnector)
@@ -107,7 +95,7 @@ func WithLogClient(logClient LogClient, sourceIndex string) ConnectorOption {
 
 // Connect returns an egress writer based on the scheme of the binding drain
 // URL.
-func (w *SyslogConnector) Connect(ctx context.Context, b Binding) (Writer, error) {
+func (w *SyslogConnector) Connect(ctx context.Context, b Binding) (egress.Writer, error) {
 	urlBinding, err := buildBinding(ctx, b)
 	if err != nil {
 		// Note: the scheduler ensures the URL is valid. It is unlikely that
@@ -133,7 +121,7 @@ func (w *SyslogConnector) Connect(ctx context.Context, b Binding) (Writer, error
 
 	droppedMetric := w.m.NewCounter("EgressDropped")
 
-	dw := NewDiodeWriter(ctx, writer, diodes.AlertFunc(func(missed int) {
+	dw := egress.NewDiodeWriter(ctx, writer, diodes.AlertFunc(func(missed int) {
 		droppedMetric(uint64(missed))
 
 		w.emitErrorLog(b.AppId, fmt.Sprintf("%d messages lost in user provided syslog drain", missed))

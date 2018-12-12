@@ -3,11 +3,13 @@ package syslog_test
 import (
 	"errors"
 	"io"
+	"sync/atomic"
 	"time"
 
 	"golang.org/x/net/context"
 
 	"code.cloudfoundry.org/go-loggregator/rpc/loggregator_v2"
+	"code.cloudfoundry.org/loggregator-agent/pkg/egress"
 	"code.cloudfoundry.org/loggregator-agent/pkg/egress/syslog"
 
 	. "github.com/onsi/ginkgo"
@@ -152,7 +154,7 @@ var _ = Describe("SyslogConnector", func() {
 			writer, err := connector.Connect(ctx, binding)
 			Expect(err).ToNot(HaveOccurred())
 
-			go func(w syslog.Writer) {
+			go func(w egress.Writer) {
 				for {
 					w.Write(&loggregator_v2.Envelope{
 						SourceId: "test-source-id",
@@ -180,7 +182,7 @@ var _ = Describe("SyslogConnector", func() {
 			writer, err := connector.Connect(ctx, binding)
 			Expect(err).ToNot(HaveOccurred())
 
-			go func(w syslog.Writer) {
+			go func(w egress.Writer) {
 				for {
 					w.Write(&loggregator_v2.Envelope{
 						SourceId: "test-source-id",
@@ -228,7 +230,7 @@ var _ = Describe("SyslogConnector", func() {
 
 type stubWriterFactory struct {
 	called bool
-	writer syslog.WriteCloser
+	writer egress.WriteCloser
 	err    error
 }
 
@@ -236,7 +238,7 @@ func (f *stubWriterFactory) NewWriter(
 	urlBinding *syslog.URLBinding,
 	netConf syslog.NetworkTimeoutConfig,
 	skipCertVerify bool,
-) (syslog.WriteCloser, error) {
+) (egress.WriteCloser, error) {
 	f.called = true
 	return f.writer, f.err
 }
@@ -251,4 +253,25 @@ func (c *SleepWriterCloser) Write(*loggregator_v2.Envelope) error {
 	c.metric(1)
 	time.Sleep(c.duration)
 	return nil
+}
+
+type SpyWaitGroup struct {
+	addInput   int64
+	doneCalled int64
+}
+
+func (s *SpyWaitGroup) Add(delta int) {
+	atomic.AddInt64(&s.addInput, int64(delta))
+}
+
+func (s *SpyWaitGroup) Done() {
+	atomic.AddInt64(&s.doneCalled, 1)
+}
+
+func (s *SpyWaitGroup) AddInput() int64 {
+	return atomic.LoadInt64(&s.addInput)
+}
+
+func (s *SpyWaitGroup) DoneCalled() int64 {
+	return atomic.LoadInt64(&s.doneCalled)
 }

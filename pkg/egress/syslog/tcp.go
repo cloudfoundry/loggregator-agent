@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"code.cloudfoundry.org/go-loggregator/rpc/loggregator_v2"
+	"code.cloudfoundry.org/loggregator-agent/pkg/egress"
 	"code.cloudfoundry.org/rfc5424"
 )
 
@@ -46,7 +47,7 @@ func NewTCPWriter(
 	netConf NetworkTimeoutConfig,
 	skipCertVerify bool,
 	egressMetric func(delta uint64),
-) WriteCloser {
+) egress.WriteCloser {
 	dialer := &net.Dialer{
 		Timeout:   netConf.DialTimeout,
 		KeepAlive: netConf.Keepalive,

@@ -9,7 +9,7 @@ import (
 
 	gendiodes "code.cloudfoundry.org/go-diodes"
 	"code.cloudfoundry.org/loggregator-agent/pkg/diodes"
-	"code.cloudfoundry.org/loggregator-agent/pkg/egress/syslog"
+	"code.cloudfoundry.org/loggregator-agent/pkg/egress"
 	"code.cloudfoundry.org/loggregator-agent/pkg/ingress/v2"
 	"code.cloudfoundry.org/loggregator-agent/pkg/plumbing"
 	"google.golang.org/grpc"
@@ -31,7 +31,7 @@ type Metrics interface {
 
 type BindingManager interface {
 	Run()
-	GetDrains(string) []syslog.Writer
+	GetDrains(string) []egress.Writer
 }
 
 // NewSyslogAgent intializes and returns a new syslog agent.

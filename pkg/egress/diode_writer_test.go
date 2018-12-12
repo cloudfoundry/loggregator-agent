@@ -1,4 +1,4 @@
-package syslog_test
+package egress_test
 
 import (
 	"fmt"
@@ -12,7 +12,7 @@ import (
 	. "github.com/onsi/gomega"
 
 	"code.cloudfoundry.org/go-loggregator/rpc/loggregator_v2"
-	"code.cloudfoundry.org/loggregator-agent/pkg/egress/syslog"
+	"code.cloudfoundry.org/loggregator-agent/pkg/egress"
 )
 
 var _ = Describe("DiodeWriter", func() {
@@ -23,7 +23,7 @@ var _ = Describe("DiodeWriter", func() {
 		}
 		spyWriter := &SpyWriter{}
 		spyAlerter := &SpyAlerter{}
-		dw := syslog.NewDiodeWriter(context.TODO(), spyWriter, spyAlerter, spyWaitGroup)
+		dw := egress.NewDiodeWriter(context.TODO(), spyWriter, spyAlerter, spyWaitGroup)
 
 		dw.Write(expectedEnv)
 
@@ -38,7 +38,7 @@ var _ = Describe("DiodeWriter", func() {
 		spyAlerter := &SpyAlerter{}
 		ctx, cancel := context.WithCancel(context.TODO())
 
-		syslog.NewDiodeWriter(ctx, spyWriter, spyAlerter, spyWaitGroup)
+		egress.NewDiodeWriter(ctx, spyWriter, spyAlerter, spyWaitGroup)
 
 		cancel()
 
@@ -52,7 +52,7 @@ var _ = Describe("DiodeWriter", func() {
 			blockWrites: true,
 		}
 		spyAlerter := &SpyAlerter{}
-		dw := syslog.NewDiodeWriter(context.TODO(), spyWriter, spyAlerter, spyWaitGroup)
+		dw := egress.NewDiodeWriter(context.TODO(), spyWriter, spyAlerter, spyWaitGroup)
 		dw.Write(nil)
 	})
 
@@ -64,7 +64,7 @@ var _ = Describe("DiodeWriter", func() {
 		spyAlerter := &SpyAlerter{}
 		ctx, cancel := context.WithCancel(context.TODO())
 
-		dw := syslog.NewDiodeWriter(ctx, spyWriter, spyAlerter, spyWaitGroup)
+		dw := egress.NewDiodeWriter(ctx, spyWriter, spyAlerter, spyWaitGroup)
 
 		e := &loggregator_v2.Envelope{}
 		for i := 0; i < 100; i++ {
@@ -83,7 +83,7 @@ var _ = Describe("DiodeWriter", func() {
 		}
 		spyAlerter := &SpyAlerter{}
 		ctx, cancel := context.WithCancel(context.TODO())
-		dw := syslog.NewDiodeWriter(ctx, spyWriter, spyAlerter, spyWaitGroup)
+		dw := egress.NewDiodeWriter(ctx, spyWriter, spyAlerter, spyWaitGroup)
 
 		go func() {
 			for {
@@ -105,7 +105,7 @@ var _ = Describe("DiodeWriter", func() {
 		spyAlerter := &SpyAlerter{}
 		ctx, cancel := context.WithCancel(context.TODO())
 
-		syslog.NewDiodeWriter(ctx, spyWriter, spyAlerter, spyWaitGroup)
+		egress.NewDiodeWriter(ctx, spyWriter, spyAlerter, spyWaitGroup)
 
 		Eventually(spyWaitGroup.AddInput).Should(Equal(int64(1)))
 		Expect(spyWaitGroup.DoneCalled()).To(Equal(int64(0)))
