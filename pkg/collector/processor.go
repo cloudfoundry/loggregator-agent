@@ -168,6 +168,31 @@ func buildGauge(stat SystemStat) *loggregator_v2.Gauge {
 			Unit:  "Percent",
 			Value: stat.SystemDisk.InodePercent,
 		}
+
+		metrics["system_disk_system_read_bytes"] = &loggregator_v2.GaugeValue{
+			Unit:  "Bytes",
+			Value: float64(stat.SystemDisk.ReadBytes),
+		}
+
+		metrics["system_disk_system_write_bytes"] = &loggregator_v2.GaugeValue{
+			Unit:  "Bytes",
+			Value: float64(stat.SystemDisk.WriteBytes),
+		}
+
+		metrics["system_disk_system_read_time"] = &loggregator_v2.GaugeValue{
+			Unit:  "ms",
+			Value: float64(stat.SystemDisk.ReadTime),
+		}
+
+		metrics["system_disk_system_write_time"] = &loggregator_v2.GaugeValue{
+			Unit:  "ms",
+			Value: float64(stat.SystemDisk.WriteTime),
+		}
+
+		metrics["system_disk_system_io_time"] = &loggregator_v2.GaugeValue{
+			Unit:  "ms",
+			Value: float64(stat.SystemDisk.IOTime),
+		}
 	}
 
 	if stat.EphemeralDisk.Present {
@@ -180,6 +205,31 @@ func buildGauge(stat SystemStat) *loggregator_v2.Gauge {
 			Unit:  "Percent",
 			Value: stat.EphemeralDisk.InodePercent,
 		}
+
+		metrics["system_disk_ephemeral_read_bytes"] = &loggregator_v2.GaugeValue{
+			Unit:  "Bytes",
+			Value: float64(stat.EphemeralDisk.ReadBytes),
+		}
+
+		metrics["system_disk_ephemeral_write_bytes"] = &loggregator_v2.GaugeValue{
+			Unit:  "Bytes",
+			Value: float64(stat.EphemeralDisk.WriteBytes),
+		}
+
+		metrics["system_disk_ephemeral_read_time"] = &loggregator_v2.GaugeValue{
+			Unit:  "ms",
+			Value: float64(stat.EphemeralDisk.ReadTime),
+		}
+
+		metrics["system_disk_ephemeral_write_time"] = &loggregator_v2.GaugeValue{
+			Unit:  "ms",
+			Value: float64(stat.EphemeralDisk.WriteTime),
+		}
+
+		metrics["system_disk_ephemeral_io_time"] = &loggregator_v2.GaugeValue{
+			Unit:  "ms",
+			Value: float64(stat.EphemeralDisk.IOTime),
+		}
 	}
 
 	if stat.PersistentDisk.Present {
@@ -191,6 +241,31 @@ func buildGauge(stat SystemStat) *loggregator_v2.Gauge {
 		metrics["system_disk_persistent_inode_percent"] = &loggregator_v2.GaugeValue{
 			Unit:  "Percent",
 			Value: stat.PersistentDisk.InodePercent,
+		}
+
+		metrics["system_disk_persistent_read_bytes"] = &loggregator_v2.GaugeValue{
+			Unit:  "Bytes",
+			Value: float64(stat.PersistentDisk.ReadBytes),
+		}
+
+		metrics["system_disk_persistent_write_bytes"] = &loggregator_v2.GaugeValue{
+			Unit:  "Bytes",
+			Value: float64(stat.PersistentDisk.WriteBytes),
+		}
+
+		metrics["system_disk_persistent_read_time"] = &loggregator_v2.GaugeValue{
+			Unit:  "ms",
+			Value: float64(stat.PersistentDisk.ReadTime),
+		}
+
+		metrics["system_disk_persistent_write_time"] = &loggregator_v2.GaugeValue{
+			Unit:  "ms",
+			Value: float64(stat.PersistentDisk.WriteTime),
+		}
+
+		metrics["system_disk_persistent_io_time"] = &loggregator_v2.GaugeValue{
+			Unit:  "ms",
+			Value: float64(stat.PersistentDisk.IOTime),
 		}
 	}
 

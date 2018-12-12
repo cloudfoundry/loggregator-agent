@@ -5,62 +5,34 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/gogo/protobuf/proto"
-	. "github.com/onsi/ginkgo"
-	. "github.com/onsi/gomega"
-
 	"code.cloudfoundry.org/go-loggregator/rpc/loggregator_v2"
 	"code.cloudfoundry.org/loggregator-agent/pkg/collector"
+	"github.com/gogo/protobuf/proto"
+
+	. "github.com/onsi/ginkgo"
+	. "github.com/onsi/ginkgo/extensions/table"
+	. "github.com/onsi/gomega"
 )
 
 var _ = Describe("Processor", func() {
-	It("receives stats and sends an envelope on an interval", func() {
-		stub := newStubInputOutput()
-		processor := collector.NewProcessor(
+	var (
+		stub      *stubInputOutput
+		processor *collector.Processor
+	)
+
+	BeforeEach(func() {
+		stub = newStubInputOutput()
+		processor = collector.NewProcessor(
 			stub.input,
 			stub.output,
 			10*time.Millisecond,
 			log.New(GinkgoWriter, "", log.LstdFlags),
 		)
+	})
 
+	It("receives stats and sends the correct number of metrics", func() {
 		go processor.Run()
-
-		stub.inStats <- collector.SystemStat{
-			MemKB:      1025,
-			MemPercent: 10.01,
-
-			SwapKB:      2049,
-			SwapPercent: 20.01,
-
-			Load1M:  1.1,
-			Load5M:  5.5,
-			Load15M: 15.15,
-
-			CPUStat: collector.CPUStat{
-				User:   25.25,
-				System: 52.52,
-				Idle:   10.10,
-				Wait:   22.22,
-			},
-
-			SystemDisk: collector.DiskStat{
-				Percent:      35.0,
-				InodePercent: 45.0,
-				Present:      true,
-			},
-
-			EphemeralDisk: collector.DiskStat{
-				Percent:      55.0,
-				InodePercent: 65.0,
-				Present:      true,
-			},
-
-			PersistentDisk: collector.DiskStat{
-				Percent:      75.0,
-				InodePercent: 85.0,
-				Present:      true,
-			},
-		}
+		stub.inStats <- defaultInput
 
 		var env *loggregator_v2.Envelope
 		Eventually(stub.outEnvs).Should(Receive(&env))
@@ -69,131 +41,60 @@ var _ = Describe("Processor", func() {
 		Expect(env.Tags["origin"]).To(Equal("system-metrics-agent"))
 
 		metrics := env.GetGauge().Metrics
-		Expect(metrics).To(HaveLen(17))
-
-		Expect(proto.Equal(
-			metrics["system_mem_kb"],
-			&loggregator_v2.GaugeValue{Unit: "KiB", Value: 1025.0},
-		)).To(BeTrue())
-
-		Expect(proto.Equal(
-			metrics["system_mem_percent"],
-			&loggregator_v2.GaugeValue{Unit: "Percent", Value: 10.01},
-		)).To(BeTrue())
-
-		Expect(proto.Equal(
-			metrics["system_swap_kb"],
-			&loggregator_v2.GaugeValue{Unit: "KiB", Value: 2049.0},
-		)).To(BeTrue())
-
-		Expect(proto.Equal(
-			metrics["system_swap_percent"],
-			&loggregator_v2.GaugeValue{Unit: "Percent", Value: 20.01},
-		)).To(BeTrue())
-
-		Expect(proto.Equal(
-			metrics["system_load_1m"],
-			&loggregator_v2.GaugeValue{Unit: "Load", Value: 1.1},
-		)).To(BeTrue())
-
-		Expect(proto.Equal(
-			metrics["system_load_5m"],
-			&loggregator_v2.GaugeValue{Unit: "Load", Value: 5.5},
-		)).To(BeTrue())
-
-		Expect(proto.Equal(
-			metrics["system_load_15m"],
-			&loggregator_v2.GaugeValue{Unit: "Load", Value: 15.15},
-		)).To(BeTrue())
-
-		Expect(proto.Equal(
-			metrics["system_cpu_user"],
-			&loggregator_v2.GaugeValue{Unit: "Percent", Value: 25.25},
-		)).To(BeTrue())
-
-		Expect(proto.Equal(
-			metrics["system_cpu_sys"],
-			&loggregator_v2.GaugeValue{Unit: "Percent", Value: 52.52},
-		)).To(BeTrue())
-
-		Expect(proto.Equal(
-			metrics["system_cpu_idle"],
-			&loggregator_v2.GaugeValue{Unit: "Percent", Value: 10.10},
-		)).To(BeTrue())
-
-		Expect(proto.Equal(
-			metrics["system_cpu_wait"],
-			&loggregator_v2.GaugeValue{Unit: "Percent", Value: 22.22},
-		)).To(BeTrue())
-
-		Expect(proto.Equal(
-			metrics["system_disk_system_percent"],
-			&loggregator_v2.GaugeValue{Unit: "Percent", Value: 35.0},
-		)).To(BeTrue())
-
-		Expect(proto.Equal(
-			metrics["system_disk_system_inode_percent"],
-			&loggregator_v2.GaugeValue{Unit: "Percent", Value: 45.0},
-		)).To(BeTrue())
-
-		Expect(proto.Equal(
-			metrics["system_disk_ephemeral_percent"],
-			&loggregator_v2.GaugeValue{Unit: "Percent", Value: 55.0},
-		)).To(BeTrue())
-
-		Expect(proto.Equal(
-			metrics["system_disk_ephemeral_inode_percent"],
-			&loggregator_v2.GaugeValue{Unit: "Percent", Value: 65.0},
-		)).To(BeTrue())
-
-		Expect(proto.Equal(
-			metrics["system_disk_persistent_percent"],
-			&loggregator_v2.GaugeValue{Unit: "Percent", Value: 75.0},
-		)).To(BeTrue())
-
-		Expect(proto.Equal(
-			metrics["system_disk_persistent_inode_percent"],
-			&loggregator_v2.GaugeValue{Unit: "Percent", Value: 85.0},
-		)).To(BeTrue())
+		Expect(metrics).To(HaveLen(32))
 	})
 
-	It("receives stats and sends an envelope on an interval", func() {
-		stub := newStubInputOutput()
-		processor := collector.NewProcessor(
-			stub.input,
-			stub.output,
-			10*time.Millisecond,
-			log.New(GinkgoWriter, "", log.LstdFlags),
-		)
-
+	DescribeTable("default metrics", func(name, unit string, value float64) {
 		go processor.Run()
+		stub.inStats <- defaultInput
 
-		stub.inStats <- collector.SystemStat{
-			Networks: []collector.NetworkStat{
-				{
-					Name:            "eth0",
-					BytesSent:       1,
-					BytesReceived:   2,
-					PacketsSent:     3,
-					PacketsReceived: 4,
-					ErrIn:           5,
-					ErrOut:          6,
-					DropIn:          7,
-					DropOut:         8,
-				},
-				{
-					Name:            "eth1",
-					BytesSent:       10,
-					BytesReceived:   20,
-					PacketsSent:     30,
-					PacketsReceived: 40,
-					ErrIn:           50,
-					ErrOut:          60,
-					DropIn:          70,
-					DropOut:         80,
-				},
-			},
-		}
+		var env *loggregator_v2.Envelope
+		Eventually(stub.outEnvs).Should(Receive(&env))
+
+		metrics := env.GetGauge().Metrics
+
+		Expect(proto.Equal(
+			metrics[name],
+			&loggregator_v2.GaugeValue{Unit: unit, Value: value},
+		)).To(BeTrue())
+	},
+		Entry("system_mem_kb", "system_mem_kb", "KiB", 1025.0),
+		Entry("system_mem_percent", "system_mem_percent", "Percent", 10.01),
+		Entry("system_swap_kb", "system_swap_kb", "KiB", 2049.0),
+		Entry("system_swap_percent", "system_swap_percent", "Percent", 20.01),
+		Entry("system_load_1m", "system_load_1m", "Load", 1.1),
+		Entry("system_load_5m", "system_load_5m", "Load", 5.5),
+		Entry("system_load_15m", "system_load_15m", "Load", 15.15),
+		Entry("system_cpu_user", "system_cpu_user", "Percent", 25.25),
+		Entry("system_cpu_sys", "system_cpu_sys", "Percent", 52.52),
+		Entry("system_cpu_idle", "system_cpu_idle", "Percent", 10.10),
+		Entry("system_cpu_wait", "system_cpu_wait", "Percent", 22.22),
+		Entry("system_disk_system_percent", "system_disk_system_percent", "Percent", 35.0),
+		Entry("system_disk_system_inode_percent", "system_disk_system_inode_percent", "Percent", 45.0),
+		Entry("system_disk_system_read_bytes", "system_disk_system_read_bytes", "Bytes", 10.0),
+		Entry("system_disk_system_write_bytes", "system_disk_system_write_bytes", "Bytes", 20.0),
+		Entry("system_disk_system_read_time", "system_disk_system_read_time", "ms", 30.0),
+		Entry("system_disk_system_write_time", "system_disk_system_write_time", "ms", 40.0),
+		Entry("system_disk_system_io_time", "system_disk_system_io_time", "ms", 50.0),
+		Entry("system_disk_ephemeral_percent", "system_disk_ephemeral_percent", "Percent", 55.0),
+		Entry("system_disk_ephemeral_inode_percent", "system_disk_ephemeral_inode_percent", "Percent", 65.0),
+		Entry("system_disk_ephemeral_read_bytes", "system_disk_ephemeral_read_bytes", "Bytes", 100.0),
+		Entry("system_disk_ephemeral_write_bytes", "system_disk_ephemeral_write_bytes", "Bytes", 200.0),
+		Entry("system_disk_ephemeral_read_time", "system_disk_ephemeral_read_time", "ms", 300.0),
+		Entry("system_disk_ephemeral_write_time", "system_disk_ephemeral_write_time", "ms", 400.0),
+		Entry("system_disk_ephemeral_io_time", "system_disk_ephemeral_io_time", "ms", 500.0),
+		Entry("system_disk_persistent_percent", "system_disk_persistent_percent", "Percent", 75.0),
+		Entry("system_disk_persistent_inode_percent", "system_disk_persistent_inode_percent", "Percent", 85.0),
+		Entry("system_disk_persistent_read_bytes", "system_disk_persistent_read_bytes", "Bytes", 1000.0),
+		Entry("system_disk_persistent_write_bytes", "system_disk_persistent_write_bytes", "Bytes", 2000.0),
+		Entry("system_disk_persistent_read_time", "system_disk_persistent_read_time", "ms", 3000.0),
+		Entry("system_disk_persistent_write_time", "system_disk_persistent_write_time", "ms", 4000.0),
+		Entry("system_disk_persistent_io_time", "system_disk_persistent_io_time", "ms", 5000.0),
+	)
+
+	It("receives stats and sends an envelope on an interval", func() {
+		go processor.Run()
+		stub.inStats <- networkInput
 
 		var env *loggregator_v2.Envelope
 		Eventually(stub.outEnvs).Should(Receive(&env))
@@ -212,46 +113,24 @@ var _ = Describe("Processor", func() {
 		metrics := env.GetGauge().Metrics
 		Expect(metrics).To(HaveLen(8))
 
-		Expect(proto.Equal(
-			metrics["system_network_bytes_sent"],
-			&loggregator_v2.GaugeValue{Unit: "Bytes", Value: 10},
-		)).To(BeTrue())
-
-		Expect(proto.Equal(
-			metrics["system_network_bytes_received"],
-			&loggregator_v2.GaugeValue{Unit: "Bytes", Value: 20},
-		)).To(BeTrue())
-
-		Expect(proto.Equal(
-			metrics["system_network_packets_sent"],
-			&loggregator_v2.GaugeValue{Unit: "Packets", Value: 30},
-		)).To(BeTrue())
-
-		Expect(proto.Equal(
-			metrics["system_network_packets_received"],
-			&loggregator_v2.GaugeValue{Unit: "Packets", Value: 40},
-		)).To(BeTrue())
-
-		Expect(proto.Equal(
-			metrics["system_network_error_in"],
-			&loggregator_v2.GaugeValue{Unit: "Frames", Value: 50},
-		)).To(BeTrue())
-
-		Expect(proto.Equal(
-			metrics["system_network_error_out"],
-			&loggregator_v2.GaugeValue{Unit: "Frames", Value: 60},
-		)).To(BeTrue())
-
-		Expect(proto.Equal(
-			metrics["system_network_drop_in"],
-			&loggregator_v2.GaugeValue{Unit: "Packets", Value: 70},
-		)).To(BeTrue())
-
-		Expect(proto.Equal(
-			metrics["system_network_drop_out"],
-			&loggregator_v2.GaugeValue{Unit: "Packets", Value: 80},
-		)).To(BeTrue())
 	})
+
+	DescribeTable("network metrics", func(name, unit string, value int) {
+		go processor.Run()
+		stub.inStats <- networkInput
+
+		var env *loggregator_v2.Envelope
+		Eventually(stub.outEnvs).Should(Receive(&env))
+	},
+		Entry("system_network_bytes_sent", "system_network_bytes_sent", "Bytes", 10),
+		Entry("system_network_bytes_received", "system_network_bytes_received", "Bytes", 20),
+		Entry("system_network_packets_sent", "system_network_packets_sent", "Packets", 30),
+		Entry("system_network_packets_received", "system_network_packets_received", "Packets", 40),
+		Entry("system_network_error_in", "system_network_error_in", "Frames", 50),
+		Entry("system_network_error_out", "system_network_error_out", "Frames", 60),
+		Entry("system_network_drop_in", "system_network_drop_in", "Packets", 70),
+		Entry("system_network_drop_out", "system_network_drop_out", "Packets", 80),
+	)
 
 	It("does not have disk metrics if disk is not present", func() {
 		stub := newStubInputOutput()
@@ -277,6 +156,91 @@ var _ = Describe("Processor", func() {
 		Expect(env.GetGauge().Metrics).ToNot(HaveKey("system_disk_persistent_inode_percent"))
 	})
 })
+
+var defaultInput = collector.SystemStat{
+	MemKB:      1025,
+	MemPercent: 10.01,
+
+	SwapKB:      2049,
+	SwapPercent: 20.01,
+
+	Load1M:  1.1,
+	Load5M:  5.5,
+	Load15M: 15.15,
+
+	CPUStat: collector.CPUStat{
+		User:   25.25,
+		System: 52.52,
+		Idle:   10.10,
+		Wait:   22.22,
+	},
+
+	SystemDisk: collector.DiskStat{
+		Present: true,
+
+		Percent:      35.0,
+		InodePercent: 45.0,
+
+		ReadBytes:  10,
+		WriteBytes: 20,
+		ReadTime:   30,
+		WriteTime:  40,
+		IOTime:     50,
+	},
+
+	EphemeralDisk: collector.DiskStat{
+		Present: true,
+
+		Percent:      55.0,
+		InodePercent: 65.0,
+
+		ReadBytes:  100,
+		WriteBytes: 200,
+		ReadTime:   300,
+		WriteTime:  400,
+		IOTime:     500,
+	},
+
+	PersistentDisk: collector.DiskStat{
+		Present: true,
+
+		Percent:      75.0,
+		InodePercent: 85.0,
+
+		ReadBytes:  1000,
+		WriteBytes: 2000,
+		ReadTime:   3000,
+		WriteTime:  4000,
+		IOTime:     5000,
+	},
+}
+
+var networkInput = collector.SystemStat{
+	Networks: []collector.NetworkStat{
+		{
+			Name:            "eth0",
+			BytesSent:       1,
+			BytesReceived:   2,
+			PacketsSent:     3,
+			PacketsReceived: 4,
+			ErrIn:           5,
+			ErrOut:          6,
+			DropIn:          7,
+			DropOut:         8,
+		},
+		{
+			Name:            "eth1",
+			BytesSent:       10,
+			BytesReceived:   20,
+			PacketsSent:     30,
+			PacketsReceived: 40,
+			ErrIn:           50,
+			ErrOut:          60,
+			DropIn:          70,
+			DropOut:         80,
+		},
+	},
+}
 
 type stubInputOutput struct {
 	inStats chan collector.SystemStat

@@ -2,6 +2,7 @@ package collector
 
 import (
 	"context"
+	"fmt"
 	"log"
 	"os"
 	"strings"
@@ -48,9 +49,15 @@ type CPUStat struct {
 }
 
 type DiskStat struct {
+	Present bool
+
 	Percent      float64
 	InodePercent float64
-	Present      bool
+	ReadBytes    uint64
+	WriteBytes   uint64
+	ReadTime     uint64
+	WriteTime    uint64
+	IOTime       uint64
 }
 
 type Collector struct {
@@ -169,15 +176,42 @@ func (c Collector) diskStat(ctx context.Context, path string) (DiskStat, error) 
 		return DiskStat{}, err
 	}
 
+	partitions, err := c.rawCollector.PartitionsWithContext(ctx, true)
+	if err != nil {
+		return DiskStat{}, err
+	}
+
+	var pDevice string
+	for _, p := range partitions {
+		if p.Mountpoint == path {
+			pDevice = p.Device
+			break
+		}
+	}
+
+	if pDevice == "" {
+		return DiskStat{}, fmt.Errorf("unable to find partition for volume: %s", path)
+	}
+
+	pStat, err := c.rawCollector.DiskIOCountersWithContext(ctx, pDevice)
+	if err != nil {
+		return DiskStat{}, err
+	}
+
 	return DiskStat{
 		Percent:      disk.UsedPercent,
 		InodePercent: disk.InodesUsedPercent,
+		ReadBytes:    pStat[pDevice].ReadBytes,
+		WriteBytes:   pStat[pDevice].WriteBytes,
+		ReadTime:     pStat[pDevice].ReadTime,
+		WriteTime:    pStat[pDevice].WriteTime,
+		IOTime:       pStat[pDevice].IoTime,
 		Present:      true,
 	}, nil
 }
 
 func (c Collector) networkStat(ctx context.Context) ([]NetworkStat, error) {
-	counters, err := c.rawCollector.IOCountersWithContext(ctx, true)
+	counters, err := c.rawCollector.NetIOCountersWithContext(ctx, true)
 	if err != nil {
 		return nil, err
 	}
@@ -219,7 +253,9 @@ type RawCollector interface {
 	AvgWithContext(context.Context) (*load.AvgStat, error)
 	TimesWithContext(context.Context, bool) ([]cpu.TimesStat, error)
 	UsageWithContext(context.Context, string) (*disk.UsageStat, error)
-	IOCountersWithContext(context.Context, bool) ([]net.IOCountersStat, error)
+	NetIOCountersWithContext(context.Context, bool) ([]net.IOCountersStat, error)
+	DiskIOCountersWithContext(context.Context, ...string) (map[string]disk.IOCountersStat, error)
+	PartitionsWithContext(context.Context, bool) ([]disk.PartitionStat, error)
 }
 
 type CollectorOption func(*Collector)
@@ -252,6 +288,14 @@ func (s defaultRawCollector) UsageWithContext(ctx context.Context, path string) 
 	return disk.UsageWithContext(ctx, path)
 }
 
-func (s defaultRawCollector) IOCountersWithContext(ctx context.Context, pernic bool) ([]net.IOCountersStat, error) {
+func (s defaultRawCollector) NetIOCountersWithContext(ctx context.Context, pernic bool) ([]net.IOCountersStat, error) {
 	return net.IOCountersWithContext(ctx, pernic)
+}
+
+func (s defaultRawCollector) DiskIOCountersWithContext(ctx context.Context, names ...string) (map[string]disk.IOCountersStat, error) {
+	return disk.IOCountersWithContext(ctx, names...)
+}
+
+func (s defaultRawCollector) PartitionsWithContext(ctx context.Context, all bool) ([]disk.PartitionStat, error) {
+	return disk.PartitionsWithContext(ctx, all)
 }

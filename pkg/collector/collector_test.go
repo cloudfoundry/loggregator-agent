@@ -91,12 +91,29 @@ var _ = Describe("Collector", func() {
 
 		Expect(stats.SystemDisk.Percent).To(Equal(65.0))
 		Expect(stats.SystemDisk.InodePercent).To(Equal(75.0))
+		Expect(stats.SystemDisk.ReadBytes).To(Equal(uint64(100)))
+		Expect(stats.SystemDisk.WriteBytes).To(Equal(uint64(200)))
+		Expect(stats.SystemDisk.ReadTime).To(Equal(uint64(300)))
+		Expect(stats.SystemDisk.WriteTime).To(Equal(uint64(400)))
+		Expect(stats.SystemDisk.IOTime).To(Equal(uint64(500)))
 		Expect(stats.SystemDisk.Present).To(BeTrue())
+
 		Expect(stats.EphemeralDisk.Percent).To(Equal(85.0))
 		Expect(stats.EphemeralDisk.InodePercent).To(Equal(95.0))
+		Expect(stats.EphemeralDisk.ReadBytes).To(Equal(uint64(1000)))
+		Expect(stats.EphemeralDisk.WriteBytes).To(Equal(uint64(2000)))
+		Expect(stats.EphemeralDisk.ReadTime).To(Equal(uint64(3000)))
+		Expect(stats.EphemeralDisk.WriteTime).To(Equal(uint64(4000)))
+		Expect(stats.EphemeralDisk.IOTime).To(Equal(uint64(5000)))
 		Expect(stats.EphemeralDisk.Present).To(BeTrue())
+
 		Expect(stats.PersistentDisk.Percent).To(Equal(105.0))
 		Expect(stats.PersistentDisk.InodePercent).To(Equal(115.0))
+		Expect(stats.PersistentDisk.ReadBytes).To(Equal(uint64(10000)))
+		Expect(stats.PersistentDisk.WriteBytes).To(Equal(uint64(20000)))
+		Expect(stats.PersistentDisk.ReadTime).To(Equal(uint64(30000)))
+		Expect(stats.PersistentDisk.WriteTime).To(Equal(uint64(40000)))
+		Expect(stats.PersistentDisk.IOTime).To(Equal(uint64(50000)))
 		Expect(stats.PersistentDisk.Present).To(BeTrue())
 	})
 
@@ -173,7 +190,7 @@ var _ = Describe("Collector", func() {
 	})
 
 	It("returns an error when getting networks fails", func() {
-		src.ioCountersErr = errors.New("an error")
+		src.netIOCountersErr = errors.New("an error")
 
 		_, err := c.Collect()
 		Expect(err).To(HaveOccurred())
@@ -181,6 +198,27 @@ var _ = Describe("Collector", func() {
 
 	It("returns an error when getting system disk usage fails", func() {
 		src.systemDiskUsageError = errors.New("an error")
+
+		_, err := c.Collect()
+		Expect(err).To(HaveOccurred())
+	})
+
+	It("returns an error when getting partitions fails", func() {
+		src.partitionsError = errors.New("an error")
+
+		_, err := c.Collect()
+		Expect(err).To(HaveOccurred())
+	})
+
+	It("returns an error unable to find the partition", func() {
+		src.cannotFindPartition = true
+
+		_, err := c.Collect()
+		Expect(err).To(HaveOccurred())
+	})
+
+	It("returns an error when getting disk IO counters fails", func() {
+		src.diskIOCountersErr = errors.New("an error")
 
 		_, err := c.Collect()
 		Expect(err).To(HaveOccurred())
@@ -202,16 +240,21 @@ var _ = Describe("Collector", func() {
 })
 
 type stubRawCollector struct {
-	timesCallCount float64
+	timesCallCount      float64
+	diskIOCountersNames []string
+	cannotFindPartition bool
 
 	virtualMemoryErr         error
 	swapMemoryErr            error
 	cpuLoadErr               error
 	cpuTimesErr              error
-	ioCountersErr            error
+	netIOCountersErr         error
+	diskIOCountersErr        error
 	systemDiskUsageError     error
 	ephemeralDiskUsageError  error
 	persistentDiskUsageError error
+
+	partitionsError error
 }
 
 func (s *stubRawCollector) VirtualMemoryWithContext(context.Context) (*mem.VirtualMemoryStat, error) {
@@ -273,9 +316,9 @@ func (s *stubRawCollector) TimesWithContext(context.Context, bool) ([]cpu.TimesS
 	}, nil
 }
 
-func (s *stubRawCollector) IOCountersWithContext(context.Context, bool) ([]net.IOCountersStat, error) {
-	if s.ioCountersErr != nil {
-		return nil, s.ioCountersErr
+func (s *stubRawCollector) NetIOCountersWithContext(context.Context, bool) ([]net.IOCountersStat, error) {
+	if s.netIOCountersErr != nil {
+		return nil, s.netIOCountersErr
 	}
 
 	return []net.IOCountersStat{
@@ -336,4 +379,80 @@ func (s *stubRawCollector) UsageWithContext(_ context.Context, path string) (*di
 	}
 
 	panic(fmt.Sprintf("requested usage for forbidden path: %s", path))
+}
+
+func (s *stubRawCollector) PartitionsWithContext(context.Context, bool) ([]disk.PartitionStat, error) {
+	if s.partitionsError != nil {
+		return nil, s.partitionsError
+	}
+
+	if s.cannotFindPartition {
+		return nil, nil
+	}
+
+	return []disk.PartitionStat{
+		{
+			Device:     "/dev/sda1",
+			Mountpoint: "/",
+		},
+		{
+			Device:     "/dev/sda2",
+			Mountpoint: "/waffle",
+		},
+		{
+			Device:     "/dev/sdb1",
+			Mountpoint: "/var/vcap/data",
+		},
+		{
+			Device:     "/dev/sdb2",
+			Mountpoint: "/var/vcap/store",
+		},
+	}, nil
+}
+
+func (s *stubRawCollector) DiskIOCountersWithContext(_ context.Context, names ...string) (map[string]disk.IOCountersStat, error) {
+	s.diskIOCountersNames = append(s.diskIOCountersNames, names...)
+
+	if len(names) != 1 {
+		panic("expecting only 1 name to DiskIOCountersWithContext")
+	}
+
+	if s.diskIOCountersErr != nil {
+		return nil, s.diskIOCountersErr
+	}
+
+	switch names[0] {
+	case "/dev/sda1": // system disk
+		return map[string]disk.IOCountersStat{
+			"/dev/sda1": disk.IOCountersStat{
+				ReadBytes:  100,
+				WriteBytes: 200,
+				ReadTime:   300,
+				WriteTime:  400,
+				IoTime:     500,
+			},
+		}, nil
+	case "/dev/sdb1": // system disk
+		return map[string]disk.IOCountersStat{
+			"/dev/sdb1": disk.IOCountersStat{
+				ReadBytes:  1000,
+				WriteBytes: 2000,
+				ReadTime:   3000,
+				WriteTime:  4000,
+				IoTime:     5000,
+			},
+		}, nil
+	case "/dev/sdb2": // system disk
+		return map[string]disk.IOCountersStat{
+			"/dev/sdb2": disk.IOCountersStat{
+				ReadBytes:  10000,
+				WriteBytes: 20000,
+				ReadTime:   30000,
+				WriteTime:  40000,
+				IoTime:     50000,
+			},
+		}, nil
+	default:
+		panic("unknown disk name")
+	}
 }
