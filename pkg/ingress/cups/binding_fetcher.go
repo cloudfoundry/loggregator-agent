@@ -58,19 +58,21 @@ func (f *BindingFetcher) FetchBindings() ([]syslog.Binding, error) {
 	d := time.Since(start)
 	latency = d.Nanoseconds()
 
-	syslogBindings := toSyslogBindings(bindings)
+	syslogBindings := toSyslogBindings(bindings, f.limit)
 
-	if f.limit > len(syslogBindings) {
-		return syslogBindings, nil
-	}
-	return syslogBindings[:f.limit], nil
+	return syslogBindings, nil
 }
 
-func toSyslogBindings(bs []binding.Binding) []syslog.Binding {
+func toSyslogBindings(bs []binding.Binding, perAppLimit int) []syslog.Binding {
 	var bindings []syslog.Binding
 	for _, b := range bs {
-		sort.Strings(b.Drains)
-		for _, d := range b.Drains {
+		drains := b.Drains
+		sort.Strings(drains)
+
+		if perAppLimit < len(drains) {
+			drains = drains[:perAppLimit]
+		}
+		for _, d := range drains {
 			// TODO: remove prefix when forwarder-agent is no longer
 			// feature-flagged
 			u, err := url.Parse(d)

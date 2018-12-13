@@ -41,15 +41,29 @@ var _ = Describe("BindingFetcher", func() {
 				},
 				Hostname: "org.space.logspinner",
 			},
+			{
+				AppID: "blah",
+				Drains: []string{
+					"syslog://some.url",
+					"syslog-v3://v3.zzz-not-included.url",
+					"syslog://some.other.url",
+					"syslog-v3://v3.other.url",
+					"syslog-v3://v3.zzz-not-included-again.url",
+					"https-v3://v3.other.url",
+					"syslog-v3://v3.other-included.url",
+				},
+				Hostname: "org.space.logspinner",
+			},
 		}
 	})
 
-	It("returns limited v3 bindings", func() {
+	It("returns limited v3 bindings by app id", func() {
 		bindings, err := fetcher.FetchBindings()
 		Expect(err).ToNot(HaveOccurred())
-		Expect(bindings).To(HaveLen(3))
+		Expect(bindings).To(HaveLen(6))
 
 		appID := "9be15160-4845-4f05-b089-40e827ba61f1"
+		otherAppID := "blah"
 		Expect(bindings).To(Equal([]syslog.Binding{
 			syslog.Binding{
 				AppId:    appID,
@@ -63,6 +77,21 @@ var _ = Describe("BindingFetcher", func() {
 			},
 			syslog.Binding{
 				AppId:    appID,
+				Hostname: "org.space.logspinner",
+				Drain:    "syslog://v3.other.url",
+			},
+			syslog.Binding{
+				AppId:    otherAppID,
+				Hostname: "org.space.logspinner",
+				Drain:    "https://v3.other.url",
+			},
+			syslog.Binding{
+				AppId:    otherAppID,
+				Hostname: "org.space.logspinner",
+				Drain:    "syslog://v3.other-included.url",
+			},
+			syslog.Binding{
+				AppId:    otherAppID,
 				Hostname: "org.space.logspinner",
 				Drain:    "syslog://v3.other.url",
 			},
