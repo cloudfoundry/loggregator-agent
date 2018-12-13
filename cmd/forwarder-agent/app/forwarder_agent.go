@@ -46,34 +46,20 @@ type Writer interface {
 
 // NewForwarderAgent intializes and returns a new forwarder agent.
 func NewForwarderAgent(
-	debugPort uint16,
+	cfg Config,
 	m Metrics,
-	grpc GRPC,
-	downstreamAddrs []string,
 	log *log.Logger,
 ) *ForwarderAgent {
 	return &ForwarderAgent{
-		debugPort:       debugPort,
-		grpc:            grpc,
+		debugPort:       cfg.DebugPort,
+		grpc:            cfg.GRPC,
 		m:               m,
-		downstreamAddrs: downstreamAddrs,
+		downstreamAddrs: cfg.DownstreamIngressAddrs,
 		log:             log,
 	}
 }
 
-// Run starts all the sub-processes of the forwarder agent. If blocking is
-// true this method will block otherwise it will return immediately and run
-// the forwarder agent a goroutine.
-func (s ForwarderAgent) Run(blocking bool) {
-	if blocking {
-		s.run()
-		return
-	}
-
-	go s.run()
-}
-
-func (s ForwarderAgent) run() {
+func (s ForwarderAgent) Run() {
 	go http.ListenAndServe(fmt.Sprintf("127.0.0.1:%d", s.debugPort), nil)
 
 	ingressDropped := s.m.NewCounter("IngressDropped")

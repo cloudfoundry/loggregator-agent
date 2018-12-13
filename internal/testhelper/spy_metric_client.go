@@ -50,6 +50,11 @@ func (s *SpyMetricClient) GetMetric(name string) *SpyMetric {
 	panic(fmt.Sprintf("unknown metric: %s", name))
 }
 
+func (s *SpyMetricClient) HasMetric(name string) bool {
+	_, ok := s.metrics[name]
+	return ok
+}
+
 type SpyMetric struct {
 	mu         sync.Mutex
 	delta      uint64

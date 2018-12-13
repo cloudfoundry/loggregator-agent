@@ -15,14 +15,11 @@ func main() {
 	defer log.Println("stopping forwarder-agent")
 
 	cfg := app.LoadConfig()
-
 	metrics := metrics.New(expvar.NewMap("ForwarderAgent"))
 
 	app.NewForwarderAgent(
-		cfg.DebugPort,
+		cfg,
 		metrics,
-		cfg.GRPC,
-		cfg.DownstreamIngressAddrs,
 		log,
-	).Run(true)
+	).Run()
 }
