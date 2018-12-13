@@ -1,8 +1,9 @@
-package main_test
+package app_test
 
 import (
 	"context"
 	"fmt"
+	"log"
 	"net"
 	"os/exec"
 	"time"
@@ -16,16 +17,18 @@ import (
 	"google.golang.org/grpc"
 
 	"code.cloudfoundry.org/go-loggregator/rpc/loggregator_v2"
+	"code.cloudfoundry.org/loggregator-agent/cmd/udp-forwarder/app"
 	"code.cloudfoundry.org/loggregator-agent/internal/testhelper"
 	"code.cloudfoundry.org/loggregator-agent/pkg/plumbing"
 )
 
-var _ = Describe("Main", func() {
+var _ = Describe("UDPForwarder", func() {
 	var (
 		spyLoggregatorV2Ingress *spyLoggregatorV2Ingress
 
 		// udpPort will be incremented for each test
-		udpPort = 10000
+		udpPort    = 10000
+		testLogger = log.New(GinkgoWriter, "", log.LstdFlags)
 	)
 
 	BeforeEach(func() {
@@ -38,14 +41,17 @@ var _ = Describe("Main", func() {
 	})
 
 	It("has a health endpoint", func() {
-		session := startUDPAgent(
-			fmt.Sprintf("UDP_PORT=%d", udpPort),
-			"LOGGREGATOR_AGENT_ADDR="+spyLoggregatorV2Ingress.addr,
-			"LOGGREGATOR_AGENT_CERT_FILE_PATH="+testhelper.Cert("metron.crt"),
-			"LOGGREGATOR_AGENT_KEY_FILE_PATH="+testhelper.Cert("metron.key"),
-			"LOGGREGATOR_AGENT_CA_FILE_PATH="+testhelper.Cert("loggregator-ca.crt"),
-		)
-		defer session.Kill()
+		mc := testhelper.NewMetricClient()
+		cfg := app.Config{
+			UDPPort: udpPort,
+			LoggregatorAgentGRPC: app.GRPC{
+				Addr:     spyLoggregatorV2Ingress.addr,
+				CAFile:   testhelper.Cert("loggregator-ca.crt"),
+				CertFile: testhelper.Cert("metron.crt"),
+				KeyFile:  testhelper.Cert("metron.key"),
+			},
+		}
+		go app.NewUDPForwarder(cfg, testLogger, mc).Run()
 
 		v1e := &events.Envelope{
 			Origin:    proto.String("doppler"),

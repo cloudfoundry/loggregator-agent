@@ -19,7 +19,7 @@ type GRPC struct {
 type Config struct {
 	UDPPort              int `env:"UDP_PORT, report"`
 	LoggregatorAgentGRPC GRPC
-	DebugPort            uint16 `env:"DEBUG_PORT, report"`
+	DebugPort            int `env:"DEBUG_PORT, report"`
 }
 
 // LoadConfig reads from the environment to create a Config.
