@@ -117,6 +117,31 @@ var _ = Describe("Collector", func() {
 		Expect(stats.PersistentDisk.Present).To(BeTrue())
 	})
 
+	It("returns disk metrics when persistent disk is not present", func() {
+		src.persistentDiskUsageError = syscall.ENOENT
+
+		stats, err := c.Collect()
+		Expect(err).ToNot(HaveOccurred())
+
+		Expect(stats.SystemDisk.Percent).To(Equal(65.0))
+		Expect(stats.SystemDisk.InodePercent).To(Equal(75.0))
+		Expect(stats.SystemDisk.ReadBytes).To(Equal(uint64(100)))
+		Expect(stats.SystemDisk.WriteBytes).To(Equal(uint64(200)))
+		Expect(stats.SystemDisk.ReadTime).To(Equal(uint64(300)))
+		Expect(stats.SystemDisk.WriteTime).To(Equal(uint64(400)))
+		Expect(stats.SystemDisk.IOTime).To(Equal(uint64(500)))
+		Expect(stats.SystemDisk.Present).To(BeTrue())
+
+		Expect(stats.EphemeralDisk.Percent).To(Equal(85.0))
+		Expect(stats.EphemeralDisk.InodePercent).To(Equal(95.0))
+		Expect(stats.EphemeralDisk.ReadBytes).To(Equal(uint64(1000)))
+		Expect(stats.EphemeralDisk.WriteBytes).To(Equal(uint64(2000)))
+		Expect(stats.EphemeralDisk.ReadTime).To(Equal(uint64(3000)))
+		Expect(stats.EphemeralDisk.WriteTime).To(Equal(uint64(4000)))
+		Expect(stats.EphemeralDisk.IOTime).To(Equal(uint64(5000)))
+		Expect(stats.EphemeralDisk.Present).To(BeTrue())
+	})
+
 	It("shows the system disk is not present if directory does not exist", func() {
 		src.systemDiskUsageError = syscall.ENOENT
 
@@ -205,13 +230,6 @@ var _ = Describe("Collector", func() {
 
 	It("returns an error when getting partitions fails", func() {
 		src.partitionsError = errors.New("an error")
-
-		_, err := c.Collect()
-		Expect(err).To(HaveOccurred())
-	})
-
-	It("returns an error unable to find the partition", func() {
-		src.cannotFindPartition = true
 
 		_, err := c.Collect()
 		Expect(err).To(HaveOccurred())

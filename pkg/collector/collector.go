@@ -2,7 +2,6 @@ package collector
 
 import (
 	"context"
-	"fmt"
 	"log"
 	"os"
 	"strings"
@@ -190,7 +189,7 @@ func (c Collector) diskStat(ctx context.Context, path string) (DiskStat, error) 
 	}
 
 	if pDevice == "" {
-		return DiskStat{}, fmt.Errorf("unable to find partition for volume: %s", path)
+		return DiskStat{}, nil
 	}
 
 	pStat, err := c.rawCollector.DiskIOCountersWithContext(ctx, pDevice)
