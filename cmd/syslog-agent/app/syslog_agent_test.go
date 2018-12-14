@@ -1,4 +1,4 @@
-package main_test
+package app_test
 
 import (
 	"context"
@@ -15,24 +15,27 @@ import (
 	"sync"
 	"time"
 
+	. "github.com/onsi/ginkgo"
+	. "github.com/onsi/gomega"
+	"github.com/onsi/gomega/gexec"
+
 	loggregator "code.cloudfoundry.org/go-loggregator"
 	"code.cloudfoundry.org/go-loggregator/rpc/loggregator_v2"
+	"code.cloudfoundry.org/loggregator-agent/cmd/syslog-agent/app"
 	"code.cloudfoundry.org/loggregator-agent/internal/testhelper"
 	"code.cloudfoundry.org/loggregator-agent/pkg/binding"
 	"code.cloudfoundry.org/loggregator-agent/pkg/plumbing"
 	"code.cloudfoundry.org/rfc5424"
-	"github.com/onsi/gomega/gexec"
-
-	. "github.com/onsi/ginkgo"
-	. "github.com/onsi/gomega"
 )
 
-var _ = Describe("Main", func() {
+var _ = Describe("SyslogAgent", func() {
 	var (
 		syslogHTTPS  *syslogHTTPSServer
 		syslogTLS    *syslogTCPServer
 		cupsProvider *fakeBindingCache
-		grpcPort     = 30000
+
+		grpcPort   = 30000
+		testLogger = log.New(GinkgoWriter, "", log.LstdFlags)
 	)
 
 	BeforeEach(func() {
@@ -73,121 +76,70 @@ var _ = Describe("Main", func() {
 	})
 
 	It("has a health endpoint", func() {
-		session := startSyslogAgent(
-			fmt.Sprintf("CACHE_URL=%s", cupsProvider.URL),
-			fmt.Sprintf("CACHE_CA_FILE_PATH=%s", testhelper.Cert("binding-cache-ca.crt")),
-			fmt.Sprintf("CACHE_CERT_FILE_PATH=%s", testhelper.Cert("binding-cache-ca.crt")),
-			fmt.Sprintf("CACHE_KEY_FILE_PATH=%s", testhelper.Cert("binding-cache-ca.key")),
-			fmt.Sprintf("CACHE_COMMON_NAME=%s", "bindingCacheCA"),
-
-			"CACHE_POLLING_INTERVAL=10ms",
-			"DEBUG_PORT=7392",
-
-			fmt.Sprintf("AGENT_PORT=%d", grpcPort),
-			fmt.Sprintf("AGENT_CA_FILE_PATH=%s", testhelper.Cert("loggregator-ca.crt")),
-			fmt.Sprintf("AGENT_CERT_FILE_PATH=%s", testhelper.Cert("metron.crt")),
-			fmt.Sprintf("AGENT_KEY_FILE_PATH=%s", testhelper.Cert("metron.key")),
-		)
-		defer session.Kill()
-
-		f := func() string {
-			resp, err := http.Get("http://127.0.0.1:7392/debug/vars")
-			if err != nil {
-				return ""
-			}
-
-			if resp.StatusCode == http.StatusOK {
-				b, err := ioutil.ReadAll(resp.Body)
-				if err != nil {
-					return ""
-				}
-				return string(b)
-			}
-
-			return ""
+		mc := testhelper.NewMetricClient()
+		cfg := app.Config{
+			BindingsPerAppLimit: 5,
+			DebugPort:           7392,
+			Cache: app.Cache{
+				URL:             cupsProvider.URL,
+				CAFile:          testhelper.Cert("binding-cache-ca.crt"),
+				CertFile:        testhelper.Cert("binding-cache-ca.crt"),
+				KeyFile:         testhelper.Cert("binding-cache-ca.key"),
+				CommonName:      "bindingCacheCA",
+				PollingInterval: 10 * time.Millisecond,
+			},
+			GRPC: app.GRPC{
+				Port:     grpcPort,
+				CAFile:   testhelper.Cert("loggregator-ca.crt"),
+				CertFile: testhelper.Cert("metron.crt"),
+				KeyFile:  testhelper.Cert("metron.key"),
+			},
 		}
+		go app.NewSyslogAgent(cfg, mc, testLogger).Run()
 
-		Eventually(f).Should(ContainSubstring(`"IngressDropped"`))
-		Eventually(f).Should(ContainSubstring(`"IngressV2"`))
-		Eventually(f).Should(ContainSubstring(`"DrainCount"`))
-		Eventually(f).Should(ContainSubstring(`"BindingRefreshCount"`))
-		Eventually(f).Should(ContainSubstring(`"LatencyForLastBindingRefreshMS"`))
-		Eventually(f).Should(ContainSubstring(`"DrainIngress"`))
-		Eventually(f).Should(ContainSubstring(`"EgressDropped"`))
-		Eventually(f).Should(ContainSubstring(`"Egress"`))
+		Eventually(hasMetric(mc, "IngressDropped")).Should(BeTrue())
+		Eventually(hasMetric(mc, "IngressV2")).Should(BeTrue())
+		Eventually(hasMetric(mc, "DrainCount")).Should(BeTrue())
+		Eventually(hasMetric(mc, "BindingRefreshCount")).Should(BeTrue())
+		Eventually(hasMetric(mc, "LatencyForLastBindingRefreshMS")).Should(BeTrue())
+		Eventually(hasMetric(mc, "DrainIngress")).Should(BeTrue())
+
+		Eventually(hasMetric(mc, "EgressDropped")).Should(BeTrue())
+		Eventually(hasMetric(mc, "Egress")).Should(BeTrue())
 	})
 
 	It("forwards envelopes to syslog drains", func() {
-		session := startSyslogAgent(
-			fmt.Sprintf("CACHE_URL=%s", cupsProvider.URL),
-			fmt.Sprintf("CACHE_CA_FILE_PATH=%s", testhelper.Cert("binding-cache-ca.crt")),
-			fmt.Sprintf("CACHE_CERT_FILE_PATH=%s", testhelper.Cert("binding-cache-ca.crt")),
-			fmt.Sprintf("CACHE_KEY_FILE_PATH=%s", testhelper.Cert("binding-cache-ca.key")),
-			fmt.Sprintf("CACHE_COMMON_NAME=%s", "bindingCacheCA"),
-
-			"CACHE_POLLING_INTERVAL=10ms",
-			"DRAIN_SKIP_CERT_VERIFY=true",
-
-			fmt.Sprintf("AGENT_PORT=%d", grpcPort),
-			fmt.Sprintf("AGENT_CA_FILE_PATH=%s", testhelper.Cert("loggregator-ca.crt")),
-			fmt.Sprintf("AGENT_CERT_FILE_PATH=%s", testhelper.Cert("metron.crt")),
-			fmt.Sprintf("AGENT_KEY_FILE_PATH=%s", testhelper.Cert("metron.key")),
-		)
-		defer session.Kill()
-
-		tlsConfig, err := loggregator.NewIngressTLSConfig(
-			testhelper.Cert("loggregator-ca.crt"),
-			testhelper.Cert("metron.crt"),
-			testhelper.Cert("metron.key"),
-		)
-		Expect(err).ToNot(HaveOccurred())
-		ingressClient, err := loggregator.NewIngressClient(
-			tlsConfig,
-			loggregator.WithAddr(fmt.Sprintf("127.0.0.1:%d", grpcPort)),
-			loggregator.WithLogger(log.New(GinkgoWriter, "[TEST INGRESS CLIENT] ", 0)),
-			loggregator.WithBatchMaxSize(1),
-		)
-		Expect(err).ToNot(HaveOccurred())
-
-		e := &loggregator_v2.Envelope{
-			Timestamp: time.Now().UnixNano(),
-			SourceId:  "some-id",
-			Message: &loggregator_v2.Envelope_Log{
-				Log: &loggregator_v2.Log{
-					Payload: []byte("hello"),
-				},
+		mc := testhelper.NewMetricClient()
+		cfg := app.Config{
+			BindingsPerAppLimit: 5,
+			DebugPort:           7392,
+			DrainSkipCertVerify: true,
+			Cache: app.Cache{
+				URL:             cupsProvider.URL,
+				CAFile:          testhelper.Cert("binding-cache-ca.crt"),
+				CertFile:        testhelper.Cert("binding-cache-ca.crt"),
+				KeyFile:         testhelper.Cert("binding-cache-ca.key"),
+				CommonName:      "bindingCacheCA",
+				PollingInterval: 10 * time.Millisecond,
+			},
+			GRPC: app.GRPC{
+				Port:     grpcPort,
+				CAFile:   testhelper.Cert("loggregator-ca.crt"),
+				CertFile: testhelper.Cert("metron.crt"),
+				KeyFile:  testhelper.Cert("metron.key"),
 			},
 		}
-
-		eTLS := &loggregator_v2.Envelope{
-			Timestamp: time.Now().UnixNano(),
-			SourceId:  "some-id-tls",
-			Message: &loggregator_v2.Envelope_Log{
-				Log: &loggregator_v2.Log{
-					Payload: []byte("hello"),
-				},
-			},
-		}
+		go app.NewSyslogAgent(cfg, mc, testLogger).Run()
 
 		ctx, cancel := context.WithCancel(context.Background())
 		defer cancel()
-		go func() {
-			ticker := time.NewTicker(10 * time.Millisecond)
-			for {
-				select {
-				case <-ticker.C:
-					ingressClient.Emit(e)
-					ingressClient.Emit(eTLS)
-				case <-ctx.Done():
-					return
-				}
-			}
-		}()
+		emitLogs(ctx, grpcPort)
 
 		var msg *rfc5424.Message
 		Eventually(syslogHTTPS.receivedMessages, 5).Should(Receive(&msg))
 		Expect(msg.AppName).To(Equal("some-id"))
 
+		//Tests Crosstalk between the drains
 		Consistently(func() string {
 			select {
 			case msg := <-syslogHTTPS.receivedMessages:
@@ -201,6 +153,61 @@ var _ = Describe("Main", func() {
 		Expect(msg.AppName).To(Equal("some-id-tls"))
 	})
 })
+
+func emitLogs(ctx context.Context, grpcPort int) {
+	tlsConfig, err := loggregator.NewIngressTLSConfig(
+		testhelper.Cert("loggregator-ca.crt"),
+		testhelper.Cert("metron.crt"),
+		testhelper.Cert("metron.key"),
+	)
+	Expect(err).ToNot(HaveOccurred())
+	ingressClient, err := loggregator.NewIngressClient(
+		tlsConfig,
+		loggregator.WithAddr(fmt.Sprintf("127.0.0.1:%d", grpcPort)),
+		loggregator.WithLogger(log.New(GinkgoWriter, "[TEST INGRESS CLIENT] ", 0)),
+		loggregator.WithBatchMaxSize(1),
+	)
+	Expect(err).ToNot(HaveOccurred())
+
+	e := &loggregator_v2.Envelope{
+		Timestamp: time.Now().UnixNano(),
+		SourceId:  "some-id",
+		Message: &loggregator_v2.Envelope_Log{
+			Log: &loggregator_v2.Log{
+				Payload: []byte("hello"),
+			},
+		},
+	}
+
+	eTLS := &loggregator_v2.Envelope{
+		Timestamp: time.Now().UnixNano(),
+		SourceId:  "some-id-tls",
+		Message: &loggregator_v2.Envelope_Log{
+			Log: &loggregator_v2.Log{
+				Payload: []byte("hello"),
+			},
+		},
+	}
+
+	go func() {
+		ticker := time.NewTicker(10 * time.Millisecond)
+		for {
+			select {
+			case <-ticker.C:
+				ingressClient.Emit(e)
+				ingressClient.Emit(eTLS)
+			case <-ctx.Done():
+				return
+			}
+		}
+	}()
+}
+
+func hasMetric(mc *testhelper.SpyMetricClient, metricName string) func() bool {
+	return func() bool {
+		return mc.HasMetric(metricName)
+	}
+}
 
 func startSyslogAgent(envs ...string) *gexec.Session {
 	path, err := gexec.Build("code.cloudfoundry.org/loggregator-agent/cmd/syslog-agent")

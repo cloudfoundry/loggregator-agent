@@ -3,25 +3,34 @@ package app
 import (
 	"fmt"
 	"log"
+	"time"
 
 	"net/http"
 	_ "net/http/pprof"
 
 	gendiodes "code.cloudfoundry.org/go-diodes"
+	"code.cloudfoundry.org/loggregator-agent/pkg/binding"
+	"code.cloudfoundry.org/loggregator-agent/pkg/cache"
 	"code.cloudfoundry.org/loggregator-agent/pkg/diodes"
 	"code.cloudfoundry.org/loggregator-agent/pkg/egress"
+	"code.cloudfoundry.org/loggregator-agent/pkg/egress/syslog"
+	"code.cloudfoundry.org/loggregator-agent/pkg/ingress/cups"
 	"code.cloudfoundry.org/loggregator-agent/pkg/ingress/v2"
 	"code.cloudfoundry.org/loggregator-agent/pkg/plumbing"
+	"code.cloudfoundry.org/loggregator-agent/pkg/timeoutwaitgroup"
 	"google.golang.org/grpc"
 )
 
 // SyslogAgent manages starting the syslog agent service.
 type SyslogAgent struct {
-	debugPort      uint16
-	m              Metrics
-	bindingManager BindingManager
-	grpc           GRPC
-	log            *log.Logger
+	debugPort           uint16
+	metrics             Metrics
+	bindingManager      BindingManager
+	grpc                GRPC
+	log                 *log.Logger
+	cache               Cache
+	bindingsPerAppLimit int
+	drainSkipCertVerify bool
 }
 
 type Metrics interface {
@@ -36,30 +45,57 @@ type BindingManager interface {
 
 // NewSyslogAgent intializes and returns a new syslog agent.
 func NewSyslogAgent(
-	debugPort uint16,
+	cfg Config,
 	m Metrics,
-	bm BindingManager,
-	grpc GRPC,
-	log *log.Logger,
+	l *log.Logger,
 ) *SyslogAgent {
+	connector := syslog.NewSyslogConnector(
+		syslog.NetworkTimeoutConfig{
+			Keepalive:    10 * time.Second,
+			DialTimeout:  10 * time.Second,
+			WriteTimeout: 10 * time.Second,
+		},
+		cfg.DrainSkipCertVerify,
+		timeoutwaitgroup.New(time.Minute),
+		syslog.NewWriterFactory(m),
+		m,
+	)
+
+	tlsClient := plumbing.NewTLSHTTPClient(
+		cfg.Cache.CertFile,
+		cfg.Cache.KeyFile,
+		cfg.Cache.CAFile,
+		cfg.Cache.CommonName,
+	)
+	cacheClient := cache.NewClient(cfg.Cache.URL, tlsClient)
+	bindingManager := binding.NewManager(
+		cups.NewBindingFetcher(cfg.BindingsPerAppLimit, cacheClient, m),
+		connector,
+		m,
+		cfg.Cache.PollingInterval,
+		l,
+	)
+
 	return &SyslogAgent{
-		debugPort:      debugPort,
-		bindingManager: bm,
-		grpc:           grpc,
-		m:              m,
-		log:            log,
+		debugPort:           cfg.DebugPort,
+		grpc:                cfg.GRPC,
+		metrics:             m,
+		log:                 l,
+		bindingsPerAppLimit: cfg.BindingsPerAppLimit,
+		drainSkipCertVerify: cfg.DrainSkipCertVerify,
+		bindingManager:      bindingManager,
 	}
 }
 
-func (s SyslogAgent) Run() {
+func (s *SyslogAgent) Run() {
 	go http.ListenAndServe(fmt.Sprintf("127.0.0.1:%d", s.debugPort), nil)
 
-	ingressDropped := s.m.NewCounter("IngressDropped")
+	ingressDropped := s.metrics.NewCounter("IngressDropped")
 	diode := diodes.NewManyToOneEnvelopeV2(10000, gendiodes.AlertFunc(func(missed int) {
 		ingressDropped(uint64(missed))
 	}))
 
-	drainIngress := s.m.NewCounter("DrainIngress")
+	drainIngress := s.metrics.NewCounter("DrainIngress")
 	go s.bindingManager.Run()
 	go func() {
 		for {
@@ -91,7 +127,7 @@ func (s SyslogAgent) Run() {
 		s.log.Fatalf("failed to configure server TLS: %s", err)
 	}
 
-	rx := v2.NewReceiver(diode, s.m)
+	rx := v2.NewReceiver(diode, s.metrics)
 	srv := v2.NewServer(
 		fmt.Sprintf("127.0.0.1:%d", s.grpc.Port),
 		rx,

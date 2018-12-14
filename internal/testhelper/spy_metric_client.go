@@ -6,6 +6,7 @@ import (
 )
 
 type SpyMetricClient struct {
+	mu      sync.Mutex
 	metrics map[string]*SpyMetric
 }
 
@@ -16,6 +17,9 @@ func NewMetricClient() *SpyMetricClient {
 }
 
 func (s *SpyMetricClient) NewCounter(name string) func(uint64) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
 	m := &SpyMetric{}
 	s.metrics[name] = m
 
@@ -25,6 +29,9 @@ func (s *SpyMetricClient) NewCounter(name string) func(uint64) {
 }
 
 func (s *SpyMetricClient) NewGauge(name string) func(float64) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
 	m := &SpyMetric{}
 	s.metrics[name] = m
 
@@ -34,6 +41,9 @@ func (s *SpyMetricClient) NewGauge(name string) func(float64) {
 }
 
 func (s *SpyMetricClient) NewSumGauge(name string) func(float64) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
 	m := &SpyMetric{}
 	s.metrics[name] = m
 
@@ -43,6 +53,8 @@ func (s *SpyMetricClient) NewSumGauge(name string) func(float64) {
 }
 
 func (s *SpyMetricClient) GetMetric(name string) *SpyMetric {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	if m, ok := s.metrics[name]; ok {
 		return m
 	}
@@ -51,6 +63,8 @@ func (s *SpyMetricClient) GetMetric(name string) *SpyMetric {
 }
 
 func (s *SpyMetricClient) HasMetric(name string) bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	_, ok := s.metrics[name]
 	return ok
 }

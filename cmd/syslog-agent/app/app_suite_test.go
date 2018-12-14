@@ -1,4 +1,4 @@
-package main_test
+package app_test
 
 import (
 	"testing"
@@ -7,7 +7,7 @@ import (
 	. "github.com/onsi/gomega"
 )
 
-func TestSyslogAgent(t *testing.T) {
+func TestApp(t *testing.T) {
 	RegisterFailHandler(Fail)
-	RunSpecs(t, "SyslogAgent Suite")
+	RunSpecs(t, "App Suite")
 }
