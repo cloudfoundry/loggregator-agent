@@ -106,9 +106,14 @@ var _ = Describe("Main", func() {
 		defer cancel()
 		emitEnvelopes(ctx, 1*time.Millisecond)
 
-		Eventually(func() int {
-			return len(downstreamNormal.envelopes)
-		}, 5).Should(BeNumerically(">=", 3000))
+		Eventually(downstreamNormal.envelopes, 5).Should(Receive())
+
+		var prevSize int
+		Consistently(func() bool {
+			notEqual := len(downstreamNormal.envelopes) != prevSize
+			prevSize = len(downstreamNormal.envelopes)
+			return notEqual
+		}, 5, 1).Should(BeTrue())
 	})
 })
 
