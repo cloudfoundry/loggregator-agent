@@ -4,6 +4,7 @@ import (
 	"context"
 	"log"
 	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -180,31 +181,33 @@ func (c Collector) diskStat(ctx context.Context, path string) (DiskStat, error) 
 		return DiskStat{}, err
 	}
 
-	var pDevice string
+	var devicePath string
 	for _, p := range partitions {
 		if p.Mountpoint == path {
-			pDevice = p.Device
+			devicePath = p.Device
 			break
 		}
 	}
 
-	if pDevice == "" {
+	if devicePath == "" {
 		return DiskStat{}, nil
 	}
 
-	pStat, err := c.rawCollector.DiskIOCountersWithContext(ctx, pDevice)
+	pStat, err := c.rawCollector.DiskIOCountersWithContext(ctx, devicePath)
 	if err != nil {
 		return DiskStat{}, err
 	}
 
+	deviceName := filepath.Base(devicePath)
+
 	return DiskStat{
 		Percent:      disk.UsedPercent,
 		InodePercent: disk.InodesUsedPercent,
-		ReadBytes:    pStat[pDevice].ReadBytes,
-		WriteBytes:   pStat[pDevice].WriteBytes,
-		ReadTime:     pStat[pDevice].ReadTime,
-		WriteTime:    pStat[pDevice].WriteTime,
-		IOTime:       pStat[pDevice].IoTime,
+		ReadBytes:    pStat[deviceName].ReadBytes,
+		WriteBytes:   pStat[deviceName].WriteBytes,
+		ReadTime:     pStat[deviceName].ReadTime,
+		WriteTime:    pStat[deviceName].WriteTime,
+		IOTime:       pStat[deviceName].IoTime,
 		Present:      true,
 	}, nil
 }
