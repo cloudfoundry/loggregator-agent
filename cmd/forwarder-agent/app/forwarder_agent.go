@@ -16,6 +16,7 @@ import (
 	"code.cloudfoundry.org/loggregator-agent/pkg/diodes"
 	"code.cloudfoundry.org/loggregator-agent/pkg/egress"
 	"code.cloudfoundry.org/loggregator-agent/pkg/egress/syslog"
+	egress_v2 "code.cloudfoundry.org/loggregator-agent/pkg/egress/v2"
 	"code.cloudfoundry.org/loggregator-agent/pkg/ingress/v2"
 	"code.cloudfoundry.org/loggregator-agent/pkg/plumbing"
 	"code.cloudfoundry.org/loggregator-agent/pkg/timeoutwaitgroup"
@@ -142,7 +143,9 @@ func ingressClients(downstreamAddrs []string, grpc GRPC, l *log.Logger) []Writer
 			il.Printf("Dropped %d logs for url %s", missed, addr)
 		}), timeoutwaitgroup.New(time.Minute))
 
-		ingressClients = append(ingressClients, dw)
+		ew := egress_v2.NewEnvelopeWriter(dw, egress_v2.NewCounterAggregator())
+
+		ingressClients = append(ingressClients, ew)
 	}
 	return ingressClients
 }

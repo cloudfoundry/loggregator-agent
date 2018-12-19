@@ -12,7 +12,7 @@ type Nexter interface {
 	TryNext() (*loggregator_v2.Envelope, bool)
 }
 
-type Writer interface {
+type BatchWriter interface {
 	Write(msgs []*loggregator_v2.Envelope) error
 }
 
@@ -23,7 +23,7 @@ type MetricClient interface {
 
 type Transponder struct {
 	nexter        Nexter
-	writer        Writer
+	writer        BatchWriter
 	tags          map[string]string
 	batcher       *batching.V2EnvelopeBatcher
 	batchSize     int
@@ -34,7 +34,7 @@ type Transponder struct {
 
 func NewTransponder(
 	n Nexter,
-	w Writer,
+	w BatchWriter,
 	tags map[string]string,
 	batchSize int,
 	batchInterval time.Duration,

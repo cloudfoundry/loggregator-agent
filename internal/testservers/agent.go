@@ -41,9 +41,9 @@ func BuildAgentConfig(dopplerURI string, dopplerGRPCPort int) app.Config {
 }
 
 type AgentPorts struct {
-	GRPC   int
-	UDP    int
-	PProf  int
+	GRPC  int
+	UDP   int
+	PProf int
 }
 
 func StartAgent(conf app.Config) (cleanup func(), mp AgentPorts) {

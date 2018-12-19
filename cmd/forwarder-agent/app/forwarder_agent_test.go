@@ -44,6 +44,20 @@ var _ = Describe("Main", func() {
 				}
 			}()
 		}
+
+		emitCounters = func(ctx context.Context, d time.Duration) {
+			go func() {
+				ticker := time.NewTicker(d)
+				for {
+					select {
+					case <-ticker.C:
+						ingressClient.Emit(sampleCounter)
+					case <-ctx.Done():
+						return
+					}
+				}
+			}()
+		}
 	)
 
 	BeforeEach(func() {
@@ -94,6 +108,23 @@ var _ = Describe("Main", func() {
 		Expect(proto.Equal(e2, sampleEnvelope)).To(BeTrue())
 	})
 
+	It("aggregates counter events before forwarding downstream", func() {
+		downstream1 := startSpyLoggregatorV2Ingress()
+
+		cfg.DownstreamIngressAddrs = []string{downstream1.addr}
+		forwarderAgent = app.NewForwarderAgent(cfg, mc, testLogger)
+		go forwarderAgent.Run()
+
+		ctx, cancel := context.WithCancel(context.Background())
+		defer cancel()
+		emitCounters(ctx, 10*time.Millisecond)
+
+		var e1 *loggregator_v2.Envelope
+		Eventually(downstream1.envelopes, 5).Should(Receive(&e1))
+
+		Expect(e1.GetCounter().GetTotal()).To(Equal(uint64(20)))
+	})
+
 	It("continues writing to other consumers if one is slow", func() {
 		downstreamNormal := startSpyLoggregatorV2Ingress()
 		downstreamBlocking := startSpyLoggregatorV2BlockingIngress()
@@ -123,6 +154,17 @@ var sampleEnvelope = &loggregator_v2.Envelope{
 	Message: &loggregator_v2.Envelope_Log{
 		Log: &loggregator_v2.Log{
 			Payload: []byte("hello"),
+		},
+	},
+}
+
+var sampleCounter = &loggregator_v2.Envelope{
+	Timestamp: time.Now().UnixNano(),
+	SourceId:  "some-id",
+	Message: &loggregator_v2.Envelope_Counter{
+		Counter: &loggregator_v2.Counter{
+			Delta: 20,
+			Total: 0,
 		},
 	},
 }
