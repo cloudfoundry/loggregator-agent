@@ -21,7 +21,7 @@ var _ = Describe("Transponder", func() {
 		writer := newMockWriter()
 		close(writer.WriteOutput.Ret0)
 
-		tx := egress.NewTransponder(nexter, writer, nil, 1, time.Nanosecond, testhelper.NewMetricClient())
+		tx := egress.NewTransponder(nexter, writer, 1, time.Nanosecond, testhelper.NewMetricClient())
 		go tx.Start()
 
 		Eventually(nexter.TryNextCalled).Should(Receive())
@@ -40,7 +40,7 @@ var _ = Describe("Transponder", func() {
 				nexter.TryNextOutput.Ret1 <- true
 			}
 
-			tx := egress.NewTransponder(nexter, writer, nil, 5, time.Minute, testhelper.NewMetricClient())
+			tx := egress.NewTransponder(nexter, writer, 5, time.Minute, testhelper.NewMetricClient())
 			go tx.Start()
 
 			var batch []*loggregator_v2.Envelope
@@ -59,7 +59,7 @@ var _ = Describe("Transponder", func() {
 			close(nexter.TryNextOutput.Ret0)
 			close(nexter.TryNextOutput.Ret1)
 
-			tx := egress.NewTransponder(nexter, writer, nil, 5, time.Millisecond, testhelper.NewMetricClient())
+			tx := egress.NewTransponder(nexter, writer, 5, time.Millisecond, testhelper.NewMetricClient())
 			go tx.Start()
 
 			var batch []*loggregator_v2.Envelope
@@ -83,7 +83,7 @@ var _ = Describe("Transponder", func() {
 				nexter.TryNextOutput.Ret1 <- true
 			}
 
-			tx := egress.NewTransponder(nexter, writer, nil, 5, time.Minute, testhelper.NewMetricClient())
+			tx := egress.NewTransponder(nexter, writer, 5, time.Minute, testhelper.NewMetricClient())
 			go tx.Start()
 
 			Eventually(writer.WriteCalled).Should(HaveLen(1))
@@ -102,7 +102,7 @@ var _ = Describe("Transponder", func() {
 			}
 
 			spy := testhelper.NewMetricClient()
-			tx := egress.NewTransponder(nexter, writer, nil, 5, time.Minute, spy)
+			tx := egress.NewTransponder(nexter, writer, 5, time.Minute, spy)
 			go tx.Start()
 
 			f := func() uint64 {
@@ -110,97 +110,6 @@ var _ = Describe("Transponder", func() {
 			}
 
 			Eventually(f).Should(Equal(uint64(5)))
-		})
-	})
-
-	Describe("tagging", func() {
-		It("adds the given tags to all envelopes", func() {
-			tags := map[string]string{
-				"tag-one": "value-one",
-				"tag-two": "value-two",
-			}
-			input := &loggregator_v2.Envelope{SourceId: "uuid"}
-			nexter := newMockNexter()
-			nexter.TryNextOutput.Ret0 <- input
-			nexter.TryNextOutput.Ret1 <- true
-			writer := newMockWriter()
-			close(writer.WriteOutput.Ret0)
-
-			tx := egress.NewTransponder(nexter, writer, tags, 1, time.Nanosecond, testhelper.NewMetricClient())
-
-			go tx.Start()
-
-			Eventually(nexter.TryNextCalled).Should(Receive())
-
-			var output []*loggregator_v2.Envelope
-			Eventually(writer.WriteInput.Msg).Should(Receive(&output))
-
-			Expect(output).To(HaveLen(1))
-			Expect(output[0].Tags["tag-one"]).To(Equal("value-one"))
-			Expect(output[0].Tags["tag-two"]).To(Equal("value-two"))
-		})
-
-		It("does not write over tags if they already exist", func() {
-			tags := map[string]string{
-				"existing-tag": "some-new-value",
-			}
-			input := &loggregator_v2.Envelope{
-				SourceId: "uuid",
-				DeprecatedTags: map[string]*loggregator_v2.Value{
-					"existing-tag": {
-						Data: &loggregator_v2.Value_Text{
-							Text: "existing-value",
-						},
-					},
-				},
-			}
-			nexter := newMockNexter()
-			nexter.TryNextOutput.Ret0 <- input
-			nexter.TryNextOutput.Ret1 <- true
-			writer := newMockWriter()
-			close(writer.WriteOutput.Ret0)
-
-			tx := egress.NewTransponder(nexter, writer, tags, 1, time.Nanosecond, testhelper.NewMetricClient())
-
-			go tx.Start()
-
-			Eventually(nexter.TryNextCalled).Should(Receive())
-
-			var output []*loggregator_v2.Envelope
-			Eventually(writer.WriteInput.Msg).Should(Receive(&output))
-			Expect(output).To(HaveLen(1))
-
-			Expect(output[0].Tags["existing-tag"]).To(Equal("existing-value"))
-		})
-
-		It("moves DesprecatedTags to Tags", func() {
-			input := &loggregator_v2.Envelope{
-				SourceId: "uuid",
-				DeprecatedTags: map[string]*loggregator_v2.Value{
-					"text-tag":    {Data: &loggregator_v2.Value_Text{Text: "text-value"}},
-					"integer-tag": {Data: &loggregator_v2.Value_Integer{Integer: 502}},
-					"decimal-tag": {Data: &loggregator_v2.Value_Decimal{Decimal: 0.23}},
-				},
-			}
-			nexter := newMockNexter()
-			nexter.TryNextOutput.Ret0 <- input
-			nexter.TryNextOutput.Ret1 <- true
-			writer := newMockWriter()
-			close(writer.WriteOutput.Ret0)
-
-			tx := egress.NewTransponder(nexter, writer, nil, 1, time.Nanosecond, testhelper.NewMetricClient())
-
-			go tx.Start()
-
-			Eventually(nexter.TryNextCalled).Should(Receive())
-
-			var output []*loggregator_v2.Envelope
-			Eventually(writer.WriteInput.Msg).Should(Receive(&output))
-			Expect(output).To(HaveLen(1))
-
-			Expect(output[0].Tags["text-tag"]).To(Equal("text-value"))
-			Expect(output[0].Tags["integer-tag"]).To(Equal("502"))
-			Expect(output[0].Tags["decimal-tag"]).To(Equal("0.23"))
 		})
 	})
 })

@@ -70,6 +70,9 @@ var _ = Describe("Main", func() {
 				KeyFile:  testhelper.Cert("metron.key"),
 			},
 			DebugPort: 7392,
+			Tags: map[string]string{
+				"some-tag": "some-value",
+			},
 		}
 		ingressClient = newIngressClient(grpcPort)
 	})
@@ -125,6 +128,24 @@ var _ = Describe("Main", func() {
 		Expect(e1.GetCounter().GetTotal()).To(Equal(uint64(20)))
 	})
 
+	It("tags before forwarding downstream", func() {
+		downstream1 := startSpyLoggregatorV2Ingress()
+
+		cfg.DownstreamIngressAddrs = []string{downstream1.addr}
+		forwarderAgent = app.NewForwarderAgent(cfg, mc, testLogger)
+		go forwarderAgent.Run()
+
+		ctx, cancel := context.WithCancel(context.Background())
+		defer cancel()
+		emitEnvelopes(ctx, 10*time.Millisecond)
+
+		var e1 *loggregator_v2.Envelope
+		Eventually(downstream1.envelopes, 5).Should(Receive(&e1))
+
+		Expect(e1.GetTags()).To(HaveLen(1))
+		Expect(e1.GetTags()["some-tag"]).To(Equal("some-value"))
+	})
+
 	It("continues writing to other consumers if one is slow", func() {
 		downstreamNormal := startSpyLoggregatorV2Ingress()
 		downstreamBlocking := startSpyLoggregatorV2BlockingIngress()
@@ -155,6 +176,9 @@ var sampleEnvelope = &loggregator_v2.Envelope{
 		Log: &loggregator_v2.Log{
 			Payload: []byte("hello"),
 		},
+	},
+	Tags: map[string]string{
+		"some-tag": "some-value",
 	},
 }
 

@@ -81,11 +81,15 @@ func (a *AppV2) Start() {
 	}))
 
 	pool := a.initializePool()
-	batchWriter := egress.NewBatchEnvelopeWriter(pool, egress.NewCounterAggregator())
+	batchWriter := egress.NewBatchEnvelopeWriter(
+		pool,
+		egress.NewCounterAggregator(),
+		egress.NewTagger(a.config.Tags),
+	)
+
 	tx := egress.NewTransponder(
 		envelopeBuffer,
 		batchWriter,
-		a.config.Tags,
 		100, 100*time.Millisecond,
 		a.metricClient,
 	)

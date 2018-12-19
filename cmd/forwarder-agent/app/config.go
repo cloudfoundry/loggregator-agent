@@ -22,10 +22,9 @@ type Config struct {
 	// adhere to the Loggregator Ingress Service and use the provided TLS
 	// configuration.
 	DownstreamIngressAddrs []string `env:"DOWNSTREAM_INGRESS_ADDRS, report"`
-
-	DebugPort uint16 `env:"DEBUG_PORT, report"`
-
-	GRPC GRPC
+	DebugPort              uint16   `env:"DEBUG_PORT, report"`
+	GRPC                   GRPC
+	Tags                   map[string]string `env:"AGENT_TAGS"`
 }
 
 // LoadConfig will load the configuration for the forwarder agent from the

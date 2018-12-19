@@ -30,6 +30,7 @@ type ForwarderAgent struct {
 	grpc            GRPC
 	downstreamAddrs []string
 	log             *log.Logger
+	tags            map[string]string
 }
 
 type Metrics interface {
@@ -57,6 +58,7 @@ func NewForwarderAgent(
 		m:               m,
 		downstreamAddrs: cfg.DownstreamIngressAddrs,
 		log:             log,
+		tags:            cfg.Tags,
 	}
 }
 
@@ -68,7 +70,7 @@ func (s ForwarderAgent) Run() {
 		ingressDropped(uint64(missed))
 	}))
 
-	clients := ingressClients(s.downstreamAddrs, s.grpc, s.log)
+	clients := ingressClients(s.downstreamAddrs, s.grpc, s.log, s.tags)
 	go func() {
 		for {
 			e := diode.Next()
@@ -115,7 +117,11 @@ func (c clientWriter) Close() error {
 	return c.c.CloseSend()
 }
 
-func ingressClients(downstreamAddrs []string, grpc GRPC, l *log.Logger) []Writer {
+func ingressClients(downstreamAddrs []string,
+	grpc GRPC,
+	l *log.Logger,
+	tags map[string]string) []Writer {
+
 	var ingressClients []Writer
 	for _, addr := range downstreamAddrs {
 		clientCreds, err := loggregator.NewIngressTLSConfig(
@@ -143,7 +149,11 @@ func ingressClients(downstreamAddrs []string, grpc GRPC, l *log.Logger) []Writer
 			il.Printf("Dropped %d logs for url %s", missed, addr)
 		}), timeoutwaitgroup.New(time.Minute))
 
-		ew := egress_v2.NewEnvelopeWriter(dw, egress_v2.NewCounterAggregator())
+		ew := egress_v2.NewEnvelopeWriter(
+			dw,
+			egress_v2.NewCounterAggregator(),
+			egress_v2.NewTagger(tags),
+		)
 
 		ingressClients = append(ingressClients, ew)
 	}
