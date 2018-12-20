@@ -204,9 +204,8 @@ func (w *TCPWriter) Write(env *loggregator_v2.Envelope) error {
 			_ = w.Close()
 			return err
 		}
-
-		w.egressMetric(1)
 	}
+	w.egressMetric(1)
 
 	return nil
 }

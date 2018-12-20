@@ -63,9 +63,8 @@ func (w *HTTPSWriter) Write(env *loggregator_v2.Envelope) error {
 		if resp.StatusCode < 200 || resp.StatusCode > 299 {
 			return fmt.Errorf("Syslog Writer: Post responded with %d status code", resp.StatusCode)
 		}
-
-		w.egressMetric(1)
 	}
+	w.egressMetric(1)
 
 	return nil
 }
