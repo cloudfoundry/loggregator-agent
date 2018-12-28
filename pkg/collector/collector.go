@@ -278,6 +278,10 @@ func (s defaultRawCollector) SwapMemoryWithContext(ctx context.Context) (*mem.Sw
 	return mem.SwapMemoryWithContext(ctx)
 }
 
+func (s defaultRawCollector) AvgWithContext(ctx context.Context) (*load.AvgStat, error) {
+	return load.AvgWithContext(ctx)
+}
+
 func (s defaultRawCollector) TimesWithContext(ctx context.Context, perCPU bool) ([]cpu.TimesStat, error) {
 	return cpu.TimesWithContext(ctx, perCPU)
 }
