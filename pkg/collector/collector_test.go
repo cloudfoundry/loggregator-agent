@@ -32,6 +32,26 @@ var _ = Describe("Collector", func() {
 		)
 	})
 
+	It("returns true if the instance is healthy", func() {
+		src.healthy = true
+
+		stats, err := c.Collect()
+		Expect(err).ToNot(HaveOccurred())
+
+		Expect(stats.Health.Healthy).To(BeTrue())
+		Expect(stats.Health.Present).To(BeTrue())
+	})
+
+	It("returns true if the instance is healthy", func() {
+		src.healthy = false
+
+		stats, err := c.Collect()
+		Expect(err).ToNot(HaveOccurred())
+
+		Expect(stats.Health.Healthy).To(BeFalse())
+		Expect(stats.Health.Present).To(BeTrue())
+	})
+
 	It("returns the memory metrics", func() {
 		stats, err := c.Collect()
 		Expect(err).ToNot(HaveOccurred())
@@ -118,7 +138,7 @@ var _ = Describe("Collector", func() {
 	})
 
 	It("returns disk metrics when persistent disk is not present", func() {
-		src.persistentDiskUsageError = syscall.ENOENT
+		src.persistentDiskUsageErr = syscall.ENOENT
 
 		stats, err := c.Collect()
 		Expect(err).ToNot(HaveOccurred())
@@ -143,7 +163,7 @@ var _ = Describe("Collector", func() {
 	})
 
 	It("shows the system disk is not present if directory does not exist", func() {
-		src.systemDiskUsageError = syscall.ENOENT
+		src.systemDiskUsageErr = syscall.ENOENT
 
 		stats, err := c.Collect()
 		Expect(err).ToNot(HaveOccurred())
@@ -154,7 +174,7 @@ var _ = Describe("Collector", func() {
 	})
 
 	It("shows the ephemeral disk is not present if directory does not exist", func() {
-		src.ephemeralDiskUsageError = syscall.ENOENT
+		src.ephemeralDiskUsageErr = syscall.ENOENT
 
 		stats, err := c.Collect()
 		Expect(err).ToNot(HaveOccurred())
@@ -165,7 +185,7 @@ var _ = Describe("Collector", func() {
 	})
 
 	It("shows the persistent disk is not present if directory does not exist", func() {
-		src.persistentDiskUsageError = syscall.ENOENT
+		src.persistentDiskUsageErr = syscall.ENOENT
 
 		stats, err := c.Collect()
 		Expect(err).ToNot(HaveOccurred())
@@ -184,6 +204,26 @@ var _ = Describe("Collector", func() {
 				collector.WithRawCollector(src),
 			)
 		}).To(Panic())
+	})
+
+	It("returns an health presence as false if we fail to read", func() {
+		src.healthyErr = errors.New("an error")
+
+		stats, err := c.Collect()
+		Expect(err).ToNot(HaveOccurred())
+
+		Expect(stats.Health.Healthy).To(BeFalse())
+		Expect(stats.Health.Present).To(BeFalse())
+	})
+
+	It("returns an error if we fail to unmarshal instance health", func() {
+		src.healthyInvalidJSON = true
+
+		stats, err := c.Collect()
+		Expect(err).ToNot(HaveOccurred())
+
+		Expect(stats.Health.Healthy).To(BeFalse())
+		Expect(stats.Health.Present).To(BeFalse())
 	})
 
 	It("returns an error when getting memory fails", func() {
@@ -222,14 +262,14 @@ var _ = Describe("Collector", func() {
 	})
 
 	It("returns an error when getting system disk usage fails", func() {
-		src.systemDiskUsageError = errors.New("an error")
+		src.systemDiskUsageErr = errors.New("an error")
 
 		_, err := c.Collect()
 		Expect(err).To(HaveOccurred())
 	})
 
 	It("returns an error when getting partitions fails", func() {
-		src.partitionsError = errors.New("an error")
+		src.partitionsErr = errors.New("an error")
 
 		_, err := c.Collect()
 		Expect(err).To(HaveOccurred())
@@ -243,14 +283,14 @@ var _ = Describe("Collector", func() {
 	})
 
 	It("returns an error when getting ephemeral disk usage fails", func() {
-		src.ephemeralDiskUsageError = errors.New("an error")
+		src.ephemeralDiskUsageErr = errors.New("an error")
 
 		_, err := c.Collect()
 		Expect(err).To(HaveOccurred())
 	})
 
 	It("returns an error when getting persistent disk usage fails", func() {
-		src.persistentDiskUsageError = errors.New("an error")
+		src.persistentDiskUsageErr = errors.New("an error")
 
 		_, err := c.Collect()
 		Expect(err).To(HaveOccurred())
@@ -262,17 +302,21 @@ type stubRawCollector struct {
 	diskIOCountersNames []string
 	cannotFindPartition bool
 
-	virtualMemoryErr         error
-	swapMemoryErr            error
-	cpuLoadErr               error
-	cpuTimesErr              error
-	netIOCountersErr         error
-	diskIOCountersErr        error
-	systemDiskUsageError     error
-	ephemeralDiskUsageError  error
-	persistentDiskUsageError error
+	virtualMemoryErr       error
+	swapMemoryErr          error
+	cpuLoadErr             error
+	cpuTimesErr            error
+	netIOCountersErr       error
+	diskIOCountersErr      error
+	systemDiskUsageErr     error
+	ephemeralDiskUsageErr  error
+	persistentDiskUsageErr error
 
-	partitionsError error
+	partitionsErr error
+
+	healthy            bool
+	healthyInvalidJSON bool
+	healthyErr         error
 }
 
 func (s *stubRawCollector) VirtualMemoryWithContext(context.Context) (*mem.VirtualMemoryStat, error) {
@@ -368,8 +412,8 @@ func (s *stubRawCollector) NetIOCountersWithContext(context.Context, bool) ([]ne
 func (s *stubRawCollector) UsageWithContext(_ context.Context, path string) (*disk.UsageStat, error) {
 	switch path {
 	case "/":
-		if s.systemDiskUsageError != nil {
-			return nil, s.systemDiskUsageError
+		if s.systemDiskUsageErr != nil {
+			return nil, s.systemDiskUsageErr
 		}
 
 		return &disk.UsageStat{
@@ -377,8 +421,8 @@ func (s *stubRawCollector) UsageWithContext(_ context.Context, path string) (*di
 			InodesUsedPercent: 75.0,
 		}, nil
 	case "/var/vcap/data":
-		if s.ephemeralDiskUsageError != nil {
-			return nil, s.ephemeralDiskUsageError
+		if s.ephemeralDiskUsageErr != nil {
+			return nil, s.ephemeralDiskUsageErr
 		}
 
 		return &disk.UsageStat{
@@ -386,8 +430,8 @@ func (s *stubRawCollector) UsageWithContext(_ context.Context, path string) (*di
 			InodesUsedPercent: 95.0,
 		}, nil
 	case "/var/vcap/store":
-		if s.persistentDiskUsageError != nil {
-			return nil, s.persistentDiskUsageError
+		if s.persistentDiskUsageErr != nil {
+			return nil, s.persistentDiskUsageErr
 		}
 
 		return &disk.UsageStat{
@@ -400,8 +444,8 @@ func (s *stubRawCollector) UsageWithContext(_ context.Context, path string) (*di
 }
 
 func (s *stubRawCollector) PartitionsWithContext(context.Context, bool) ([]disk.PartitionStat, error) {
-	if s.partitionsError != nil {
-		return nil, s.partitionsError
+	if s.partitionsErr != nil {
+		return nil, s.partitionsErr
 	}
 
 	if s.cannotFindPartition {
@@ -473,4 +517,20 @@ func (s *stubRawCollector) DiskIOCountersWithContext(_ context.Context, names ..
 	default:
 		panic("unknown disk name")
 	}
+}
+
+func (s *stubRawCollector) InstanceHealth() ([]byte, error) {
+	if s.healthyInvalidJSON {
+		return []byte("NOTJSON"), nil
+	}
+
+	if s.healthyErr != nil {
+		return nil, s.healthyErr
+	}
+
+	if s.healthy {
+		return []byte(`{"state":"running"}`), nil
+	}
+
+	return []byte(`{"state":"failing"}`), nil
 }

@@ -41,7 +41,7 @@ var _ = Describe("Processor", func() {
 		Expect(env.Tags["origin"]).To(Equal("system-metrics-agent"))
 
 		metrics := env.GetGauge().Metrics
-		Expect(metrics).To(HaveLen(32))
+		Expect(metrics).To(HaveLen(33))
 	})
 
 	DescribeTable("default metrics", func(name, unit string, value float64) {
@@ -90,6 +90,7 @@ var _ = Describe("Processor", func() {
 		Entry("system_disk_persistent_read_time", "system_disk_persistent_read_time", "ms", 3000.0),
 		Entry("system_disk_persistent_write_time", "system_disk_persistent_write_time", "ms", 4000.0),
 		Entry("system_disk_persistent_io_time", "system_disk_persistent_io_time", "ms", 5000.0),
+		Entry("system_healthy", "system_healthy", "", 1.0),
 	)
 
 	It("receives stats and sends an envelope on an interval", func() {
@@ -112,7 +113,6 @@ var _ = Describe("Processor", func() {
 
 		metrics := env.GetGauge().Metrics
 		Expect(metrics).To(HaveLen(8))
-
 	})
 
 	DescribeTable("network metrics", func(name, unit string, value int) {
@@ -155,92 +155,143 @@ var _ = Describe("Processor", func() {
 		Expect(env.GetGauge().Metrics).ToNot(HaveKey("system_disk_persistent_percent"))
 		Expect(env.GetGauge().Metrics).ToNot(HaveKey("system_disk_persistent_inode_percent"))
 	})
+
+	It("returns 0 for an unhealthy instance", func() {
+		stub := newStubInputOutput()
+		processor := collector.NewProcessor(
+			stub.input,
+			stub.output,
+			10*time.Millisecond,
+			log.New(GinkgoWriter, "", log.LstdFlags),
+		)
+
+		go processor.Run()
+
+		stub.inStats <- unhealthyInstanceInput
+
+		var env *loggregator_v2.Envelope
+		Eventually(stub.outEnvs).Should(Receive(&env))
+		Expect(env.GetGauge().Metrics["system_healthy"].Value).To(Equal(0.0))
+	})
+
+	It("excludes system_healthy if health precence is false", func() {
+		stub := newStubInputOutput()
+		processor := collector.NewProcessor(
+			stub.input,
+			stub.output,
+			10*time.Millisecond,
+			log.New(GinkgoWriter, "", log.LstdFlags),
+		)
+
+		go processor.Run()
+
+		stub.inStats <- collector.SystemStat{}
+
+		var env *loggregator_v2.Envelope
+		Eventually(stub.outEnvs).Should(Receive(&env))
+
+		Expect(env.GetGauge().Metrics).ToNot(HaveKey("system_healthy"))
+	})
 })
 
-var defaultInput = collector.SystemStat{
-	MemKB:      1025,
-	MemPercent: 10.01,
+var (
+	defaultInput = collector.SystemStat{
+		MemKB:      1025,
+		MemPercent: 10.01,
 
-	SwapKB:      2049,
-	SwapPercent: 20.01,
+		SwapKB:      2049,
+		SwapPercent: 20.01,
 
-	Load1M:  1.1,
-	Load5M:  5.5,
-	Load15M: 15.15,
+		Load1M:  1.1,
+		Load5M:  5.5,
+		Load15M: 15.15,
 
-	CPUStat: collector.CPUStat{
-		User:   25.25,
-		System: 52.52,
-		Idle:   10.10,
-		Wait:   22.22,
-	},
-
-	SystemDisk: collector.DiskStat{
-		Present: true,
-
-		Percent:      35.0,
-		InodePercent: 45.0,
-
-		ReadBytes:  10,
-		WriteBytes: 20,
-		ReadTime:   30,
-		WriteTime:  40,
-		IOTime:     50,
-	},
-
-	EphemeralDisk: collector.DiskStat{
-		Present: true,
-
-		Percent:      55.0,
-		InodePercent: 65.0,
-
-		ReadBytes:  100,
-		WriteBytes: 200,
-		ReadTime:   300,
-		WriteTime:  400,
-		IOTime:     500,
-	},
-
-	PersistentDisk: collector.DiskStat{
-		Present: true,
-
-		Percent:      75.0,
-		InodePercent: 85.0,
-
-		ReadBytes:  1000,
-		WriteBytes: 2000,
-		ReadTime:   3000,
-		WriteTime:  4000,
-		IOTime:     5000,
-	},
-}
-
-var networkInput = collector.SystemStat{
-	Networks: []collector.NetworkStat{
-		{
-			Name:            "eth0",
-			BytesSent:       1,
-			BytesReceived:   2,
-			PacketsSent:     3,
-			PacketsReceived: 4,
-			ErrIn:           5,
-			ErrOut:          6,
-			DropIn:          7,
-			DropOut:         8,
+		CPUStat: collector.CPUStat{
+			User:   25.25,
+			System: 52.52,
+			Idle:   10.10,
+			Wait:   22.22,
 		},
-		{
-			Name:            "eth1",
-			BytesSent:       10,
-			BytesReceived:   20,
-			PacketsSent:     30,
-			PacketsReceived: 40,
-			ErrIn:           50,
-			ErrOut:          60,
-			DropIn:          70,
-			DropOut:         80,
+
+		SystemDisk: collector.DiskStat{
+			Present: true,
+
+			Percent:      35.0,
+			InodePercent: 45.0,
+
+			ReadBytes:  10,
+			WriteBytes: 20,
+			ReadTime:   30,
+			WriteTime:  40,
+			IOTime:     50,
 		},
-	},
-}
+
+		EphemeralDisk: collector.DiskStat{
+			Present: true,
+
+			Percent:      55.0,
+			InodePercent: 65.0,
+
+			ReadBytes:  100,
+			WriteBytes: 200,
+			ReadTime:   300,
+			WriteTime:  400,
+			IOTime:     500,
+		},
+
+		PersistentDisk: collector.DiskStat{
+			Present: true,
+
+			Percent:      75.0,
+			InodePercent: 85.0,
+
+			ReadBytes:  1000,
+			WriteBytes: 2000,
+			ReadTime:   3000,
+			WriteTime:  4000,
+			IOTime:     5000,
+		},
+
+		Health: collector.HealthStat{
+			Present: true,
+			Healthy: true,
+		},
+	}
+
+	networkInput = collector.SystemStat{
+		Networks: []collector.NetworkStat{
+			{
+				Name:            "eth0",
+				BytesSent:       1,
+				BytesReceived:   2,
+				PacketsSent:     3,
+				PacketsReceived: 4,
+				ErrIn:           5,
+				ErrOut:          6,
+				DropIn:          7,
+				DropOut:         8,
+			},
+			{
+				Name:            "eth1",
+				BytesSent:       10,
+				BytesReceived:   20,
+				PacketsSent:     30,
+				PacketsReceived: 40,
+				ErrIn:           50,
+				ErrOut:          60,
+				DropIn:          70,
+				DropOut:         80,
+			},
+		},
+	}
+
+	unhealthyInstanceInput = collector.SystemStat{
+		Health: collector.HealthStat{
+			Present: true,
+			Healthy: false,
+		},
+	}
+)
 
 type stubInputOutput struct {
 	inStats chan collector.SystemStat

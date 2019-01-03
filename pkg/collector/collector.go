@@ -2,6 +2,8 @@ package collector
 
 import (
 	"context"
+	"encoding/json"
+	"io/ioutil"
 	"log"
 	"os"
 	"path/filepath"
@@ -19,6 +21,7 @@ const (
 	systemDiskPath     = "/"
 	ephemeralDiskPath  = "/var/vcap/data"
 	persistentDiskPath = "/var/vcap/store"
+	instanceHealthPath = "/var/vcap/instance/health.json"
 )
 
 type SystemStat struct {
@@ -39,6 +42,8 @@ type SystemStat struct {
 	PersistentDisk DiskStat
 
 	Networks []NetworkStat
+
+	Health HealthStat
 }
 
 type CPUStat struct {
@@ -75,6 +80,11 @@ type NetworkStat struct {
 	ErrOut          uint64
 	DropIn          uint64
 	DropOut         uint64
+}
+
+type HealthStat struct {
+	Present bool
+	Healthy bool
 }
 
 func New(log *log.Logger, opts ...CollectorOption) Collector {
@@ -163,7 +173,33 @@ func (c Collector) Collect() (SystemStat, error) {
 		PersistentDisk: pdisk,
 
 		Networks: networks,
+
+		Health: c.healthy(),
 	}, nil
+}
+
+func (c Collector) healthy() HealthStat {
+	h, err := c.rawCollector.InstanceHealth()
+	if err != nil {
+		return HealthStat{}
+	}
+
+	var ih map[string]string
+	err = json.Unmarshal(h, &ih)
+	if err != nil {
+		return HealthStat{}
+	}
+
+	if ih["state"] == "running" {
+		return HealthStat{
+			Present: true,
+			Healthy: true,
+		}
+	}
+
+	return HealthStat{
+		Present: true,
+	}
 }
 
 func (c Collector) diskStat(ctx context.Context, path string) (DiskStat, error) {
@@ -258,6 +294,7 @@ type RawCollector interface {
 	NetIOCountersWithContext(context.Context, bool) ([]net.IOCountersStat, error)
 	DiskIOCountersWithContext(context.Context, ...string) (map[string]disk.IOCountersStat, error)
 	PartitionsWithContext(context.Context, bool) ([]disk.PartitionStat, error)
+	InstanceHealth() ([]byte, error)
 }
 
 type CollectorOption func(*Collector)
@@ -300,4 +337,8 @@ func (s defaultRawCollector) DiskIOCountersWithContext(ctx context.Context, name
 
 func (s defaultRawCollector) PartitionsWithContext(ctx context.Context, all bool) ([]disk.PartitionStat, error) {
 	return disk.PartitionsWithContext(ctx, all)
+}
+
+func (s defaultRawCollector) InstanceHealth() ([]byte, error) {
+	return ioutil.ReadFile(instanceHealthPath)
 }

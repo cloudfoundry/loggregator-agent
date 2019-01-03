@@ -269,6 +269,17 @@ func buildGauge(stat SystemStat) *loggregator_v2.Gauge {
 		}
 	}
 
+	if stat.Health.Present {
+		var healthValue float64
+		if stat.Health.Healthy {
+			healthValue = 1.0
+		}
+
+		metrics["system_healthy"] = &loggregator_v2.GaugeValue{
+			Value: healthValue,
+		}
+	}
+
 	return &loggregator_v2.Gauge{
 		Metrics: metrics,
 	}
