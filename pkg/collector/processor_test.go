@@ -115,21 +115,28 @@ var _ = Describe("Processor", func() {
 		Expect(metrics).To(HaveLen(8))
 	})
 
-	DescribeTable("network metrics", func(name, unit string, value int) {
-		go processor.Run()
+	DescribeTable("network metrics", func(name, unit string, value float64) {
 		stub.inStats <- networkInput
+		go processor.Run()
 
 		var env *loggregator_v2.Envelope
 		Eventually(stub.outEnvs).Should(Receive(&env))
+		Eventually(stub.outEnvs).Should(Receive(&env)) //network envelopes always come after system_stat envelopes
+
+		metrics := env.GetGauge().Metrics
+		Expect(proto.Equal(
+			metrics[name],
+			&loggregator_v2.GaugeValue{Unit: unit, Value: value},
+		)).To(BeTrue())
 	},
-		Entry("system_network_bytes_sent", "system_network_bytes_sent", "Bytes", 10),
-		Entry("system_network_bytes_received", "system_network_bytes_received", "Bytes", 20),
-		Entry("system_network_packets_sent", "system_network_packets_sent", "Packets", 30),
-		Entry("system_network_packets_received", "system_network_packets_received", "Packets", 40),
-		Entry("system_network_error_in", "system_network_error_in", "Frames", 50),
-		Entry("system_network_error_out", "system_network_error_out", "Frames", 60),
-		Entry("system_network_drop_in", "system_network_drop_in", "Packets", 70),
-		Entry("system_network_drop_out", "system_network_drop_out", "Packets", 80),
+		Entry("system_network_bytes_sent", "system_network_bytes_sent", "Bytes", 1.0),
+		Entry("system_network_bytes_received", "system_network_bytes_received", "Bytes", 2.0),
+		Entry("system_network_packets_sent", "system_network_packets_sent", "Packets", 3.0),
+		Entry("system_network_packets_received", "system_network_packets_received", "Packets", 4.0),
+		Entry("system_network_error_in", "system_network_error_in", "Frames", 5.0),
+		Entry("system_network_error_out", "system_network_error_out", "Frames", 6.0),
+		Entry("system_network_drop_in", "system_network_drop_in", "Packets", 7.0),
+		Entry("system_network_drop_out", "system_network_drop_out", "Packets", 8.0),
 	)
 
 	It("does not have disk metrics if disk is not present", func() {
