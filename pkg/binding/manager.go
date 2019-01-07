@@ -26,7 +26,7 @@ type Connector interface {
 }
 
 type Manager struct {
-	sync.Mutex
+	mu               sync.Mutex
 	bf               Fetcher
 	bfLimit          int
 	drainCountMetric func(float64)
@@ -79,8 +79,8 @@ func (m *Manager) Run() {
 }
 
 func (m *Manager) GetDrains(sourceID string) []egress.Writer {
-	m.Lock()
-	defer m.Unlock()
+	m.mu.Lock()
+	defer m.mu.Unlock()
 
 	drains := make([]egress.Writer, 0, m.bfLimit)
 	for binding, dh := range m.sourceDrainMap[sourceID] {
@@ -100,8 +100,8 @@ func (m *Manager) GetDrains(sourceID string) []egress.Writer {
 }
 
 func (m *Manager) updateDrains(bindings []syslog.Binding) {
-	m.Lock()
-	defer m.Unlock()
+	m.mu.Lock()
+	defer m.mu.Unlock()
 
 	newBindings := make(map[syslog.Binding]bool)
 
