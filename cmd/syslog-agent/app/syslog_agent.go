@@ -73,6 +73,7 @@ func NewSyslogAgent(
 		connector,
 		m,
 		cfg.Cache.PollingInterval,
+		cfg.IdleDrainTimeout,
 		l,
 	)
 

@@ -80,6 +80,7 @@ var _ = Describe("SyslogAgent", func() {
 		cfg := app.Config{
 			BindingsPerAppLimit: 5,
 			DebugPort:           7392,
+			IdleDrainTimeout:    10 * time.Minute,
 			Cache: app.Cache{
 				URL:             cupsProvider.URL,
 				CAFile:          testhelper.Cert("binding-cache-ca.crt"),
@@ -113,6 +114,7 @@ var _ = Describe("SyslogAgent", func() {
 		cfg := app.Config{
 			BindingsPerAppLimit: 5,
 			DebugPort:           7392,
+			IdleDrainTimeout:    10 * time.Minute,
 			DrainSkipCertVerify: true,
 			Cache: app.Cache{
 				URL:             cupsProvider.URL,

@@ -42,6 +42,7 @@ var _ = Describe("Manager", func() {
 			c,
 			sm,
 			100*time.Millisecond,
+			10*time.Minute,
 			log.New(GinkgoWriter, "", 0),
 		)
 		go m.Run()
@@ -76,6 +77,7 @@ var _ = Describe("Manager", func() {
 			c,
 			sm,
 			100*time.Millisecond,
+			10*time.Minute,
 			log.New(GinkgoWriter, "", 0),
 		)
 		go m.Run()
@@ -110,6 +112,7 @@ var _ = Describe("Manager", func() {
 			c,
 			sm,
 			100*time.Millisecond,
+			10*time.Minute,
 			log.New(GinkgoWriter, "", 0),
 		)
 		go m.Run()
@@ -170,6 +173,7 @@ var _ = Describe("Manager", func() {
 			c,
 			sm,
 			100*time.Millisecond,
+			10*time.Minute,
 			log.New(GinkgoWriter, "", 0),
 		)
 		go m.Run()
@@ -194,6 +198,53 @@ var _ = Describe("Manager", func() {
 		Expect(sm.GetMetric("ActiveDrainCount").GaugeValue()).To(Equal(0.0))
 	})
 
+	It("removes drain holders for inactive drains", func() {
+		bf.bindings <- []syslog.Binding{
+			{"app-1", "host-1", "syslog://drain.url.com"},
+			{"app-2", "host-1", "syslog://drain.url.com"},
+		}
+
+		m := binding.NewManager(
+			bf,
+			c,
+			sm,
+			100*time.Millisecond,
+			100*time.Millisecond,
+			log.New(GinkgoWriter, "", 0),
+		)
+		go m.Run()
+
+		Eventually(func() []egress.Writer {
+			return m.GetDrains("app-1")
+		}).Should(HaveLen(1))
+
+		go func() {
+			for {
+				Eventually(func() []egress.Writer {
+					return m.GetDrains("app-2")
+				}).Should(HaveLen(1))
+			}
+		}()
+
+		Eventually(func() float64 {
+			return sm.GetMetric("ActiveDrainCount").GaugeValue()
+		}).Should(Equal(2.0))
+
+		// app-1 should eventually expire and be cleaned up.
+		Eventually(func() float64 {
+			return sm.GetMetric("ActiveDrainCount").GaugeValue()
+		}).Should(Equal(1.0))
+
+		// It re-activates on another get drains
+		Eventually(func() []egress.Writer {
+			return m.GetDrains("app-1")
+		}).Should(HaveLen(1))
+
+		Eventually(func() float64 {
+			return sm.GetMetric("ActiveDrainCount").GaugeValue()
+		}).Should(Equal(2.0))
+	})
+
 	It("returns drains for a sourceID", func() {
 		bf.bindings <- []syslog.Binding{
 			{"app-1", "host-1", "syslog://drain.url.com"},
@@ -206,6 +257,7 @@ var _ = Describe("Manager", func() {
 			c,
 			sm,
 			10*time.Second,
+			10*time.Minute,
 			log.New(GinkgoWriter, "", 0),
 		)
 		go m.Run()
@@ -243,6 +295,7 @@ var _ = Describe("Manager", func() {
 			c,
 			sm,
 			10*time.Millisecond,
+			10*time.Minute,
 			log.New(GinkgoWriter, "", 0),
 		)
 		go m.Run()

@@ -28,8 +28,9 @@ type Cache struct {
 
 // Config holds the configuration for the syslog agent
 type Config struct {
-	BindingsPerAppLimit int  `env:"BINDING_PER_APP_LIMIT, report"`
-	DrainSkipCertVerify bool `env:"DRAIN_SKIP_CERT_VERIFY, report"`
+	BindingsPerAppLimit int           `env:"BINDING_PER_APP_LIMIT,    report"`
+	DrainSkipCertVerify bool          `env:"DRAIN_SKIP_CERT_VERIFY,   report"`
+	IdleDrainTimeout    time.Duration `env:"IDLE_DRAIN_TIMEOUT, report"`
 
 	DebugPort uint16 `env:"DEBUG_PORT, report"`
 
@@ -42,10 +43,12 @@ type Config struct {
 // panic.
 func LoadConfig() Config {
 	cfg := Config{
+		BindingsPerAppLimit: 5,
+		IdleDrainTimeout:    10 * time.Minute,
+
 		Cache: Cache{
 			PollingInterval: 1 * time.Minute,
 		},
-		BindingsPerAppLimit: 5,
 		GRPC: GRPC{
 			Port: 3458,
 		},

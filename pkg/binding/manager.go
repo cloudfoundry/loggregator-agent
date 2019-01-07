@@ -26,37 +26,47 @@ type Connector interface {
 }
 
 type Manager struct {
-	mu              sync.Mutex
-	bf              Fetcher
-	bfLimit         int
+	mu        sync.Mutex
+	bf        Fetcher
+	bfLimit   int
+	connector Connector
+	log       *log.Logger
+
 	pollingInterval time.Duration
-	connector       Connector
-	log             *log.Logger
+	idleTimeout     time.Duration
 
 	drainCountMetric       func(float64)
 	activeDrainCountMetric func(float64)
 	activeDrainCount       int64
 
-	sourceDrainMap map[string]map[syslog.Binding]drainHolder
+	sourceDrainMap    map[string]map[syslog.Binding]drainHolder
+	sourceAccessTimes map[string]time.Time
 }
 
 func NewManager(
 	bf Fetcher,
-	connector Connector,
+	c Connector,
 	m Metrics,
-	pi time.Duration,
+	pollingInterval time.Duration,
+	idleTimeout time.Duration,
 	log *log.Logger,
 ) *Manager {
-	return &Manager{
+	manager := &Manager{
 		bf:                     bf,
 		bfLimit:                bf.DrainLimit(),
-		pollingInterval:        pi,
-		connector:              connector,
+		pollingInterval:        pollingInterval,
+		idleTimeout:            idleTimeout,
+		connector:              c,
 		drainCountMetric:       m.NewGauge("DrainCount"),
 		activeDrainCountMetric: m.NewGauge("ActiveDrainCount"),
 		sourceDrainMap:         make(map[string]map[syslog.Binding]drainHolder),
+		sourceAccessTimes:      make(map[string]time.Time),
 		log:                    log,
 	}
+
+	go manager.idleCleanupLoop()
+
+	return manager
 }
 
 func (m *Manager) Run() {
@@ -81,6 +91,7 @@ func (m *Manager) GetDrains(sourceID string) []egress.Writer {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
+	m.sourceAccessTimes[sourceID] = time.Now()
 	drains := make([]egress.Writer, 0, m.bfLimit)
 	for binding, dh := range m.sourceDrainMap[sourceID] {
 		// Create drain writer if one does not already exist
@@ -122,31 +133,66 @@ func (m *Manager) updateDrains(bindings []syslog.Binding) {
 			m.sourceDrainMap[b.AppId] = make(map[syslog.Binding]drainHolder)
 		}
 
-		ctx, cancel := context.WithCancel(context.Background())
-		m.sourceDrainMap[b.AppId][b] = drainHolder{
-			ctx:         ctx,
-			cancel:      cancel,
-			drainWriter: nil,
-		}
+		m.sourceDrainMap[b.AppId][b] = newDrainHolder()
 	}
 
 	// Delete all bindings that are not in updated list of bindings.
 	// TODO: this is not optimal, consider lazily storing bindings
-	for appID, bindingWriterMap := range m.sourceDrainMap {
-		for b, _ := range bindingWriterMap {
+	for _, bindingWriterMap := range m.sourceDrainMap {
+		for b := range bindingWriterMap {
 			if newBindings[b] {
 				continue
 			}
 
-			bindingWriterMap[b].cancel()
-			delete(bindingWriterMap, b)
-			if len(bindingWriterMap) == 0 {
-				// Prevent memory leak
-				delete(m.sourceDrainMap, appID)
-			}
+			m.removeDrain(bindingWriterMap, b)
+		}
+	}
+}
 
-			m.activeDrainCount--
-			m.activeDrainCountMetric(float64(m.activeDrainCount))
+func (m *Manager) removeDrain(
+	bindingWriterMap map[syslog.Binding]drainHolder,
+	b syslog.Binding,
+) {
+	var active bool
+	if bindingWriterMap[b].drainWriter != nil {
+		active = true
+	}
+
+	bindingWriterMap[b].cancel()
+	delete(bindingWriterMap, b)
+	if len(bindingWriterMap) == 0 {
+		// Prevent memory leak
+		delete(m.sourceDrainMap, b.AppId)
+	}
+
+	if active {
+		m.activeDrainCount--
+		m.activeDrainCountMetric(float64(m.activeDrainCount))
+	}
+}
+
+func (m *Manager) idleCleanupLoop() {
+	t := time.NewTicker(m.idleTimeout)
+	for range t.C {
+		m.idleCleanup()
+	}
+}
+
+func (m *Manager) idleCleanup() {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	currentTime := time.Now()
+	for sID, ts := range m.sourceAccessTimes {
+		if ts.Before(currentTime.Add(-m.idleTimeout)) {
+			for b, dh := range m.sourceDrainMap[sID] {
+				dh.cancel()
+
+				m.sourceDrainMap[sID][b] = newDrainHolder()
+
+				m.activeDrainCount--
+				m.activeDrainCountMetric(float64(m.activeDrainCount))
+			}
 		}
 	}
 }
@@ -155,4 +201,13 @@ type drainHolder struct {
 	ctx         context.Context
 	cancel      func()
 	drainWriter egress.Writer
+}
+
+func newDrainHolder() drainHolder {
+	ctx, cancel := context.WithCancel(context.Background())
+	return drainHolder{
+		ctx:         ctx,
+		cancel:      cancel,
+		drainWriter: nil,
+	}
 }
