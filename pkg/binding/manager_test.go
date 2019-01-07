@@ -50,6 +50,51 @@ var _ = Describe("Manager", func() {
 		Expect(mv).To(BeNumerically("==", 3))
 	})
 
+	It("only creates connections when asked for them", func() {
+		bf.bindings <- []syslog.Binding{
+			{"app-1", "host-1", "syslog://drain.url.com"},
+			{"app-3", "host-3", "syslog://drain.url.com"},
+		}
+		bf.bindings <- []syslog.Binding{
+			{"app-1", "host-1", "syslog://drain.url.com"},
+			{"app-2", "host-2", "syslog://drain.url.com"},
+			{"app-3", "host-3", "syslog://drain.url.com"},
+		}
+
+		go func(bindings chan []syslog.Binding) {
+			for {
+				bindings <- []syslog.Binding{
+					{"app-2", "host-2", "syslog://drain.url.com"},
+					{"app-3", "host-3", "syslog://drain.url.com"},
+				}
+			}
+		}(bf.bindings)
+
+		m := binding.NewManager(
+			bf,
+			c,
+			sm,
+			100*time.Millisecond,
+			log.New(GinkgoWriter, "", 0),
+		)
+		go m.Run()
+
+		Eventually(func() []egress.Writer {
+			return m.GetDrains("app-1")
+		}).Should(HaveLen(1))
+		Expect(c.ConnectionCount()).To(BeNumerically("==", 1))
+
+		Eventually(func() []egress.Writer {
+			return m.GetDrains("app-2")
+		}).Should(HaveLen(1))
+		Expect(c.ConnectionCount()).To(BeNumerically("==", 2))
+
+		Eventually(func() []egress.Writer {
+			return m.GetDrains("app-3")
+		}).Should(HaveLen(1))
+		Expect(c.ConnectionCount()).To(BeNumerically("==", 3))
+	})
+
 	It("polls for updates from the binding fetcher", func() {
 		bf.bindings <- []syslog.Binding{
 			{"app-1", "host-1", "syslog://drain.url.com"},
@@ -83,6 +128,9 @@ var _ = Describe("Manager", func() {
 		Expect(<-sm.metricValues).To(BeNumerically("==", 2))
 		Expect(<-sm.metricValues).To(BeNumerically("==", 3))
 
+		Eventually(func() []egress.Writer {
+			return m.GetDrains("app-1")
+		}).Should(HaveLen(1))
 		Eventually(func() []egress.Writer {
 			return m.GetDrains("app-2")
 		}).Should(HaveLen(1))
@@ -222,6 +270,10 @@ func (s *stubBindingFetcher) FetchBindings() ([]syslog.Binding, error) {
 	case err := <-s.errors:
 		return nil, err
 	}
+}
+
+func (s *stubBindingFetcher) DrainLimit() int {
+	return 100
 }
 
 type spyMetrics struct {

@@ -136,11 +136,7 @@ func (w *SyslogConnector) Connect(ctx context.Context, b Binding) (egress.Writer
 }
 
 func (w *SyslogConnector) emitErrorLog(appID, message string) {
-	option := loggregator.WithAppInfo(
-		appID,
-		"LGR",
-		"", // source instance is unavailable
-	)
+	option := loggregator.WithAppInfo(appID, "LGR", "")
 	w.logClient.EmitLog(message, option)
 
 	option = loggregator.WithAppInfo(

@@ -13,6 +13,7 @@ import (
 
 type Fetcher interface {
 	FetchBindings() ([]syslog.Binding, error)
+	DrainLimit() int
 }
 
 type Metrics interface {
@@ -24,24 +25,28 @@ type Connector interface {
 	Connect(context.Context, syslog.Binding) (egress.Writer, error)
 }
 
-type drainHolder struct {
-	cancel      func()
-	drainWriter egress.Writer
-}
-
 type Manager struct {
 	sync.Mutex
 	bf               Fetcher
+	bfLimit          int
 	drainCountMetric func(float64)
 	pollingInterval  time.Duration
-	sourceDrainMap   map[string]map[syslog.Binding]drainHolder
 	c                Connector
 	log              *log.Logger
+
+	sourceDrainMap map[string]map[syslog.Binding]drainHolder
 }
 
-func NewManager(bf Fetcher, connector Connector, m Metrics, pi time.Duration, log *log.Logger) *Manager {
+func NewManager(
+	bf Fetcher,
+	connector Connector,
+	m Metrics,
+	pi time.Duration,
+	log *log.Logger,
+) *Manager {
 	return &Manager{
 		bf:               bf,
+		bfLimit:          bf.DrainLimit(),
 		drainCountMetric: m.NewGauge("DrainCount"),
 		pollingInterval:  pi,
 		sourceDrainMap:   make(map[string]map[syslog.Binding]drainHolder),
@@ -57,11 +62,11 @@ func (m *Manager) Run() {
 		),
 	) * time.Nanosecond
 
-	t := time.NewTicker(m.pollingInterval + offset)
-
 	bindings, _ := m.bf.FetchBindings()
 	m.drainCountMetric(float64(len(bindings)))
 	m.updateDrains(bindings)
+
+	t := time.NewTicker(m.pollingInterval + offset)
 	for range t.C {
 		bindings, err := m.bf.FetchBindings()
 		if err != nil {
@@ -71,6 +76,27 @@ func (m *Manager) Run() {
 		m.drainCountMetric(float64(len(bindings)))
 		m.updateDrains(bindings)
 	}
+}
+
+func (m *Manager) GetDrains(sourceID string) []egress.Writer {
+	m.Lock()
+	defer m.Unlock()
+
+	drains := make([]egress.Writer, 0, m.bfLimit)
+	for binding, dh := range m.sourceDrainMap[sourceID] {
+		// Create drain writer if one does not already exist
+		if dh.drainWriter == nil {
+			writer, err := m.c.Connect(dh.ctx, binding)
+			if err != nil {
+				m.log.Printf("Failed to create binding: %s", err)
+			}
+			dh.drainWriter = writer
+		}
+
+		drains = append(drains, dh.drainWriter)
+	}
+
+	return drains
 }
 
 func (m *Manager) updateDrains(bindings []syslog.Binding) {
@@ -87,19 +113,15 @@ func (m *Manager) updateDrains(bindings []syslog.Binding) {
 			continue
 		}
 
-		ctx, cancel := context.WithCancel(context.Background())
-		writer, err := m.c.Connect(ctx, b)
-		if err != nil {
-			m.log.Printf("Failed to create binding: %s", err)
-		}
-
 		_, ok = m.sourceDrainMap[b.AppId]
 		if !ok {
 			m.sourceDrainMap[b.AppId] = make(map[syslog.Binding]drainHolder)
 		}
+
+		ctx, cancel := context.WithCancel(context.Background())
 		m.sourceDrainMap[b.AppId][b] = drainHolder{
-			cancel:      cancel,
-			drainWriter: writer,
+			ctx:    ctx,
+			cancel: cancel,
 		}
 	}
 
@@ -121,15 +143,8 @@ func (m *Manager) updateDrains(bindings []syslog.Binding) {
 	}
 }
 
-func (m *Manager) GetDrains(sourceID string) []egress.Writer {
-	m.Lock()
-	defer m.Unlock()
-
-	existing := m.sourceDrainMap[sourceID]
-	drains := make([]egress.Writer, 0, len(existing))
-	for _, dh := range existing {
-		drains = append(drains, dh.drainWriter)
-	}
-
-	return drains
+type drainHolder struct {
+	ctx         context.Context
+	cancel      func()
+	drainWriter egress.Writer
 }

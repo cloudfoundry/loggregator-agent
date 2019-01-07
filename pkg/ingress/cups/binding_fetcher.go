@@ -63,6 +63,10 @@ func (f *BindingFetcher) FetchBindings() ([]syslog.Binding, error) {
 	return syslogBindings, nil
 }
 
+func (f *BindingFetcher) DrainLimit() int {
+	return f.limit
+}
+
 func toSyslogBindings(bs []binding.Binding, perAppLimit int) []syslog.Binding {
 	var bindings []syslog.Binding
 	for _, b := range bs {
