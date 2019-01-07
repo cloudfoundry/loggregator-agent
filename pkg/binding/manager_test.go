@@ -16,7 +16,6 @@ import (
 )
 
 var _ = Describe("Manager", func() {
-
 	var (
 		bf *stubBindingFetcher
 		sm *spyMetrics

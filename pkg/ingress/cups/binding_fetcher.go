@@ -55,9 +55,7 @@ func (f *BindingFetcher) FetchBindings() ([]syslog.Binding, error) {
 	if err != nil {
 		return nil, err
 	}
-	d := time.Since(start)
-	latency = d.Nanoseconds()
-
+	latency = time.Since(start).Nanoseconds()
 	syslogBindings := toSyslogBindings(bindings, f.limit)
 
 	return syslogBindings, nil
