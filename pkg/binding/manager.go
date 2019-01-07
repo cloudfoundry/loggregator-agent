@@ -56,17 +56,12 @@ func NewManager(
 }
 
 func (m *Manager) Run() {
-	offset := time.Duration(
-		rand.Intn(
-			int(m.pollingInterval.Nanoseconds()),
-		),
-	) * time.Nanosecond
-
 	bindings, _ := m.bf.FetchBindings()
 	m.drainCountMetric(float64(len(bindings)))
 	m.updateDrains(bindings)
 
-	t := time.NewTicker(m.pollingInterval + offset)
+	offset := rand.Int63n(m.pollingInterval.Nanoseconds())
+	t := time.NewTicker(m.pollingInterval + time.Duration(offset))
 	for range t.C {
 		bindings, err := m.bf.FetchBindings()
 		if err != nil {
