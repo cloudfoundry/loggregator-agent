@@ -156,6 +156,34 @@ func buildGauge(stat SystemStat) *loggregator_v2.Gauge {
 			Unit:  "Percent",
 			Value: stat.Wait,
 		},
+		"system_network_ip_forwarding": &loggregator_v2.GaugeValue{
+			Unit:  "",
+			Value: float64(stat.ProtoCounters.IPForwarding),
+		},
+		"system_network_udp_no_ports": &loggregator_v2.GaugeValue{
+			Unit:  "",
+			Value: float64(stat.ProtoCounters.UDPNoPorts),
+		},
+		"system_network_udp_in_errors": &loggregator_v2.GaugeValue{
+			Unit:  "",
+			Value: float64(stat.ProtoCounters.UDPInErrors),
+		},
+		"system_network_udp_lite_in_errors": &loggregator_v2.GaugeValue{
+			Unit:  "",
+			Value: float64(stat.ProtoCounters.UDPLiteInErrors),
+		},
+		"system_network_tcp_active_opens": &loggregator_v2.GaugeValue{
+			Unit:  "",
+			Value: float64(stat.ProtoCounters.TCPActiveOpens),
+		},
+		"system_network_tcp_curr_estab": &loggregator_v2.GaugeValue{
+			Unit:  "",
+			Value: float64(stat.ProtoCounters.TCPCurrEstab),
+		},
+		"system_network_tcp_retrans_segs": &loggregator_v2.GaugeValue{
+			Unit:  "",
+			Value: float64(stat.ProtoCounters.TCPRetransSegs),
+		},
 	}
 
 	if stat.SystemDisk.Present {

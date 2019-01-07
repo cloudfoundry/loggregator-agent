@@ -41,6 +41,8 @@ type SystemStat struct {
 	EphemeralDisk  DiskStat
 	PersistentDisk DiskStat
 
+	ProtoCounters ProtoCountersStat
+
 	Networks []NetworkStat
 
 	Health HealthStat
@@ -63,6 +65,17 @@ type DiskStat struct {
 	ReadTime     uint64
 	WriteTime    uint64
 	IOTime       uint64
+}
+
+type ProtoCountersStat struct {
+	IPForwarding    int64
+	UDPNoPorts      int64
+	UDPInErrors     int64
+	UDPLiteInErrors int64
+
+	TCPActiveOpens int64
+	TCPCurrEstab   int64
+	TCPRetransSegs int64
 }
 
 type Collector struct {
@@ -155,6 +168,11 @@ func (c Collector) Collect() (SystemStat, error) {
 		return SystemStat{}, err
 	}
 
+	protoCounters, err := c.protoCountersStat(ctx)
+	if err != nil {
+		return SystemStat{}, err
+	}
+
 	return SystemStat{
 		CPUStat: cpu,
 
@@ -175,6 +193,8 @@ func (c Collector) Collect() (SystemStat, error) {
 		Networks: networks,
 
 		Health: c.healthy(),
+
+		ProtoCounters: protoCounters,
 	}, nil
 }
 
@@ -274,6 +294,33 @@ func (c Collector) networkStat(ctx context.Context) ([]NetworkStat, error) {
 	return ns, nil
 }
 
+func (c Collector) protoCountersStat(ctx context.Context) (ProtoCountersStat, error) {
+	protoCounters, err := c.rawCollector.ProtoCountersWithContext(ctx, []string{"tcp", "udp", "ip", "udplite"})
+	if err != nil {
+		return ProtoCountersStat{}, err
+	}
+
+	protoCountersStat := ProtoCountersStat{}
+
+	for _, pc := range protoCounters {
+		s := pc.Stats
+		switch pc.Protocol {
+		case "ip":
+			protoCountersStat.IPForwarding = s["Forwarding"]
+		case "udp":
+			protoCountersStat.UDPNoPorts = s["NoPorts"]
+			protoCountersStat.UDPInErrors = s["InErrors"]
+		case "udplite":
+			protoCountersStat.UDPLiteInErrors = s["InErrors"]
+		case "tcp":
+			protoCountersStat.TCPActiveOpens = s["ActiveOpens"]
+			protoCountersStat.TCPCurrEstab = s["CurrEstab"]
+			protoCountersStat.TCPRetransSegs = s["RetransSegs"]
+		}
+	}
+	return protoCountersStat, nil
+}
+
 func calculateCPUStat(previous, current cpu.TimesStat) CPUStat {
 	totalDiff := current.Total() - previous.Total()
 
@@ -286,6 +333,7 @@ func calculateCPUStat(previous, current cpu.TimesStat) CPUStat {
 }
 
 type RawCollector interface {
+	ProtoCountersWithContext(context.Context, []string) ([]net.ProtoCountersStat, error)
 	VirtualMemoryWithContext(context.Context) (*mem.VirtualMemoryStat, error)
 	SwapMemoryWithContext(context.Context) (*mem.SwapMemoryStat, error)
 	AvgWithContext(context.Context) (*load.AvgStat, error)
@@ -306,6 +354,10 @@ func WithRawCollector(c RawCollector) CollectorOption {
 }
 
 type defaultRawCollector struct{}
+
+func (s defaultRawCollector) ProtoCountersWithContext(ctx context.Context, protocols []string) ([]net.ProtoCountersStat, error) {
+	return net.ProtoCountersWithContext(ctx, protocols)
+}
 
 func (s defaultRawCollector) VirtualMemoryWithContext(ctx context.Context) (*mem.VirtualMemoryStat, error) {
 	return mem.VirtualMemoryWithContext(ctx)

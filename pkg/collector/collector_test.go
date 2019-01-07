@@ -105,6 +105,22 @@ var _ = Describe("Collector", func() {
 		Expect(stat.DropOut).To(Equal(uint64(80)))
 	})
 
+	It("returns protocol based network metrics", func() {
+		stats, err := c.Collect()
+		Expect(err).ToNot(HaveOccurred())
+
+		Expect(stats.ProtoCounters.UDPNoPorts).To(Equal(int64(1337)))
+		Expect(stats.ProtoCounters.UDPInErrors).To(Equal(int64(1338)))
+
+		Expect(stats.ProtoCounters.UDPLiteInErrors).To(Equal(int64(1339)))
+
+		Expect(stats.ProtoCounters.TCPActiveOpens).To(Equal(int64(1340)))
+		Expect(stats.ProtoCounters.TCPCurrEstab).To(Equal(int64(1341)))
+		Expect(stats.ProtoCounters.TCPRetransSegs).To(Equal(int64(1342)))
+
+		Expect(stats.ProtoCounters.IPForwarding).To(Equal(int64(1343)))
+	})
+
 	It("returns disk metrics", func() {
 		stats, err := c.Collect()
 		Expect(err).ToNot(HaveOccurred())
@@ -204,6 +220,13 @@ var _ = Describe("Collector", func() {
 				collector.WithRawCollector(src),
 			)
 		}).To(Panic())
+	})
+
+	It("returns an error when unable to collect protocol counters", func() {
+		src.protoCountersError = errors.New("an error")
+
+		_, err := c.Collect()
+		Expect(err).To(HaveOccurred())
 	})
 
 	It("returns an health presence as false if we fail to read", func() {
@@ -312,11 +335,49 @@ type stubRawCollector struct {
 	ephemeralDiskUsageErr  error
 	persistentDiskUsageErr error
 
+	protoCountersError error
+
 	partitionsErr error
 
 	healthy            bool
 	healthyInvalidJSON bool
 	healthyErr         error
+}
+
+func (s *stubRawCollector) ProtoCountersWithContext(_ context.Context, protocols []string) ([]net.ProtoCountersStat, error) {
+	if s.protoCountersError != nil {
+		return nil, s.protoCountersError
+	}
+
+	return []net.ProtoCountersStat{
+		{
+			"udp",
+			map[string]int64{
+				"NoPorts":  1337,
+				"InErrors": 1338,
+			},
+		},
+		{
+			"udplite",
+			map[string]int64{
+				"InErrors": 1339,
+			},
+		},
+		{
+			"tcp",
+			map[string]int64{
+				"ActiveOpens": 1340,
+				"CurrEstab":   1341,
+				"RetransSegs": 1342,
+			},
+		},
+		{
+			"ip",
+			map[string]int64{
+				"Forwarding": 1343,
+			},
+		},
+	}, nil
 }
 
 func (s *stubRawCollector) VirtualMemoryWithContext(context.Context) (*mem.VirtualMemoryStat, error) {
