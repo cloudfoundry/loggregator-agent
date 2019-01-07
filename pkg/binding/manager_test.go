@@ -8,9 +8,11 @@ import (
 	"time"
 
 	"code.cloudfoundry.org/go-loggregator/rpc/loggregator_v2"
+	"code.cloudfoundry.org/loggregator-agent/internal/testhelper"
 	"code.cloudfoundry.org/loggregator-agent/pkg/binding"
 	"code.cloudfoundry.org/loggregator-agent/pkg/egress"
 	"code.cloudfoundry.org/loggregator-agent/pkg/egress/syslog"
+
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 )
@@ -18,13 +20,13 @@ import (
 var _ = Describe("Manager", func() {
 	var (
 		bf *stubBindingFetcher
-		sm *spyMetrics
+		sm *testhelper.SpyMetricClient
 		c  *spyConnector
 	)
 
 	BeforeEach(func() {
 		bf = newStubBindingFetcher()
-		sm = newSpyMetrics()
+		sm = testhelper.NewMetricClient()
 		c = newSpyConnector()
 	})
 
@@ -44,9 +46,9 @@ var _ = Describe("Manager", func() {
 		)
 		go m.Run()
 
-		var mv float64
-		Eventually(sm.metricValues).Should(Receive(&mv))
-		Expect(mv).To(BeNumerically("==", 3))
+		Eventually(func() float64 {
+			return sm.GetMetric("DrainCount").GaugeValue()
+		}).Should(BeNumerically("==", 3))
 	})
 
 	It("only creates connections when asked for them", func() {
@@ -99,20 +101,6 @@ var _ = Describe("Manager", func() {
 			{"app-1", "host-1", "syslog://drain.url.com"},
 			{"app-3", "host-3", "syslog://drain.url.com"},
 		}
-		bf.bindings <- []syslog.Binding{
-			{"app-1", "host-1", "syslog://drain.url.com"},
-			{"app-2", "host-2", "syslog://drain.url.com"},
-			{"app-3", "host-3", "syslog://drain.url.com"},
-		}
-
-		go func(bindings chan []syslog.Binding) {
-			for {
-				bindings <- []syslog.Binding{
-					{"app-2", "host-2", "syslog://drain.url.com"},
-					{"app-3", "host-3", "syslog://drain.url.com"},
-				}
-			}
-		}(bf.bindings)
 
 		m := binding.NewManager(
 			bf,
@@ -123,9 +111,28 @@ var _ = Describe("Manager", func() {
 		)
 		go m.Run()
 
-		Eventually(sm.metricValues).Should(HaveLen(2))
-		Expect(<-sm.metricValues).To(BeNumerically("==", 2))
-		Expect(<-sm.metricValues).To(BeNumerically("==", 3))
+		Eventually(func() float64 {
+			return sm.GetMetric("DrainCount").GaugeValue()
+		}).Should(BeNumerically("==", 2))
+
+		bf.bindings <- []syslog.Binding{
+			{"app-1", "host-1", "syslog://drain.url.com"},
+			{"app-2", "host-2", "syslog://drain.url.com"},
+			{"app-3", "host-3", "syslog://drain.url.com"},
+		}
+
+		Eventually(func() float64 {
+			return sm.GetMetric("DrainCount").GaugeValue()
+		}).Should(BeNumerically("==", 3))
+
+		go func(bindings chan []syslog.Binding) {
+			for {
+				bindings <- []syslog.Binding{
+					{"app-2", "host-2", "syslog://drain.url.com"},
+					{"app-3", "host-3", "syslog://drain.url.com"},
+				}
+			}
+		}(bf.bindings)
 
 		Eventually(func() []egress.Writer {
 			return m.GetDrains("app-1")
