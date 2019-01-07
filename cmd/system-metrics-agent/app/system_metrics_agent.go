@@ -9,7 +9,10 @@ import (
 
 	loggregator "code.cloudfoundry.org/go-loggregator"
 	"code.cloudfoundry.org/loggregator-agent/pkg/collector"
+	"code.cloudfoundry.org/loggregator-agent/pkg/egress/stats"
 )
+
+const statOrigin = "system-metrics-agent"
 
 type SystemMetricsAgent struct {
 	cfg      Config
@@ -59,11 +62,13 @@ func (a *SystemMetricsAgent) run() {
 		a.log.Panicf("failed to initialize ingress client: %s", err)
 	}
 
+	loggregatorSender := stats.NewLoggregatorSender(ic.Emit, statOrigin)
+
 	c := collector.New(a.log)
 
 	collector.NewProcessor(
 		c.Collect,
-		ic.Emit,
+		[]collector.StatsSender{loggregatorSender},
 		a.cfg.SampleInterval,
 		a.log,
 	).Run()
