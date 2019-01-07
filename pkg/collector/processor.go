@@ -43,29 +43,39 @@ func (p *Processor) Run() {
 			continue
 		}
 
-		ts := time.Now().UnixNano()
+		systemStats := buildGauge(stat)
+		networkStats := make(map[string]*loggregator_v2.Gauge)
+		for _, network := range stat.Networks {
+			networkStats[network.Name] = buildNetworkGauge(network)
+		}
+
+		p.flushToOutput(systemStats, networkStats)
+	}
+}
+
+func (p *Processor) flushToOutput(systemStats *loggregator_v2.Gauge, networkStats map[string]*loggregator_v2.Gauge) {
+	ts := time.Now().UnixNano()
+	p.out(&loggregator_v2.Envelope{
+		Timestamp: ts,
+		Message: &loggregator_v2.Envelope_Gauge{
+			Gauge: systemStats,
+		},
+		Tags: map[string]string{
+			"origin": envelopeOrigin,
+		},
+	})
+
+	for name, stats := range networkStats {
 		p.out(&loggregator_v2.Envelope{
 			Timestamp: ts,
 			Message: &loggregator_v2.Envelope_Gauge{
-				Gauge: buildGauge(stat),
+				Gauge: stats,
 			},
 			Tags: map[string]string{
-				"origin": envelopeOrigin,
+				"network_interface": name,
+				"origin":            envelopeOrigin,
 			},
 		})
-
-		for _, network := range stat.Networks {
-			p.out(&loggregator_v2.Envelope{
-				Timestamp: ts,
-				Message: &loggregator_v2.Envelope_Gauge{
-					Gauge: buildNetworkGauge(network),
-				},
-				Tags: map[string]string{
-					"network_interface": network.Name,
-					"origin":            envelopeOrigin,
-				},
-			})
-		}
 	}
 }
 

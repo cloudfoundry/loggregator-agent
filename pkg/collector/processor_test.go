@@ -111,19 +111,23 @@ var _ = Describe("Processor", func() {
 		Eventually(stub.outEnvs).Should(Receive(&env))
 		Expect(env.GetTimestamp()).To(BeNumerically(">", 0))
 		Expect(env.GetTags()).To(HaveKeyWithValue("origin", "system-metrics-agent"))
-		Expect(env.GetTags()).To(HaveKeyWithValue("network_interface", "eth0"))
+
+		interfaceName := env.GetTags()["network_interface"]
+		Expect(interfaceName).To(Or(Equal("eth0"), Equal("eth1")))
 
 		Eventually(stub.outEnvs).Should(Receive(&env))
 		Expect(env.GetTimestamp()).To(BeNumerically(">", 0))
 		Expect(env.GetTags()).To(HaveKeyWithValue("origin", "system-metrics-agent"))
-		Expect(env.GetTags()).To(HaveKeyWithValue("network_interface", "eth1"))
+
+		interfaceName = env.GetTags()["network_interface"]
+		Expect(interfaceName).To(Or(Equal("eth0"), Equal("eth1")))
 
 		metrics := env.GetGauge().Metrics
 		Expect(metrics).To(HaveLen(8))
 	})
 
 	DescribeTable("network metrics", func(name, unit string, value float64) {
-		stub.inStats <- networkInput
+		stub.inStats <- singleNetworkInput
 		go processor.Run()
 
 		var env *loggregator_v2.Envelope
@@ -331,6 +335,22 @@ var (
 				ErrOut:          60,
 				DropIn:          70,
 				DropOut:         80,
+			},
+		},
+	}
+
+	singleNetworkInput = collector.SystemStat{
+		Networks: []collector.NetworkStat{
+			{
+				Name:            "eth0",
+				BytesSent:       1,
+				BytesReceived:   2,
+				PacketsSent:     3,
+				PacketsReceived: 4,
+				ErrIn:           5,
+				ErrOut:          6,
+				DropIn:          7,
+				DropOut:         8,
 			},
 		},
 	}
