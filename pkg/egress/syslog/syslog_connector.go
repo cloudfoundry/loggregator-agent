@@ -45,6 +45,7 @@ type SyslogConnector struct {
 	sourceIndex    string
 	writerFactory  writerFactory
 	m              metrics
+	droppedMetric  func(uint64)
 }
 
 // NewSyslogConnector configures and returns a new SyslogConnector.
@@ -64,7 +65,7 @@ func NewSyslogConnector(
 		wg:             wg,
 		logClient:      nullLogClient{},
 		writerFactory:  f,
-		m:              m,
+		droppedMetric:  m.NewCounter("EgressDropped"),
 	}
 	for _, o := range opts {
 		o(sc)
@@ -119,10 +120,8 @@ func (w *SyslogConnector) Connect(ctx context.Context, b Binding) (egress.Writer
 	anonymousUrl := *urlBinding.URL
 	anonymousUrl.User = nil
 
-	droppedMetric := w.m.NewCounter("EgressDropped")
-
 	dw := egress.NewDiodeWriter(ctx, writer, diodes.AlertFunc(func(missed int) {
-		droppedMetric(uint64(missed))
+		w.droppedMetric(uint64(missed))
 
 		w.emitErrorLog(b.AppId, fmt.Sprintf("%d messages lost in user provided syslog drain", missed))
 

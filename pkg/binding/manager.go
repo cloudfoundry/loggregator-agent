@@ -26,13 +26,16 @@ type Connector interface {
 }
 
 type Manager struct {
-	mu               sync.Mutex
-	bf               Fetcher
-	bfLimit          int
-	drainCountMetric func(float64)
-	pollingInterval  time.Duration
-	c                Connector
-	log              *log.Logger
+	mu              sync.Mutex
+	bf              Fetcher
+	bfLimit         int
+	pollingInterval time.Duration
+	connector       Connector
+	log             *log.Logger
+
+	drainCountMetric       func(float64)
+	activeDrainCountMetric func(float64)
+	activeDrainCount       int64
 
 	sourceDrainMap map[string]map[syslog.Binding]drainHolder
 }
@@ -45,13 +48,14 @@ func NewManager(
 	log *log.Logger,
 ) *Manager {
 	return &Manager{
-		bf:               bf,
-		bfLimit:          bf.DrainLimit(),
-		drainCountMetric: m.NewGauge("DrainCount"),
-		pollingInterval:  pi,
-		sourceDrainMap:   make(map[string]map[syslog.Binding]drainHolder),
-		c:                connector,
-		log:              log,
+		bf:                     bf,
+		bfLimit:                bf.DrainLimit(),
+		pollingInterval:        pi,
+		connector:              connector,
+		drainCountMetric:       m.NewGauge("DrainCount"),
+		activeDrainCountMetric: m.NewGauge("ActiveDrainCount"),
+		sourceDrainMap:         make(map[string]map[syslog.Binding]drainHolder),
+		log:                    log,
 	}
 }
 
@@ -81,11 +85,16 @@ func (m *Manager) GetDrains(sourceID string) []egress.Writer {
 	for binding, dh := range m.sourceDrainMap[sourceID] {
 		// Create drain writer if one does not already exist
 		if dh.drainWriter == nil {
-			writer, err := m.c.Connect(dh.ctx, binding)
+			writer, err := m.connector.Connect(dh.ctx, binding)
 			if err != nil {
 				m.log.Printf("Failed to create binding: %s", err)
 			}
+
 			dh.drainWriter = writer
+			m.sourceDrainMap[sourceID][binding] = dh
+
+			m.activeDrainCount++
+			m.activeDrainCountMetric(float64(m.activeDrainCount))
 		}
 
 		drains = append(drains, dh.drainWriter)
@@ -115,8 +124,9 @@ func (m *Manager) updateDrains(bindings []syslog.Binding) {
 
 		ctx, cancel := context.WithCancel(context.Background())
 		m.sourceDrainMap[b.AppId][b] = drainHolder{
-			ctx:    ctx,
-			cancel: cancel,
+			ctx:         ctx,
+			cancel:      cancel,
+			drainWriter: nil,
 		}
 	}
 
@@ -134,6 +144,9 @@ func (m *Manager) updateDrains(bindings []syslog.Binding) {
 				// Prevent memory leak
 				delete(m.sourceDrainMap, appID)
 			}
+
+			m.activeDrainCount--
+			m.activeDrainCountMetric(float64(m.activeDrainCount))
 		}
 	}
 }

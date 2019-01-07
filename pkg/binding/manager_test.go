@@ -84,16 +84,19 @@ var _ = Describe("Manager", func() {
 			return m.GetDrains("app-1")
 		}).Should(HaveLen(1))
 		Expect(c.ConnectionCount()).To(BeNumerically("==", 1))
+		Expect(sm.GetMetric("ActiveDrainCount").GaugeValue()).To(Equal(1.0))
 
 		Eventually(func() []egress.Writer {
 			return m.GetDrains("app-2")
 		}).Should(HaveLen(1))
 		Expect(c.ConnectionCount()).To(BeNumerically("==", 2))
+		Expect(sm.GetMetric("ActiveDrainCount").GaugeValue()).To(Equal(2.0))
 
 		Eventually(func() []egress.Writer {
 			return m.GetDrains("app-3")
 		}).Should(HaveLen(1))
 		Expect(c.ConnectionCount()).To(BeNumerically("==", 3))
+		Expect(sm.GetMetric("ActiveDrainCount").GaugeValue()).To(Equal(3.0))
 	})
 
 	It("polls for updates from the binding fetcher", func() {
@@ -153,6 +156,42 @@ var _ = Describe("Manager", func() {
 		closedBdg := syslog.Binding{"app-1", "host-1", "syslog://drain.url.com"}
 		closedCtx := c.bindingContextMap[closedBdg]
 		Expect(closedCtx.Err()).To(Equal(errors.New("context canceled")))
+	})
+
+	It("removes deleted drains", func() {
+		bf.bindings <- []syslog.Binding{
+			{"app-1", "host-1", "syslog://drain.url.com"},
+			{"app-2", "host-2", "syslog://drain.url.com"},
+			{"app-3", "host-3", "syslog://drain.url.com"},
+		}
+
+		m := binding.NewManager(
+			bf,
+			c,
+			sm,
+			100*time.Millisecond,
+			log.New(GinkgoWriter, "", 0),
+		)
+		go m.Run()
+
+		Eventually(func() []egress.Writer {
+			return m.GetDrains("app-1")
+		}).Should(HaveLen(1))
+		Expect(sm.GetMetric("ActiveDrainCount").GaugeValue()).To(Equal(1.0))
+
+		go func(bindings chan []syslog.Binding) {
+			for {
+				bindings <- []syslog.Binding{
+					{"app-2", "host-2", "syslog://drain.url.com"},
+					{"app-3", "host-3", "syslog://drain.url.com"},
+				}
+			}
+		}(bf.bindings)
+
+		Eventually(func() []egress.Writer {
+			return m.GetDrains("app-1")
+		}).Should(HaveLen(0))
+		Expect(sm.GetMetric("ActiveDrainCount").GaugeValue()).To(Equal(0.0))
 	})
 
 	It("returns drains for a sourceID", func() {
@@ -280,29 +319,4 @@ func (s *stubBindingFetcher) FetchBindings() ([]syslog.Binding, error) {
 
 func (s *stubBindingFetcher) DrainLimit() int {
 	return 100
-}
-
-type spyMetrics struct {
-	name         string
-	metricValues chan float64
-}
-
-func newSpyMetrics() *spyMetrics {
-	return &spyMetrics{
-		metricValues: make(chan float64, 100),
-	}
-}
-
-func (sm *spyMetrics) NewGauge(name string) func(float64) {
-	sm.name = name
-	return func(val float64) {
-		sm.metricValues <- val
-	}
-}
-
-func (sm *spyMetrics) NewCounter(name string) func(uint64) {
-	sm.name = name
-	return func(val uint64) {
-		sm.metricValues <- float64(val)
-	}
 }

@@ -11,12 +11,12 @@ type metrics interface {
 }
 
 type WriterFactory struct {
-	m metrics
+	egressMetric func(uint64)
 }
 
 func NewWriterFactory(m metrics) WriterFactory {
 	return WriterFactory{
-		m: m,
+		egressMetric: m.NewCounter("Egress"),
 	}
 }
 
@@ -31,21 +31,21 @@ func (f WriterFactory) NewWriter(
 			urlBinding,
 			netConf,
 			skipCertVerify,
-			f.m.NewCounter("Egress"),
+			f.egressMetric,
 		), nil
 	case "syslog":
 		return NewTCPWriter(
 			urlBinding,
 			netConf,
 			skipCertVerify,
-			f.m.NewCounter("Egress"),
+			f.egressMetric,
 		), nil
 	case "syslog-tls":
 		return NewTLSWriter(
 			urlBinding,
 			netConf,
 			skipCertVerify,
-			f.m.NewCounter("Egress"),
+			f.egressMetric,
 		), nil
 	default:
 		return nil, errors.New("unsupported protocol")
