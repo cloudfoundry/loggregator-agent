@@ -6,6 +6,7 @@ import (
 	"log"
 	"net"
 	"os/exec"
+	"sync"
 	"time"
 
 	loggregator "code.cloudfoundry.org/go-loggregator"
@@ -31,29 +32,33 @@ var _ = Describe("Main", func() {
 		cfg            app.Config
 		ingressClient  *loggregator.IngressClient
 
-		emitEnvelopes = func(ctx context.Context, d time.Duration) {
+		emitEnvelopes = func(ctx context.Context, d time.Duration, wg *sync.WaitGroup) {
 			go func() {
+				defer wg.Done()
+
 				ticker := time.NewTicker(d)
 				for {
 					select {
-					case <-ticker.C:
-						ingressClient.Emit(sampleEnvelope)
 					case <-ctx.Done():
 						return
+					case <-ticker.C:
+						ingressClient.Emit(sampleEnvelope)
 					}
 				}
 			}()
 		}
 
-		emitCounters = func(ctx context.Context, d time.Duration) {
+		emitCounters = func(ctx context.Context, d time.Duration, wg *sync.WaitGroup) {
 			go func() {
+				defer wg.Done()
+
 				ticker := time.NewTicker(d)
 				for {
 					select {
-					case <-ticker.C:
-						ingressClient.Emit(sampleCounter)
 					case <-ctx.Done():
 						return
+					case <-ticker.C:
+						ingressClient.Emit(sampleCounter)
 					}
 				}
 			}()
@@ -100,8 +105,12 @@ var _ = Describe("Main", func() {
 		go forwarderAgent.Run()
 
 		ctx, cancel := context.WithCancel(context.Background())
+		var wg sync.WaitGroup
+		defer wg.Wait()
 		defer cancel()
-		emitEnvelopes(ctx, 10*time.Millisecond)
+
+		wg.Add(1)
+		emitEnvelopes(ctx, 10*time.Millisecond, &wg)
 
 		var e1, e2 *loggregator_v2.Envelope
 		Eventually(downstream1.envelopes, 5).Should(Receive(&e1))
@@ -119,8 +128,12 @@ var _ = Describe("Main", func() {
 		go forwarderAgent.Run()
 
 		ctx, cancel := context.WithCancel(context.Background())
+		var wg sync.WaitGroup
+		defer wg.Wait()
 		defer cancel()
-		emitCounters(ctx, 10*time.Millisecond)
+
+		wg.Add(1)
+		emitCounters(ctx, 10*time.Millisecond, &wg)
 
 		var e1 *loggregator_v2.Envelope
 		Eventually(downstream1.envelopes, 5).Should(Receive(&e1))
@@ -136,8 +149,12 @@ var _ = Describe("Main", func() {
 		go forwarderAgent.Run()
 
 		ctx, cancel := context.WithCancel(context.Background())
+		var wg sync.WaitGroup
+		defer wg.Wait()
 		defer cancel()
-		emitEnvelopes(ctx, 10*time.Millisecond)
+
+		wg.Add(1)
+		emitEnvelopes(ctx, 10*time.Millisecond, &wg)
 
 		var e1 *loggregator_v2.Envelope
 		Eventually(downstream1.envelopes, 5).Should(Receive(&e1))
@@ -155,8 +172,12 @@ var _ = Describe("Main", func() {
 		go forwarderAgent.Run()
 
 		ctx, cancel := context.WithCancel(context.Background())
+		var wg sync.WaitGroup
+		defer wg.Wait()
 		defer cancel()
-		emitEnvelopes(ctx, 1*time.Millisecond)
+
+		wg.Add(1)
+		emitEnvelopes(ctx, 1*time.Millisecond, &wg)
 
 		Eventually(downstreamNormal.envelopes, 5).Should(Receive())
 
