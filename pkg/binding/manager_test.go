@@ -235,7 +235,12 @@ var _ = Describe("Manager", func() {
 			return sm.GetMetric("ActiveDrainCount").GaugeValue()
 		}).Should(Equal(1.0))
 
-		// It re-activates on another get drains
+		// The active drain count metric should only be decremented once.
+		Consistently(func() float64 {
+			return sm.GetMetric("ActiveDrainCount").GaugeValue()
+		}).Should(Equal(1.0))
+
+		// It re-activates on another get drains.
 		Eventually(func() []egress.Writer {
 			return m.GetDrains("app-1")
 		}).Should(HaveLen(1))

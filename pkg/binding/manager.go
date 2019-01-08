@@ -195,6 +195,8 @@ func (m *Manager) idleCleanup() {
 				m.activeDrainCount--
 				m.activeDrainCountMetric(float64(m.activeDrainCount))
 			}
+
+			delete(m.sourceAccessTimes, sID)
 		}
 	}
 }
