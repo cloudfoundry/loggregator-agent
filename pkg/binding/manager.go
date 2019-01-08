@@ -82,8 +82,10 @@ func (m *Manager) Run() {
 			m.log.Printf("failed to fetch bindings: %s", err)
 			continue
 		}
+
 		m.drainCountMetric(float64(len(bindings)))
 		m.updateDrains(bindings)
+		m.log.Printf("updated drain bindings with %d bindings", len(bindings))
 	}
 }
 
@@ -98,7 +100,7 @@ func (m *Manager) GetDrains(sourceID string) []egress.Writer {
 		if dh.drainWriter == nil {
 			writer, err := m.connector.Connect(dh.ctx, binding)
 			if err != nil {
-				m.log.Printf("Failed to create binding: %s", err)
+				m.log.Printf("failed to create binding: %s", err)
 			}
 
 			dh.drainWriter = writer
