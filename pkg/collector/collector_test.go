@@ -109,6 +109,7 @@ var _ = Describe("Collector", func() {
 		stats, err := c.Collect()
 		Expect(err).ToNot(HaveOccurred())
 
+		Expect(stats.ProtoCounters.Present).To(BeTrue())
 		Expect(stats.ProtoCounters.UDPNoPorts).To(Equal(int64(1337)))
 		Expect(stats.ProtoCounters.UDPInErrors).To(Equal(int64(1338)))
 

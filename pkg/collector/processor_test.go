@@ -146,6 +146,31 @@ var _ = Describe("Processor", func() {
 		Entry("system_network_drop_out", "system_network_drop_out", "Packets", 8.0),
 	)
 
+	It("does not have netstat metrics if protocounters is not present", func() {
+		stub := newStubInputOutput()
+		processor := collector.NewProcessor(
+			stub.input,
+			stub.output,
+			10*time.Millisecond,
+			log.New(GinkgoWriter, "", log.LstdFlags),
+		)
+
+		go processor.Run()
+
+		stub.inStats <- collector.SystemStat{}
+
+		var env *loggregator_v2.Envelope
+		Eventually(stub.outEnvs).Should(Receive(&env))
+
+		Expect(env.GetGauge().Metrics).ToNot(HaveKey("system_network_ip_forwarding"))
+		Expect(env.GetGauge().Metrics).ToNot(HaveKey("system_network_udp_no_ports"))
+		Expect(env.GetGauge().Metrics).ToNot(HaveKey("system_network_udp_in_errors"))
+		Expect(env.GetGauge().Metrics).ToNot(HaveKey("system_network_udp_lite_in_errors"))
+		Expect(env.GetGauge().Metrics).ToNot(HaveKey("system_network_tcp_active_opens"))
+		Expect(env.GetGauge().Metrics).ToNot(HaveKey("system_network_tcp_curr_estab"))
+		Expect(env.GetGauge().Metrics).ToNot(HaveKey("system_network_tcp_retrans_segs"))
+	})
+
 	It("does not have disk metrics if disk is not present", func() {
 		stub := newStubInputOutput()
 		processor := collector.NewProcessor(
@@ -267,6 +292,7 @@ var (
 		},
 
 		ProtoCounters: collector.ProtoCountersStat{
+			Present:         true,
 			IPForwarding:    1,
 			UDPNoPorts:      2,
 			UDPInErrors:     3,

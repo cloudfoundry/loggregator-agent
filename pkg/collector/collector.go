@@ -68,6 +68,8 @@ type DiskStat struct {
 }
 
 type ProtoCountersStat struct {
+	Present bool
+
 	IPForwarding    int64
 	UDPNoPorts      int64
 	UDPInErrors     int64
@@ -300,8 +302,10 @@ func (c Collector) protoCountersStat(ctx context.Context) (ProtoCountersStat, er
 		return ProtoCountersStat{}, err
 	}
 
-	protoCountersStat := ProtoCountersStat{}
-
+	var protoCountersStat ProtoCountersStat
+	if len(protoCounters) > 0 {
+		protoCountersStat.Present = true
+	}
 	for _, pc := range protoCounters {
 		s := pc.Stats
 		switch pc.Protocol {
@@ -354,10 +358,6 @@ func WithRawCollector(c RawCollector) CollectorOption {
 }
 
 type defaultRawCollector struct{}
-
-func (s defaultRawCollector) ProtoCountersWithContext(ctx context.Context, protocols []string) ([]net.ProtoCountersStat, error) {
-	return net.ProtoCountersWithContext(ctx, protocols)
-}
 
 func (s defaultRawCollector) VirtualMemoryWithContext(ctx context.Context) (*mem.VirtualMemoryStat, error) {
 	return mem.VirtualMemoryWithContext(ctx)
