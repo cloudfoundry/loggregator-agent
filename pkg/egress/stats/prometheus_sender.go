@@ -67,6 +67,27 @@ func (p PromSender) setSystemStats(stats collector.SystemStat) {
 	gauge = p.registry.Get("system_load_15m", p.origin, "Load", nil)
 	gauge.Set(float64(stats.Load15M))
 
+	gauge = p.registry.Get("system_network_ip_forwarding", p.origin, "", nil)
+	gauge.Set(float64(stats.ProtoCounters.IPForwarding))
+
+	gauge = p.registry.Get("system_network_udp_no_ports", p.origin, "", nil)
+	gauge.Set(float64(stats.ProtoCounters.UDPNoPorts))
+
+	gauge = p.registry.Get("system_network_udp_in_errors", p.origin, "", nil)
+	gauge.Set(float64(stats.ProtoCounters.UDPInErrors))
+
+	gauge = p.registry.Get("system_network_udp_lite_in_errors", p.origin, "", nil)
+	gauge.Set(float64(stats.ProtoCounters.UDPLiteInErrors))
+
+	gauge = p.registry.Get("system_network_tcp_active_opens", p.origin, "", nil)
+	gauge.Set(float64(stats.ProtoCounters.TCPActiveOpens))
+
+	gauge = p.registry.Get("system_network_tcp_curr_estab", p.origin, "", nil)
+	gauge.Set(float64(stats.ProtoCounters.TCPCurrEstab))
+
+	gauge = p.registry.Get("system_network_tcp_retrans_segs", p.origin, "", nil)
+	gauge.Set(float64(stats.ProtoCounters.TCPRetransSegs))
+
 	if stats.Health.Present {
 		var healthValue float64
 		if stats.Health.Healthy {

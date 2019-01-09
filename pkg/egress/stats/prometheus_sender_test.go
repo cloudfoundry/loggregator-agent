@@ -22,7 +22,7 @@ var _ = Describe("Prometheus Sender", func() {
 	It("gets the correct number of metrics from the registry", func() {
 		sender.Send(defaultInput)
 
-		Expect(registry.gaugeCount).To(Equal(33))
+		Expect(registry.gaugeCount).To(Equal(40))
 	})
 
 	DescribeTable("default metrics", func(name, origin, unit string, value float64) {

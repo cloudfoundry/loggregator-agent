@@ -34,7 +34,7 @@ var _ = Describe("Loggregator Sender", func() {
 		Expect(env.Tags["origin"]).To(Equal("system-metrics-agent"))
 
 		metrics := env.GetGauge().Metrics
-		Expect(metrics).To(HaveLen(33))
+		Expect(metrics).To(HaveLen(40))
 	})
 
 	DescribeTable("default metrics", func(name, unit string, value float64) {
@@ -83,6 +83,13 @@ var _ = Describe("Loggregator Sender", func() {
 		Entry("system_disk_persistent_write_time", "system_disk_persistent_write_time", "ms", 4000.0),
 		Entry("system_disk_persistent_io_time", "system_disk_persistent_io_time", "ms", 5000.0),
 		Entry("system_healthy", "system_healthy", "", 1.0),
+		Entry("system_network_ip_forwarding", "system_network_ip_forwarding", "", 1.0),
+		Entry("system_network_udp_no_ports", "system_network_udp_no_ports", "", 2.0),
+		Entry("system_network_udp_in_errors", "system_network_udp_in_errors", "", 3.0),
+		Entry("system_network_udp_lite_in_errors", "system_network_udp_lite_in_errors", "", 4.0),
+		Entry("system_network_tcp_active_opens", "system_network_tcp_active_opens", "", 5.0),
+		Entry("system_network_tcp_curr_estab", "system_network_tcp_curr_estab", "", 6.0),
+		Entry("system_network_tcp_retrans_segs", "system_network_tcp_retrans_segs", "", 7.0),
 	)
 
 	It("receives stats and sends an envelope on an interval", func() {
@@ -221,6 +228,16 @@ var (
 			ReadTime:   3000,
 			WriteTime:  4000,
 			IOTime:     5000,
+		},
+
+		ProtoCounters: collector.ProtoCountersStat{
+			IPForwarding:    1,
+			UDPNoPorts:      2,
+			UDPInErrors:     3,
+			UDPLiteInErrors: 4,
+			TCPActiveOpens:  5,
+			TCPCurrEstab:    6,
+			TCPRetransSegs:  7,
 		},
 
 		Health: collector.HealthStat{
