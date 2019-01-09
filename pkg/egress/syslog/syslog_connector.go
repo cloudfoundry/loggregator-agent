@@ -119,6 +119,7 @@ func (w *SyslogConnector) Connect(ctx context.Context, b Binding) (egress.Writer
 
 	anonymousUrl := *urlBinding.URL
 	anonymousUrl.User = nil
+	anonymousUrl.RawQuery = ""
 
 	dw := egress.NewDiodeWriter(ctx, writer, diodes.AlertFunc(func(missed int) {
 		w.droppedMetric(uint64(missed))
