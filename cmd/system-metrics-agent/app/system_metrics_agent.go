@@ -10,6 +10,8 @@ import (
 	loggregator "code.cloudfoundry.org/go-loggregator"
 	"code.cloudfoundry.org/loggregator-agent/pkg/collector"
 	"code.cloudfoundry.org/loggregator-agent/pkg/egress/stats"
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 )
 
 const statOrigin = "system-metrics-agent"
@@ -51,8 +53,6 @@ func (a *SystemMetricsAgent) DebugAddr() string {
 }
 
 func (a *SystemMetricsAgent) run() {
-	go http.Serve(a.debugLis, nil)
-
 	ic, err := loggregator.NewIngressClient(
 		a.cfg.TLS.Config(),
 		loggregator.WithAddr(a.cfg.LoggregatorAddr),
@@ -64,11 +64,16 @@ func (a *SystemMetricsAgent) run() {
 
 	loggregatorSender := stats.NewLoggregatorSender(ic.Emit, statOrigin)
 
-	c := collector.New(a.log)
+	promRegisterer := prometheus.NewRegistry()
+	promRegistry := stats.NewPromRegistry(promRegisterer)
+	promSender := stats.NewPromSender(promRegistry, statOrigin)
 
+	go http.Serve(a.debugLis, promhttp.HandlerFor(promRegisterer, promhttp.HandlerOpts{}))
+
+	c := collector.New(a.log)
 	collector.NewProcessor(
 		c.Collect,
-		[]collector.StatsSender{loggregatorSender},
+		[]collector.StatsSender{loggregatorSender, promSender},
 		a.cfg.SampleInterval,
 		a.log,
 	).Run()
