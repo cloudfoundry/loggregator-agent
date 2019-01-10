@@ -12,7 +12,6 @@ import (
 
 	"code.cloudfoundry.org/go-loggregator/rpc/loggregator_v2"
 	"code.cloudfoundry.org/loggregator-agent/pkg/egress"
-	"code.cloudfoundry.org/rfc5424"
 )
 
 // gaugeStructuredDataID contains the registered enterprise ID for the Cloud
@@ -69,6 +68,38 @@ func NewTCPWriter(
 	return w
 }
 
+// Write writes an envelope to the syslog drain connection.
+func (w *TCPWriter) Write(env *loggregator_v2.Envelope) error {
+	conn, err := w.connection()
+	if err != nil {
+		return err
+	}
+
+	msgs, err := ToRFC5424(env, w.hostname, w.appID)
+	if err != nil {
+		return err
+	}
+
+	for _, msg := range msgs {
+		conn.SetWriteDeadline(time.Now().Add(w.writeTimeout))
+		_, err = conn.Write([]byte(strconv.Itoa(len(msg)) + " "))
+		if err != nil {
+			_ = w.Close()
+			return err
+		}
+
+		_, err = conn.Write(msg)
+		if err != nil {
+			_ = w.Close()
+			return err
+		}
+
+		w.egressMetric(1)
+	}
+
+	return nil
+}
+
 func (w *TCPWriter) connection() (net.Conn, error) {
 	if w.conn == nil {
 		return w.connect()
@@ -100,116 +131,6 @@ func (w *TCPWriter) Close() error {
 	return nil
 }
 
-func generateRFC5424Messages(
-	env *loggregator_v2.Envelope,
-	hostname string,
-	appID string,
-) []rfc5424.Message {
-	switch env.GetMessage().(type) {
-	case *loggregator_v2.Envelope_Log:
-		return []rfc5424.Message{
-			{
-				Priority:  generatePriority(env.GetLog().Type),
-				Timestamp: time.Unix(0, env.GetTimestamp()).UTC(),
-				Hostname:  hostname,
-				AppName:   appID,
-				ProcessID: generateProcessID(
-					env.Tags["source_type"],
-					env.InstanceId,
-				),
-				Message: appendNewline(removeNulls(env.GetLog().Payload)),
-			},
-		}
-	case *loggregator_v2.Envelope_Gauge:
-		gauges := make([]rfc5424.Message, 0, 5)
-
-		for name, g := range env.GetGauge().GetMetrics() {
-			gauges = append(gauges, rfc5424.Message{
-				Priority:  rfc5424.Info + rfc5424.User,
-				Timestamp: time.Unix(0, env.GetTimestamp()).UTC(),
-				Hostname:  hostname,
-				AppName:   appID,
-				ProcessID: fmt.Sprintf("[%s]", env.InstanceId),
-				Message:   []byte("\n"),
-				StructuredData: []rfc5424.StructuredData{
-					{
-						ID: gaugeStructuredDataID,
-						Parameters: []rfc5424.SDParam{
-							{
-								Name:  "name",
-								Value: name,
-							},
-							{
-								Name:  "value",
-								Value: strconv.FormatFloat(g.GetValue(), 'g', -1, 64),
-							},
-							{
-								Name:  "unit",
-								Value: g.GetUnit(),
-							},
-						},
-					},
-				},
-			})
-		}
-		return gauges
-
-	case *loggregator_v2.Envelope_Counter:
-		return []rfc5424.Message{
-			{
-				Priority:  rfc5424.Info + rfc5424.User,
-				Timestamp: time.Unix(0, env.GetTimestamp()).UTC(),
-				Hostname:  hostname,
-				AppName:   appID,
-				ProcessID: fmt.Sprintf("[%s]", env.InstanceId),
-				Message:   []byte("\n"),
-				StructuredData: []rfc5424.StructuredData{
-					{
-						ID: counterStructuredDataID,
-						Parameters: []rfc5424.SDParam{
-							{
-								Name:  "name",
-								Value: env.GetCounter().GetName(),
-							},
-							{
-								Name:  "total",
-								Value: fmt.Sprint(env.GetCounter().GetTotal()),
-							},
-							{
-								Name:  "delta",
-								Value: fmt.Sprint(env.GetCounter().GetDelta()),
-							},
-						},
-					},
-				},
-			},
-		}
-	default:
-		return []rfc5424.Message{}
-	}
-}
-
-// Write writes an envelope to the syslog drain connection.
-func (w *TCPWriter) Write(env *loggregator_v2.Envelope) error {
-	msgs := generateRFC5424Messages(env, w.hostname, w.appID)
-	conn, err := w.connection()
-	if err != nil {
-		return err
-	}
-
-	for _, msg := range msgs {
-		conn.SetWriteDeadline(time.Now().Add(w.writeTimeout))
-		_, err = msg.WriteTo(conn)
-		if err != nil {
-			_ = w.Close()
-			return err
-		}
-	}
-	w.egressMetric(1)
-
-	return nil
-}
-
 func removeNulls(msg []byte) []byte {
 	return bytes.Replace(msg, []byte{0}, nil, -1)
 }
@@ -219,17 +140,6 @@ func appendNewline(msg []byte) []byte {
 		msg = append(msg, byte('\n'))
 	}
 	return msg
-}
-
-func generatePriority(logType loggregator_v2.Log_Type) rfc5424.Priority {
-	switch logType {
-	case loggregator_v2.Log_OUT:
-		return rfc5424.Info + rfc5424.User
-	case loggregator_v2.Log_ERR:
-		return rfc5424.Error + rfc5424.User
-	default:
-		return rfc5424.Priority(-1)
-	}
 }
 
 func generateProcessID(sourceType, sourceInstance string) string {

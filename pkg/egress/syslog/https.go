@@ -1,13 +1,8 @@
 package syslog
 
 import (
-	"bytes"
 	"errors"
 	"fmt"
-	"io"
-	"io/ioutil"
-	"net"
-	"net/http"
 	"net/url"
 	"strings"
 	"time"
@@ -15,13 +10,14 @@ import (
 	"code.cloudfoundry.org/go-loggregator/rpc/loggregator_v2"
 	"code.cloudfoundry.org/loggregator-agent/pkg/egress"
 	"code.cloudfoundry.org/loggregator-agent/pkg/plumbing"
+	"github.com/valyala/fasthttp"
 )
 
 type HTTPSWriter struct {
 	hostname     string
 	appID        string
 	url          *url.URL
-	client       *http.Client
+	client       *fasthttp.Client
 	egressMetric func(delta uint64)
 }
 
@@ -44,27 +40,30 @@ func NewHTTPSWriter(
 }
 
 func (w *HTTPSWriter) Write(env *loggregator_v2.Envelope) error {
-	msgs := generateRFC5424Messages(env, w.hostname, w.appID)
-	for _, msg := range msgs {
-		b, err := msg.MarshalBinary()
-		if err != nil {
-			return err
-		}
+	msgs, err := ToRFC5424(env, w.hostname, w.appID)
+	if err != nil {
+		return err
+	}
 
-		resp, err := w.client.Post(w.url.String(), "text/plain", bytes.NewBuffer(b))
+	for _, msg := range msgs {
+		req := fasthttp.AcquireRequest()
+		req.SetRequestURI(w.url.String())
+		req.Header.SetMethod("POST")
+		req.SetBody(msg)
+
+		resp := fasthttp.AcquireResponse()
+
+		err := w.client.Do(req, resp)
 		if err != nil {
 			return w.sanitizeError(w.url, err)
 		}
-		defer func() {
-			io.Copy(ioutil.Discard, resp.Body)
-			resp.Body.Close()
-		}()
 
-		if resp.StatusCode < 200 || resp.StatusCode > 299 {
-			return fmt.Errorf("Syslog Writer: Post responded with %d status code", resp.StatusCode)
+		if resp.StatusCode() < 200 || resp.StatusCode() > 299 {
+			return fmt.Errorf("Syslog Writer: Post responded with %d status code", resp.StatusCode())
 		}
+
+		w.egressMetric(1)
 	}
-	w.egressMetric(1)
 
 	return nil
 }
@@ -88,24 +87,15 @@ func (*HTTPSWriter) Close() error {
 	return nil
 }
 
-func httpClient(netConf NetworkTimeoutConfig, skipCertVerify bool) *http.Client {
+func httpClient(netConf NetworkTimeoutConfig, skipCertVerify bool) *fasthttp.Client {
 	tlsConfig := plumbing.NewTLSConfig()
 	tlsConfig.InsecureSkipVerify = skipCertVerify
 
-	tr := &http.Transport{
-		DialContext: (&net.Dialer{
-			Timeout:   netConf.DialTimeout,
-			KeepAlive: netConf.Keepalive,
-		}).DialContext,
-		MaxIdleConns:          100,
-		IdleConnTimeout:       90 * time.Second,
-		TLSHandshakeTimeout:   10 * time.Second,
-		ExpectContinueTimeout: 1 * time.Second,
-		TLSClientConfig:       tlsConfig,
-	}
-
-	return &http.Client{
-		Transport: tr,
-		Timeout:   60 * time.Second,
+	return &fasthttp.Client{
+		MaxConnsPerHost:     5,
+		MaxIdleConnDuration: 90 * time.Second,
+		TLSConfig:           tlsConfig,
+		ReadTimeout:         20 * time.Second,
+		WriteTimeout:        20 * time.Second,
 	}
 }
