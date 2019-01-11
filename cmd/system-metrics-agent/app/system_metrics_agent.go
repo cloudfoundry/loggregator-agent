@@ -6,15 +6,16 @@ import (
 	"net"
 	"net/http"
 	_ "net/http/pprof"
+	"time"
 
 	loggregator "code.cloudfoundry.org/go-loggregator"
 	"code.cloudfoundry.org/loggregator-agent/pkg/collector"
 	"code.cloudfoundry.org/loggregator-agent/pkg/egress/stats"
-	"code.cloudfoundry.org/loggregator/healthendpoint"
 	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 )
 
-const statOrigin = "system-metrics-agent"
+const statOrigin = "system_metrics_agent"
 
 type SystemMetricsAgent struct {
 	cfg      Config
@@ -69,7 +70,7 @@ func (a *SystemMetricsAgent) run() {
 	promRegistry := stats.NewPromRegistry(promRegisterer)
 	promSender := stats.NewPromSender(promRegistry, statOrigin)
 
-	healthendpoint.StartServer(":0", promRegisterer)
+	startMetricsServer("127.0.0.1:0", promRegisterer)
 
 	c := collector.New(a.log)
 	collector.NewProcessor(
@@ -78,4 +79,27 @@ func (a *SystemMetricsAgent) run() {
 		a.cfg.SampleInterval,
 		a.log,
 	).Run()
+}
+
+func startMetricsServer(addr string, gatherer prometheus.Gatherer) net.Listener {
+	router := http.NewServeMux()
+	router.Handle("/metrics", promhttp.HandlerFor(gatherer, promhttp.HandlerOpts{}))
+
+	server := http.Server{
+		Addr:         addr,
+		ReadTimeout:  5 * time.Second,
+		WriteTimeout: 5 * time.Second,
+		Handler:      router,
+	}
+
+	lis, err := net.Listen("tcp", addr)
+	if err != nil {
+		log.Fatalf("Unable to setup metrics endpoint (%s): %s", addr, err)
+	}
+
+	go func() {
+		log.Printf("Metrics endpoint is listening on %s", lis.Addr().String())
+		log.Printf("Metrics server closing: %s", server.Serve(lis))
+	}()
+	return lis
 }

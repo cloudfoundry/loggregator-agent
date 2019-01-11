@@ -15,8 +15,8 @@ type PromSender struct {
 	origin   string
 }
 
-func NewPromSender(registry GaugeRegistry, origin string) PromSender {
-	return PromSender{
+func NewPromSender(registry GaugeRegistry, origin string) *PromSender {
+	return &PromSender{
 		registry: registry,
 		origin:   origin,
 	}

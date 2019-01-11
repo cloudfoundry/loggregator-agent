@@ -10,7 +10,7 @@ import (
 
 var _ = Describe("Prometheus Sender", func() {
 	var (
-		sender   stats.PromSender
+		sender   *stats.PromSender
 		registry *stubRegistry
 	)
 

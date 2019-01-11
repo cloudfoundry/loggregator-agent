@@ -2,6 +2,8 @@ package stats
 
 import (
 	"fmt"
+	"sort"
+	"strings"
 
 	"github.com/prometheus/client_golang/prometheus"
 )
@@ -19,16 +21,16 @@ func NewPromRegistry(r prometheus.Registerer) *PromRegistry {
 }
 
 func (r *PromRegistry) Get(name, origin, unit string, tags map[string]string) Gauge {
+	if tags == nil {
+		tags = make(map[string]string)
+	}
+	tags["unit"] = unit
+
 	gaugeName := gaugeName(name, origin, unit, tags)
 	g, ok := r.gauges[gaugeName]
 	if ok {
 		return g
 	}
-
-	if tags == nil {
-		tags = make(map[string]string)
-	}
-	tags["unit"] = unit
 
 	g = prometheus.NewGauge(
 		prometheus.GaugeOpts{
@@ -39,11 +41,26 @@ func (r *PromRegistry) Get(name, origin, unit string, tags map[string]string) Ga
 			ConstLabels: tags,
 		},
 	)
-	r.gauges[gaugeName] = g
+
 	r.Registerer.Register(g)
+	r.gauges[gaugeName] = g
 	return g
 }
 
 func gaugeName(name, origin, unit string, tags map[string]string) string {
-	return fmt.Sprintf("%s_%s_%s", name, origin, tags)
+	return fmt.Sprintf("%s_%s_%s", name, origin, sortedTags(tags))
+}
+
+func sortedTags(tags map[string]string) string {
+	var keys []string
+	for k := range tags {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+
+	var t []string
+	for _, k := range keys {
+		t = append(keys, k, tags[k])
+	}
+	return strings.Join(t, "_")
 }
