@@ -12,11 +12,20 @@ var _ = Describe("Prometheus Sender", func() {
 	var (
 		sender   *stats.PromSender
 		registry *stubRegistry
+		labels   map[string]string
 	)
 
 	BeforeEach(func() {
 		registry = newStubRegistry()
-		sender = stats.NewPromSender(registry, "test-origin")
+		labels = map[string]string{
+			"source_id":  "test-origin",
+			"deployment": "test-deployment",
+			"job":        "test-job",
+			"index":      "test-index",
+			"ip":         "test-ip",
+		}
+
+		sender = stats.NewPromSender(registry, "test-origin", labels)
 	})
 
 	It("gets the correct number of metrics from the registry", func() {
@@ -25,12 +34,32 @@ var _ = Describe("Prometheus Sender", func() {
 		Expect(registry.gaugeCount).To(Equal(40))
 	})
 
+	It("does not panic with no default labels", func() {
+		stats.NewPromSender(registry, "test-origin", nil)
+	})
+
+	DescribeTable("default tags", func(tag, value string) {
+		sender.Send(defaultInput)
+
+		gauge := registry.gauges["system_mem_kbtest-originKiB"]
+
+		Expect(gauge.tags[tag]).To(Equal(value))
+	},
+		Entry("origin", "origin", "test-origin"),
+		Entry("source_id", "source_id", "test-origin"),
+		Entry("deployment", "deployment", "test-deployment"),
+		Entry("job", "job", "test-job"),
+		Entry("index", "index", "test-index"),
+		Entry("ip", "ip", "test-ip"),
+	)
+
 	DescribeTable("default metrics", func(name, origin, unit string, value float64) {
 		sender.Send(defaultInput)
 
 		gauge := registry.gauges[name+origin+unit]
 
 		Expect(gauge.value).To(BeNumerically("==", value))
+		Expect(gauge.tags["origin"]).To(Equal("test-origin"))
 	},
 		Entry("system_mem_kb", "system_mem_kb", "test-origin", "KiB", 1025.0),
 		Entry("system_mem_percent", "system_mem_percent", "test-origin", "Percent", 10.01),
@@ -74,6 +103,8 @@ var _ = Describe("Prometheus Sender", func() {
 		Expect(exists).To(BeTrue())
 
 		Expect(gauge.value).To(BeNumerically("==", value))
+		Expect(gauge.tags["network_interface"]).To(Or(Equal("eth0"), Equal("eth1")))
+		Expect(gauge.tags["origin"]).To(Equal("test-origin"))
 	},
 		Entry("system_network_bytes_sent", "system_network_bytes_sent", "test-origin", "Bytes", "eth0", 1.0),
 		Entry("system_network_bytes_received", "system_network_bytes_received", "test-origin", "Bytes", "eth0", 2.0),
@@ -141,6 +172,7 @@ var _ = Describe("Prometheus Sender", func() {
 
 type spyGauge struct {
 	value float64
+	tags  map[string]string
 }
 
 func (g *spyGauge) Set(value float64) {
@@ -167,7 +199,9 @@ func (r *stubRegistry) Get(gaugeName, origin, unit string, tags map[string]strin
 	}
 	key := gaugeName + origin + unit + networkName
 
-	r.gauges[key] = &spyGauge{}
+	r.gauges[key] = &spyGauge{
+		tags: tags,
+	}
 
 	return r.gauges[key]
 }

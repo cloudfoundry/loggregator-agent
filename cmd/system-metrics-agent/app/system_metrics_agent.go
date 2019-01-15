@@ -1,11 +1,13 @@
 package app
 
 import (
+	"context"
 	"fmt"
 	"log"
 	"net"
 	"net/http"
 	_ "net/http/pprof"
+	"sync"
 	"time"
 
 	"code.cloudfoundry.org/loggregator-agent/pkg/collector"
@@ -17,9 +19,12 @@ import (
 const statOrigin = "system_metrics_agent"
 
 type SystemMetricsAgent struct {
-	cfg      Config
-	log      *log.Logger
-	debugLis net.Listener
+	cfg           Config
+	log           *log.Logger
+	debugLis      net.Listener
+	metricsLis    net.Listener
+	metricsServer http.Server
+	mu            sync.Mutex
 }
 
 func NewSystemMetricsAgent(cfg Config, log *log.Logger) *SystemMetricsAgent {
@@ -29,22 +34,28 @@ func NewSystemMetricsAgent(cfg Config, log *log.Logger) *SystemMetricsAgent {
 	}
 }
 
-func (a *SystemMetricsAgent) Run(blocking bool) {
-	var err error
-	a.debugLis, err = net.Listen("tcp", fmt.Sprintf("127.0.0.1:%d", a.cfg.DebugPort))
-	if err != nil {
-		a.log.Panicf("failed to start debug listener: %s", err)
+func (a *SystemMetricsAgent) Run() {
+	a.startDebugServer()
+
+	metricsURL := fmt.Sprintf("127.0.0.1:%d", a.cfg.MetricPort)
+	startMetricsServer(metricsURL)
+}
+
+func (a *SystemMetricsAgent) MetricsAddr() string {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+
+	if a.metricsLis == nil {
+		return ""
 	}
 
-	if blocking {
-		a.run()
-		return
-	}
-
-	go a.run()
+	return a.metricsLis.Addr().String()
 }
 
 func (a *SystemMetricsAgent) DebugAddr() string {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+
 	if a.debugLis == nil {
 		return ""
 	}
@@ -52,44 +63,69 @@ func (a *SystemMetricsAgent) DebugAddr() string {
 	return a.debugLis.Addr().String()
 }
 
-func (a *SystemMetricsAgent) run() {
+func (a *SystemMetricsAgent) Shutdown(ctx context.Context) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+
+	if a.debugLis != nil {
+		a.debugLis.Close()
+	}
+
+	a.metricsServer.Shutdown(ctx)
+}
+
+func (a *SystemMetricsAgent) startDebugServer() {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+
+	var err error
+	a.debugLis, err = net.Listen("tcp", fmt.Sprintf("127.0.0.1:%d", a.cfg.DebugPort))
+	if err != nil {
+		a.log.Panicf("failed to start debug listener: %s", err)
+	}
+
 	go http.Serve(a.debugLis, nil)
+}
+
+func (a *SystemMetricsAgent) startMetricsServer(addr string) {
+	labels := map[string]string{
+		"source_id":  statOrigin,
+		"deployment": a.cfg.Deployment,
+		"job":        a.cfg.Job,
+		"index":      a.cfg.Index,
+		"ip":         a.cfg.IP,
+	}
 
 	promRegisterer := prometheus.NewRegistry()
 	promRegistry := stats.NewPromRegistry(promRegisterer)
-	promSender := stats.NewPromSender(promRegistry, statOrigin)
+	promSender := stats.NewPromSender(promRegistry, statOrigin, labels)
 
-	metricsURL := fmt.Sprintf("127.0.0.1:%d", a.cfg.MetricPort)
-	startMetricsServer(metricsURL, promRegisterer)
-
-	c := collector.New(a.log)
-	collector.NewProcessor(
-		c.Collect,
-		[]collector.StatsSender{promSender},
-		a.cfg.SampleInterval,
-		a.log,
-	).Run()
-}
-
-func startMetricsServer(addr string, gatherer prometheus.Gatherer) net.Listener {
 	router := http.NewServeMux()
-	router.Handle("/metrics", promhttp.HandlerFor(gatherer, promhttp.HandlerOpts{}))
+	router.Handle("/metrics", promhttp.HandlerFor(promRegisterer, promhttp.HandlerOpts{}))
 
-	server := http.Server{
+	a.metricsServer = http.Server{
 		Addr:         addr,
 		ReadTimeout:  5 * time.Second,
 		WriteTimeout: 5 * time.Second,
 		Handler:      router,
 	}
 
-	lis, err := net.Listen("tcp", addr)
+	a.mu.Lock()
+	var err error
+	a.metricsLis, err = net.Listen("tcp", addr)
 	if err != nil {
 		log.Fatalf("Unable to setup metrics endpoint (%s): %s", addr, err)
 	}
+	log.Printf("Metrics endpoint is listening on %s", a.metricsLis.Addr().String())
+	a.mu.Unlock()
 
-	go func() {
-		log.Printf("Metrics endpoint is listening on %s", lis.Addr().String())
-		log.Printf("Metrics server closing: %s", server.Serve(lis))
-	}()
-	return lis
+	c := collector.New(a.log)
+	go collector.NewProcessor(
+		c.Collect,
+		[]collector.StatsSender{promSender},
+		a.cfg.SampleInterval,
+		a.log,
+	).Run()
+
+	log.Printf("Metrics server closing: %s", a.metricsServer.Serve(a.metricsLis))
 }

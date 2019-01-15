@@ -14,5 +14,5 @@ func main() {
 
 	cfg := app.LoadConfig()
 
-	app.NewSystemMetricsAgent(cfg, log).Run(true)
+	app.NewSystemMetricsAgent(cfg, log).Run()
 }
