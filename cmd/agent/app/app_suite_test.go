@@ -12,5 +12,5 @@ import (
 func TestApp(t *testing.T) {
 	log.SetOutput(GinkgoWriter)
 	RegisterFailHandler(Fail)
-	RunSpecs(t, "App Suite")
+	RunSpecs(t, "Agent App Suite")
 }
