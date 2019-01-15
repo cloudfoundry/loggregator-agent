@@ -14,7 +14,8 @@ type Config struct {
 	LoggregatorAddr string        `env:"LOGGREGATOR_ADDR, required, report"`
 	SampleInterval  time.Duration `env:"SAMPLE_INTERVAL,            report"`
 
-	DebugPort uint16 `env:"DEBUG_PORT, report"`
+	DebugPort  uint16 `env:"DEBUG_PORT, report"`
+	MetricPort uint16 `env:"METRIC_PORT, report, required"`
 
 	TLS TLS
 }
@@ -22,6 +23,7 @@ type Config struct {
 func LoadConfig() Config {
 	cfg := Config{
 		SampleInterval: time.Minute,
+		MetricPort:     0,
 	}
 
 	if err := envstruct.Load(&cfg); err != nil {

@@ -59,7 +59,8 @@ func (a *SystemMetricsAgent) run() {
 	promRegistry := stats.NewPromRegistry(promRegisterer)
 	promSender := stats.NewPromSender(promRegistry, statOrigin)
 
-	startMetricsServer("127.0.0.1:0", promRegisterer)
+	metricsURL := fmt.Sprintf("127.0.0.1:%d", a.cfg.MetricPort)
+	startMetricsServer(metricsURL, promRegisterer)
 
 	c := collector.New(a.log)
 	collector.NewProcessor(
