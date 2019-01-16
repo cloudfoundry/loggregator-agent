@@ -4,16 +4,11 @@ import (
 	"context"
 	"io/ioutil"
 	"log"
-	"net"
 	"net/http"
 	"strings"
 	"time"
 
-	"code.cloudfoundry.org/go-loggregator/rpc/loggregator_v2"
 	"code.cloudfoundry.org/loggregator-agent/cmd/system-metrics-agent/app"
-	"code.cloudfoundry.org/loggregator-agent/internal/testhelper"
-	"code.cloudfoundry.org/loggregator-agent/pkg/plumbing"
-	"google.golang.org/grpc"
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/ginkgo/extensions/table"
@@ -22,25 +17,17 @@ import (
 
 var _ = Describe("SystemMetricsAgent", func() {
 	var (
-		loggr *spyLoggregator
 		agent *app.SystemMetricsAgent
 	)
 
 	BeforeEach(func() {
-		loggr = newSpyLoggregator()
 		agent = app.NewSystemMetricsAgent(
 			app.Config{
-				LoggregatorAddr: loggr.addr,
-				SampleInterval:  time.Millisecond,
-				TLS: app.TLS{
-					CAPath:   testhelper.Cert("loggregator-ca.crt"),
-					CertPath: testhelper.Cert("metron.crt"),
-					KeyPath:  testhelper.Cert("metron.key"),
-				},
-				Deployment: "some-deployment",
-				Job:        "some-job",
-				Index:      "some-index",
-				IP:         "some-ip",
+				SampleInterval: time.Millisecond,
+				Deployment:     "some-deployment",
+				Job:            "some-job",
+				Index:          "some-index",
+				IP:             "some-ip",
 			},
 			log.New(GinkgoWriter, "", log.LstdFlags),
 		)
@@ -107,61 +94,5 @@ func hasLabel(addr, label string) func() bool {
 		Expect(err).ToNot(HaveOccurred())
 
 		return strings.Contains(string(body), label)
-	}
-}
-
-type spyLoggregator struct {
-	addr      string
-	close     func()
-	envelopes chan *loggregator_v2.Envelope
-}
-
-func newSpyLoggregator() *spyLoggregator {
-	s := &spyLoggregator{
-		envelopes: make(chan *loggregator_v2.Envelope, 100),
-	}
-
-	serverCreds, err := plumbing.NewServerCredentials(
-		testhelper.Cert("metron.crt"),
-		testhelper.Cert("metron.key"),
-		testhelper.Cert("loggregator-ca.crt"),
-	)
-
-	lis, err := net.Listen("tcp", ":0")
-	if err != nil {
-		panic(err)
-	}
-
-	grpcServer := grpc.NewServer(grpc.Creds(serverCreds))
-	loggregator_v2.RegisterIngressServer(grpcServer, s)
-
-	s.close = func() {
-		lis.Close()
-	}
-	s.addr = lis.Addr().String()
-
-	go grpcServer.Serve(lis)
-
-	return s
-}
-
-func (s *spyLoggregator) Sender(loggregator_v2.Ingress_SenderServer) error {
-	panic("not implemented")
-}
-
-func (s *spyLoggregator) Send(context.Context, *loggregator_v2.EnvelopeBatch) (*loggregator_v2.SendResponse, error) {
-	panic("not implemented")
-}
-
-func (s *spyLoggregator) BatchSender(srv loggregator_v2.Ingress_BatchSenderServer) error {
-	for {
-		batch, err := srv.Recv()
-		if err != nil {
-			return err
-		}
-
-		for _, e := range batch.Batch {
-			s.envelopes <- e
-		}
 	}
 }
