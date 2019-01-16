@@ -78,7 +78,7 @@ func buildEnvelope(name string, value float64) *loggregator_v2.Envelope {
 }
 
 func startScraper(envs ...string) *gexec.Session {
-	path, err := gexec.Build("code.cloudfoundry.org/loggregator-agent/cmd/prom-scraper")
+	path, err := gexec.Build("code.cloudfoundry.org/loggregator-agent/cmd/metric-scraper")
 	if err != nil {
 		panic(err)
 	}

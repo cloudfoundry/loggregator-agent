@@ -12,8 +12,8 @@ import (
 
 func main() {
 	log := log.New(os.Stderr, "", log.LstdFlags)
-	log.Printf("starting Prometheus Scraper...")
-	defer log.Printf("closing Prometheus Scraper...")
+	log.Printf("starting Metrics Scraper...")
+	defer log.Printf("closing Metrics Scraper...")
 
 	cfg := loadConfig(log)
 
