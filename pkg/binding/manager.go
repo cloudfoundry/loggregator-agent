@@ -39,8 +39,8 @@ type Manager struct {
 	activeDrainCountMetric func(float64)
 	activeDrainCount       int64
 
-	sourceDrainMap    sync.Map
-	sourceAccessTimes sync.Map
+	sourceDrainMap    map[string]map[syslog.Binding]drainHolder
+	sourceAccessTimes map[string]time.Time
 }
 
 func NewManager(
@@ -59,7 +59,9 @@ func NewManager(
 		connector:              c,
 		drainCountMetric:       m.NewGauge("DrainCount"),
 		activeDrainCountMetric: m.NewGauge("ActiveDrainCount"),
-		log: log,
+		sourceDrainMap:         make(map[string]map[syslog.Binding]drainHolder),
+		sourceAccessTimes:      make(map[string]time.Time),
+		log:                    log,
 	}
 
 	go manager.idleCleanupLoop()
@@ -88,18 +90,12 @@ func (m *Manager) Run() {
 }
 
 func (m *Manager) GetDrains(sourceID string) []egress.Writer {
-	m.sourceAccessTimes.Store(sourceID, time.Now())
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	m.sourceAccessTimes[sourceID] = time.Now()
 	drains := make([]egress.Writer, 0, m.bfLimit)
-	a, ok := m.sourceDrainMap.Load(sourceID)
-	if !ok {
-		return drains
-	}
-
-	appBindings := a.(*sync.Map)
-	appBindings.Range(func(b, d interface{}) bool {
-		binding := b.(syslog.Binding)
-		dh := d.(drainHolder)
-
+	for binding, dh := range m.sourceDrainMap[sourceID] {
 		// Create drain writer if one does not already exist
 		if dh.drainWriter == nil {
 			writer, err := m.connector.Connect(dh.ctx, binding)
@@ -108,66 +104,68 @@ func (m *Manager) GetDrains(sourceID string) []egress.Writer {
 			}
 
 			dh.drainWriter = writer
-			appBindings.Store(binding, dh)
+			m.sourceDrainMap[sourceID][binding] = dh
 
 			m.activeDrainCount++
 			m.activeDrainCountMetric(float64(m.activeDrainCount))
 		}
 
 		drains = append(drains, dh.drainWriter)
-
-		return true
-	})
+	}
 
 	return drains
 }
 
 func (m *Manager) updateDrains(bindings []syslog.Binding) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
 	newBindings := make(map[syslog.Binding]bool)
 
 	for _, b := range bindings {
 		newBindings[b] = true
 
-		ab, _ := m.sourceDrainMap.LoadOrStore(b.AppId, &sync.Map{})
-		appBindings := ab.(*sync.Map)
-		appBindings.LoadOrStore(b, newDrainHolder())
+		_, ok := m.sourceDrainMap[b.AppId][b]
+		if ok {
+			continue
+		}
+
+		_, ok = m.sourceDrainMap[b.AppId]
+		if !ok {
+			m.sourceDrainMap[b.AppId] = make(map[syslog.Binding]drainHolder)
+		}
+
+		m.sourceDrainMap[b.AppId][b] = newDrainHolder()
 	}
 
 	// Delete all bindings that are not in updated list of bindings.
 	// TODO: this is not optimal, consider lazily storing bindings
-	m.sourceDrainMap.Range(func(_, a interface{}) bool {
-		appBindings := a.(*sync.Map)
-		appBindings.Range(func(b, _ interface{}) bool {
-			binding := b.(syslog.Binding)
-			if newBindings[binding] {
-				return true
+	for _, bindingWriterMap := range m.sourceDrainMap {
+		for b := range bindingWriterMap {
+			if newBindings[b] {
+				continue
 			}
 
-			m.removeDrain(appBindings, binding)
-			return true
-		})
-		return true
-	})
+			m.removeDrain(bindingWriterMap, b)
+		}
+	}
 }
 
 func (m *Manager) removeDrain(
-	bindingWriterMap *sync.Map,
+	bindingWriterMap map[syslog.Binding]drainHolder,
 	b syslog.Binding,
 ) {
-	w, _ := bindingWriterMap.Load(b)
-	writer := w.(drainHolder)
-
 	var active bool
-	if writer.drainWriter != nil {
+	if bindingWriterMap[b].drainWriter != nil {
 		active = true
 	}
 
-	writer.cancel()
-	bindingWriterMap.Delete(b)
-	// if len(bindingWriterMap) == 0 {
-	// 	// Prevent memory leak
-	// 	m.SourceDrainMap.Delete(b.AppId)
-	// }
+	bindingWriterMap[b].cancel()
+	delete(bindingWriterMap, b)
+	if len(bindingWriterMap) == 0 {
+		// Prevent memory leak
+		delete(m.sourceDrainMap, b.AppId)
+	}
 
 	if active {
 		m.activeDrainCount--
@@ -183,35 +181,26 @@ func (m *Manager) idleCleanupLoop() {
 }
 
 func (m *Manager) idleCleanup() {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
 	m.log.Println("starting cleanup of idle drains")
 	currentTime := time.Now()
-	m.sourceAccessTimes.Range(func(s, t interface{}) bool {
-		sID := s.(string)
-		ts := t.(time.Time)
-
+	for sID, ts := range m.sourceAccessTimes {
 		if ts.Before(currentTime.Add(-m.idleTimeout)) {
 			m.log.Println("removing idle drain for source", sID)
-
-			a, _ := m.sourceDrainMap.Load(sID)
-			appBindings := a.(*sync.Map)
-			appBindings.Range(func(b, d interface{}) bool {
-				binding := b.(syslog.Binding)
-				dh := d.(drainHolder)
-
+			for b, dh := range m.sourceDrainMap[sID] {
 				dh.cancel()
 
-				appBindings.Store(binding, newDrainHolder())
+				m.sourceDrainMap[sID][b] = newDrainHolder()
 
 				m.activeDrainCount--
 				m.activeDrainCountMetric(float64(m.activeDrainCount))
+			}
 
-				return true
-			})
-
-			m.sourceAccessTimes.Delete(sID)
+			delete(m.sourceAccessTimes, sID)
 		}
-		return true
-	})
+	}
 }
 
 type drainHolder struct {
