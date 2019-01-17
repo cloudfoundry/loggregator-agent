@@ -1,11 +1,13 @@
 package scraper
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"io/ioutil"
 	"net/http"
 	"strconv"
+	"strings"
 
 	loggregator "code.cloudfoundry.org/go-loggregator"
 	"github.com/wfernandes/app-metrics-plugin/pkg/parser"
@@ -15,7 +17,7 @@ type Scraper struct {
 	doer         Doer
 	metricClient MetricClient
 	sourceID     string
-	addr         string
+	addrProvider func() []string
 }
 
 type Doer interface {
@@ -26,17 +28,32 @@ type MetricClient interface {
 	EmitGauge(opts ...loggregator.EmitGaugeOption)
 }
 
-func New(sourceID, addr string, c MetricClient, d Doer) *Scraper {
+func New(sourceID string, addrProvider func() []string, c MetricClient, d Doer) *Scraper {
 	return &Scraper{
 		doer:         d,
 		sourceID:     sourceID,
-		addr:         addr,
+		addrProvider: addrProvider,
 		metricClient: c,
 	}
 }
 
 func (s *Scraper) Scrape() error {
-	req, err := http.NewRequest(http.MethodGet, s.addr, nil)
+	var errs []string
+	for _, addr := range s.addrProvider() {
+		err := s.scrape(addr)
+		if err != nil {
+			errs = append(errs, err.Error())
+		}
+	}
+
+	if len(errs) > 0 {
+		return errors.New(strings.Join(errs, ","))
+	}
+	return nil
+}
+
+func (s *Scraper) scrape(addr string) error {
+	req, err := http.NewRequest(http.MethodGet, addr, nil)
 	if err != nil {
 		return err
 	}
@@ -83,13 +100,19 @@ func (s *Scraper) Scrape() error {
 				continue
 			}
 
+			sourceID, ok := mm.Labels["source_id"]
+			if !ok {
+				sourceID = s.sourceID
+			}
+			delete(mm.Labels, "source_id")
+
 			s.metricClient.EmitGauge(
-				loggregator.WithGaugeSourceInfo(s.sourceID, ""),
+				loggregator.WithGaugeSourceInfo(sourceID, ""),
 				loggregator.WithGaugeValue(f.Name, v, ""),
 				loggregator.WithEnvelopeTags(mm.Labels),
 			)
 		}
 	}
 
-	return nil
+	return err
 }

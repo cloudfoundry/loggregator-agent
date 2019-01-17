@@ -1,29 +1,30 @@
-package main_test
+package app_test
 
 import (
+	"log"
 	"net"
 	"net/http"
 	"net/http/httptest"
-	"os/exec"
+	"strconv"
 	"strings"
 	"sync"
+	"time"
 
-	"code.cloudfoundry.org/go-loggregator/rpc/loggregator_v2"
-	"code.cloudfoundry.org/loggregator-agent/internal/testhelper"
-	"code.cloudfoundry.org/loggregator-agent/pkg/plumbing"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
-	"github.com/onsi/gomega/gexec"
 	"google.golang.org/grpc"
+
+	"code.cloudfoundry.org/go-loggregator/rpc/loggregator_v2"
+	"code.cloudfoundry.org/loggregator-agent/cmd/metric-scraper/app"
+	"code.cloudfoundry.org/loggregator-agent/internal/testhelper"
+	"code.cloudfoundry.org/loggregator-agent/pkg/plumbing"
 )
 
-var _ = Describe("Main", func() {
+var _ = Describe("App", func() {
 	var (
 		promServer *httptest.Server
-		scrapePort string
 		spyAgent   *spyAgent
-
-		session *gexec.Session
+		testLogger = log.New(GinkgoWriter, "", log.LstdFlags)
 	)
 
 	Describe("when configured with a single metrics_url", func() {
@@ -35,38 +36,43 @@ var _ = Describe("Main", func() {
 				w.Write([]byte(promOutput))
 			}))
 
-			scrapePort = strings.Split(promServer.URL, ":")[2]
-			session = startScraper(
-				"CLIENT_KEY_PATH="+testhelper.Cert("prom-scraper.key"),
-				"CLIENT_CERT_PATH="+testhelper.Cert("prom-scraper.crt"),
-				"CA_CERT_PATH="+testhelper.Cert("loggregator-ca.crt"),
-				"LOGGREGATOR_AGENT_ADDR="+spyAgent.addr,
-				"SOURCE_ID=some-id",
-				"SCRAPE_INTERVAL=100ms",
-				"SCRAPE_PORT="+scrapePort,
-			)
-		})
+			scrapePort, err := strconv.Atoi(strings.Split(promServer.URL, ":")[2])
+			Expect(err).ToNot(HaveOccurred())
 
-		AfterEach(func() {
-			session.Kill()
-			gexec.CleanupBuildArtifacts()
+			cfg := app.Config{
+				ClientKeyPath:          testhelper.Cert("prom-scraper.key"),
+				ClientCertPath:         testhelper.Cert("prom-scraper.crt"),
+				CACertPath:             testhelper.Cert("loggregator-ca.crt"),
+				LoggregatorIngressAddr: spyAgent.addr,
+				ScrapeInterval:         100 * time.Millisecond,
+				ScrapePort:             scrapePort,
+				DefaultSourceID:        "default-id",
+			}
+
+			dnsLookup := func(addr string) ([]net.IP, error) {
+				return []net.IP{
+					net.ParseIP("127.0.0.1"),
+				}, nil
+			}
+			scraper := app.NewMetricScraper(cfg, dnsLookup, testLogger)
+			go scraper.Run()
 		})
 
 		It("scrapes a prometheus endpoint and sends those metrics to a loggregator agent", func() {
 			Eventually(spyAgent.Envelopes).Should(And(
-				ContainElement(buildEnvelope("node_timex_pps_calibration_total", 1)),
-				ContainElement(buildEnvelope("node_timex_pps_error_total", 2)),
-				ContainElement(buildEnvelope("node_timex_pps_frequency_hertz", 3)),
-				ContainElement(buildEnvelope("node_timex_pps_jitter_seconds", 4)),
-				ContainElement(buildEnvelope("node_timex_pps_jitter_total", 5)),
+				ContainElement(buildEnvelope("source-1", "node_timex_pps_calibration_total", 1)),
+				ContainElement(buildEnvelope("source-1", "node_timex_pps_error_total", 2)),
+				ContainElement(buildEnvelope("source-1", "node_timex_pps_frequency_hertz", 3)),
+				ContainElement(buildEnvelope("source-2", "node_timex_pps_jitter_seconds", 4)),
+				ContainElement(buildEnvelope("default-id", "node_timex_pps_jitter_total", 5)),
 			))
 		})
 	})
 })
 
-func buildEnvelope(name string, value float64) *loggregator_v2.Envelope {
+func buildEnvelope(sourceID, name string, value float64) *loggregator_v2.Envelope {
 	return &loggregator_v2.Envelope{
-		SourceId: "some-id",
+		SourceId: sourceID,
 		Message: &loggregator_v2.Envelope_Gauge{
 			Gauge: &loggregator_v2.Gauge{
 				Metrics: map[string]*loggregator_v2.GaugeValue{
@@ -77,36 +83,20 @@ func buildEnvelope(name string, value float64) *loggregator_v2.Envelope {
 	}
 }
 
-func startScraper(envs ...string) *gexec.Session {
-	path, err := gexec.Build("code.cloudfoundry.org/loggregator-agent/cmd/metric-scraper")
-	if err != nil {
-		panic(err)
-	}
-
-	cmd := exec.Command(path)
-	cmd.Env = envs
-	session, err := gexec.Start(cmd, GinkgoWriter, GinkgoWriter)
-	if err != nil {
-		panic(err)
-	}
-
-	return session
-}
-
 const (
 	promOutput = `
 # HELP node_timex_pps_calibration_total Pulse per second count of calibration intervals.
 # TYPE node_timex_pps_calibration_total counter
-node_timex_pps_calibration_total 1
+node_timex_pps_calibration_total{source_id="source-1"} 1
 # HELP node_timex_pps_error_total Pulse per second count of calibration errors.
 # TYPE node_timex_pps_error_total counter
-node_timex_pps_error_total 2
+node_timex_pps_error_total{source_id="source-1"} 2
 # HELP node_timex_pps_frequency_hertz Pulse per second frequency.
 # TYPE node_timex_pps_frequency_hertz gauge
-node_timex_pps_frequency_hertz 3
+node_timex_pps_frequency_hertz{source_id="source-1"} 3
 # HELP node_timex_pps_jitter_seconds Pulse per second jitter.
 # TYPE node_timex_pps_jitter_seconds gauge
-node_timex_pps_jitter_seconds 4
+node_timex_pps_jitter_seconds{source_id="source-2"} 4
 # HELP node_timex_pps_jitter_total Pulse per second count of jitter limit exceeded events.
 # TYPE node_timex_pps_jitter_total counter
 node_timex_pps_jitter_total 5

@@ -37,7 +37,7 @@ func NewSystemMetricsAgent(cfg Config, log *log.Logger) *SystemMetricsAgent {
 func (a *SystemMetricsAgent) Run() {
 	a.startDebugServer()
 
-	metricsURL := fmt.Sprintf("127.0.0.1:%d", a.cfg.MetricPort)
+	metricsURL := fmt.Sprintf(":%d", a.cfg.MetricPort)
 	a.startMetricsServer(metricsURL)
 }
 

@@ -1,4 +1,4 @@
-package main
+package app
 
 import (
 	"log"
@@ -7,21 +7,21 @@ import (
 	envstruct "code.cloudfoundry.org/go-envstruct"
 )
 
-type config struct {
+type Config struct {
 	// Loggregator Agent Certs
 	ClientKeyPath  string `env:"CLIENT_KEY_PATH, report, required"`
 	ClientCertPath string `env:"CLIENT_CERT_PATH, report, required"`
 	CACertPath     string `env:"CA_CERT_PATH, report, required"`
 
 	LoggregatorIngressAddr string `env:"LOGGREGATOR_AGENT_ADDR, report, required"`
-	SourceID               string `env:"SOURCE_ID, report, required"`
+	DefaultSourceID        string `env:"DEFAULT_SOURCE_ID, report, required"`
 
 	ScrapeInterval time.Duration `env:"SCRAPE_INTERVAL, report"`
-	ScrapePort     string        `env:"SCRAPE_PORT, report, required"`
+	ScrapePort     int           `env:"SCRAPE_PORT, report, required"`
 }
 
-func loadConfig(log *log.Logger) config {
-	cfg := config{
+func LoadConfig(log *log.Logger) Config {
+	cfg := Config{
 		ScrapeInterval: time.Minute,
 	}
 
