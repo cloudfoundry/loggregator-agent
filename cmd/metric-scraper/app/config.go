@@ -13,6 +13,12 @@ type Config struct {
 	ClientCertPath string `env:"CLIENT_CERT_PATH, report, required"`
 	CACertPath     string `env:"CA_CERT_PATH, report, required"`
 
+	// System Metrics Agent Certs
+	MetricsKeyPath    string `env:"METRICS_KEY_PATH, report, required"`
+	MetricsCertPath   string `env:"METRICS_CERT_PATH, report, required"`
+	MetricsCACertPath string `env:"METRICS_CA_CERT_PATH, report, required"`
+	MetricsCN         string `env:"METRICS_CA_CN, report, required"`
+
 	LoggregatorIngressAddr string `env:"LOGGREGATOR_AGENT_ADDR, report, required"`
 	DefaultSourceID        string `env:"DEFAULT_SOURCE_ID, report, required"`
 

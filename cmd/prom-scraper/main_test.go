@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os/exec"
+	"strings"
 	"sync"
 
 	"code.cloudfoundry.org/go-loggregator/rpc/loggregator_v2"
@@ -27,14 +28,32 @@ var _ = Describe("Main", func() {
 	Describe("when configured with a single metrics_url", func() {
 		BeforeEach(func() {
 			spyAgent = newSpyAgent()
-			promServer = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+			promServer = httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+				Expect(req.URL.Path).To(Equal("/metrics"))
+
 				w.Write([]byte(promOutput))
 			}))
 
+			tlsConfig, err := plumbing.NewServerMutualTLSConfig(
+				testhelper.Cert("system-metrics-agent-ca.crt"),
+				testhelper.Cert("system-metrics-agent-ca.key"),
+				testhelper.Cert("system-metrics-agent-ca.crt"),
+			)
+			Expect(err).ToNot(HaveOccurred())
+
+			promServer.TLS = tlsConfig
+
+			promServer.StartTLS()
+
+			scrapePort = strings.Split(promServer.URL, ":")[2]
 			session = startScraper(
-				"CLIENT_KEY_PATH="+testhelper.Cert("prom-scraper.key"),
-				"CLIENT_CERT_PATH="+testhelper.Cert("prom-scraper.crt"),
+				"CLIENT_KEY_PATH="+testhelper.Cert("metron.key"),
+				"CLIENT_CERT_PATH="+testhelper.Cert("metron.crt"),
 				"CA_CERT_PATH="+testhelper.Cert("loggregator-ca.crt"),
+				"METRICS_KEY_PATH="+testhelper.Cert("system-metrics-agent-ca.key"),
+				"METRICS_CERT_PATH="+testhelper.Cert("system-metrics-agent-ca.crt"),
+				"METRICS_CA_CERT_PATH="+testhelper.Cert("system-metrics-agent-ca.crt"),
+				"METRICS_CA_CN=systemMetricsAgentCA",
 				"LOGGREGATOR_AGENT_ADDR="+spyAgent.addr,
 				"METRICS_URLS="+promServer.URL,
 				"SOURCE_ID=some-id",
@@ -142,14 +161,6 @@ node_timex_pps_jitter_seconds 4
 # HELP node_timex_pps_jitter_total Pulse per second count of jitter limit exceeded events.
 # TYPE node_timex_pps_jitter_total counter
 node_timex_pps_jitter_total 5
-`
-)
-
-const (
-	promOutput2 = `
-# HELP node2_counter A second counter from another metrics url
-# TYPE node2_counter counter
-node2_counter 6
 `
 )
 

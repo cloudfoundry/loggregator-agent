@@ -14,26 +14,26 @@ import (
 )
 
 type Scraper struct {
-	doer         Doer
-	metricClient MetricClient
-	sourceID     string
-	addrProvider func() []string
+	sourceID            string
+	addrProvider        func() []string
+	metricsEgressClient MetricsEgressClient
+	systemMetricsClient MetricsGetter
 }
 
-type Doer interface {
-	Do(*http.Request) (*http.Response, error)
-}
-
-type MetricClient interface {
+type MetricsEgressClient interface {
 	EmitGauge(opts ...loggregator.EmitGaugeOption)
 }
 
-func New(sourceID string, addrProvider func() []string, c MetricClient, d Doer) *Scraper {
+type MetricsGetter interface {
+	Get(addr string) (*http.Response, error)
+}
+
+func New(sourceID string, addrProvider func() []string, c MetricsEgressClient, sc MetricsGetter) *Scraper {
 	return &Scraper{
-		doer:         d,
-		sourceID:     sourceID,
-		addrProvider: addrProvider,
-		metricClient: c,
+		sourceID:            sourceID,
+		addrProvider:        addrProvider,
+		metricsEgressClient: c,
+		systemMetricsClient: sc,
 	}
 }
 
@@ -53,12 +53,7 @@ func (s *Scraper) Scrape() error {
 }
 
 func (s *Scraper) scrape(addr string) error {
-	req, err := http.NewRequest(http.MethodGet, addr, nil)
-	if err != nil {
-		return err
-	}
-
-	resp, err := s.doer.Do(req)
+	resp, err := s.systemMetricsClient.Get(addr)
 	if err != nil {
 		return err
 	}
@@ -106,7 +101,7 @@ func (s *Scraper) scrape(addr string) error {
 			}
 			delete(mm.Labels, "source_id")
 
-			s.metricClient.EmitGauge(
+			s.metricsEgressClient.EmitGauge(
 				loggregator.WithGaugeSourceInfo(sourceID, ""),
 				loggregator.WithGaugeValue(f.Name, v, ""),
 				loggregator.WithEnvelopeTags(mm.Labels),

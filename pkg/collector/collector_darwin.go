@@ -14,5 +14,5 @@ func (s defaultRawCollector) AvgWithContext(ctx context.Context) (*load.AvgStat,
 }
 
 func (s defaultRawCollector) ProtoCountersWithContext(ctx context.Context, protocols []string) ([]net.ProtoCountersStat, error) {
-	return net.ProtoCountersWithContext(ctx, protocols)
+	return []net.ProtoCountersStat{}, nil
 }

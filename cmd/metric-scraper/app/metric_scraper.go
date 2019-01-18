@@ -2,10 +2,10 @@ package app
 
 import (
 	"log"
-	"net/http"
 	"time"
 
 	loggregator "code.cloudfoundry.org/go-loggregator"
+	"code.cloudfoundry.org/loggregator-agent/pkg/plumbing"
 	"code.cloudfoundry.org/loggregator-agent/pkg/scraper"
 )
 
@@ -44,11 +44,18 @@ func (m *MetricScraper) Run() {
 		m.log.Fatal(err)
 	}
 
+	systemMetricsClient := plumbing.NewTLSHTTPClient(
+		cfg.MetricsCertPath,
+		cfg.MetricsKeyPath,
+		cfg.MetricsCACertPath,
+		cfg.MetricsCN,
+	)
+
 	s := scraper.New(
 		m.cfg.DefaultSourceID,
 		m.urlProvider,
 		client,
-		http.DefaultClient,
+		systemMetricsClient,
 	)
 
 	t := time.NewTicker(m.cfg.ScrapeInterval)

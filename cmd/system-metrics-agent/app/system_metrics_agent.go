@@ -12,6 +12,7 @@ import (
 
 	"code.cloudfoundry.org/loggregator-agent/pkg/collector"
 	"code.cloudfoundry.org/loggregator-agent/pkg/egress/stats"
+	"code.cloudfoundry.org/loggregator-agent/pkg/plumbing"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 )
@@ -105,15 +106,24 @@ func (a *SystemMetricsAgent) startMetricsServer(addr string) {
 	router := http.NewServeMux()
 	router.Handle("/metrics", promhttp.HandlerFor(promRegisterer, promhttp.HandlerOpts{}))
 
+	tlsConfig, err := plumbing.NewServerMutualTLSConfig(
+		a.cfg.CertPath,
+		a.cfg.KeyPath,
+		a.cfg.CACertPath,
+	)
+	if err != nil {
+		log.Fatalf("Unable to setup tls for metrics endpoint (%s): %s", addr, err)
+	}
+
 	a.metricsServer = http.Server{
 		Addr:         addr,
 		ReadTimeout:  5 * time.Second,
 		WriteTimeout: 5 * time.Second,
 		Handler:      router,
+		TLSConfig:    tlsConfig,
 	}
 
 	a.mu.Lock()
-	var err error
 	a.metricsLis, err = net.Listen("tcp", addr)
 	if err != nil {
 		log.Fatalf("Unable to setup metrics endpoint (%s): %s", addr, err)
@@ -128,5 +138,5 @@ func (a *SystemMetricsAgent) startMetricsServer(addr string) {
 		a.log,
 	).Run()
 
-	log.Printf("Metrics server closing: %s", a.metricsServer.Serve(a.metricsLis))
+	log.Printf("Metrics server closing: %s", a.metricsServer.ServeTLS(a.metricsLis, "", ""))
 }
