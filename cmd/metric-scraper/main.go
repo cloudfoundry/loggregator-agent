@@ -2,7 +2,6 @@ package main
 
 import (
 	"log"
-	"net"
 	"os"
 
 	"code.cloudfoundry.org/loggregator-agent/cmd/metric-scraper/app"
@@ -14,5 +13,5 @@ func main() {
 	defer log.Printf("closing Metrics Scraper...")
 
 	cfg := app.LoadConfig(log)
-	app.NewMetricScraper(cfg, net.LookupIP, log).Run()
+	app.NewMetricScraper(cfg, log).Run()
 }

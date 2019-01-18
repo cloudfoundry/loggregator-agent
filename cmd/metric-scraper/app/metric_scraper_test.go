@@ -1,12 +1,16 @@
 package app_test
 
 import (
+	"fmt"
+	"io/ioutil"
 	"log"
 	"net"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
+	"os"
+	"path/filepath"
 	"strconv"
-	"strings"
 	"sync"
 	"time"
 
@@ -22,8 +26,10 @@ import (
 
 var _ = Describe("App", func() {
 	var (
-		promServer *httptest.Server
-		spyAgent   *spyAgent
+		promServer  *httptest.Server
+		spyAgent    *spyAgent
+		dnsFilePath string
+
 		testLogger = log.New(GinkgoWriter, "", log.LstdFlags)
 	)
 
@@ -36,8 +42,13 @@ var _ = Describe("App", func() {
 				w.Write([]byte(promOutput))
 			}))
 
-			scrapePort, err := strconv.Atoi(strings.Split(promServer.URL, ":")[2])
+			u, err := url.Parse(promServer.URL)
 			Expect(err).ToNot(HaveOccurred())
+
+			scrapePort, err := strconv.Atoi(u.Port())
+			Expect(err).ToNot(HaveOccurred())
+
+			dnsFilePath = createDNSFile(u.Hostname())
 
 			cfg := app.Config{
 				ClientKeyPath:          testhelper.Cert("prom-scraper.key"),
@@ -47,15 +58,15 @@ var _ = Describe("App", func() {
 				ScrapeInterval:         100 * time.Millisecond,
 				ScrapePort:             scrapePort,
 				DefaultSourceID:        "default-id",
+				DNSFile:                dnsFilePath,
 			}
 
-			dnsLookup := func(addr string) ([]net.IP, error) {
-				return []net.IP{
-					net.ParseIP("127.0.0.1"),
-				}, nil
-			}
-			scraper := app.NewMetricScraper(cfg, dnsLookup, testLogger)
+			scraper := app.NewMetricScraper(cfg, testLogger)
 			go scraper.Run()
+		})
+
+		AfterEach(func() {
+			os.RemoveAll(filepath.Dir(dnsFilePath))
 		})
 
 		It("scrapes a prometheus endpoint and sends those metrics to a loggregator agent", func() {
@@ -83,6 +94,20 @@ func buildEnvelope(sourceID, name string, value float64) *loggregator_v2.Envelop
 	}
 }
 
+func createDNSFile(URL string) string {
+	contents := fmt.Sprintf(dnsFileTemplate, URL)
+	dir, err := ioutil.TempDir("", "")
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	tmpfn := filepath.Join(dir, "records.json")
+	if err := ioutil.WriteFile(tmpfn, []byte(contents), 0666); err != nil {
+		log.Fatal(err)
+	}
+	return tmpfn
+}
+
 const (
 	promOutput = `
 # HELP node_timex_pps_calibration_total Pulse per second count of calibration intervals.
@@ -101,14 +126,13 @@ node_timex_pps_jitter_seconds{source_id="source-2"} 4
 # TYPE node_timex_pps_jitter_total counter
 node_timex_pps_jitter_total 5
 `
-)
-
-const (
-	promOutput2 = `
-# HELP node2_counter A second counter from another metrics url
-# TYPE node2_counter counter
-node2_counter 6
-`
+	dnsFileTemplate = `{
+	"records": [
+		[
+			%q
+		]
+	]
+}`
 )
 
 type spyAgent struct {

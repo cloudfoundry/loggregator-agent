@@ -2,7 +2,6 @@ package app
 
 import (
 	"log"
-	"net"
 	"net/http"
 	"time"
 
@@ -16,11 +15,11 @@ type MetricScraper struct {
 	urlProvider func() []string
 }
 
-func NewMetricScraper(cfg Config, dnsLookup func(string) ([]net.IP, error), l *log.Logger) *MetricScraper {
+func NewMetricScraper(cfg Config, l *log.Logger) *MetricScraper {
 	return &MetricScraper{
 		cfg:         cfg,
 		log:         l,
-		urlProvider: scraper.NewDNSMetricUrlProvider(dnsLookup, cfg.ScrapePort),
+		urlProvider: scraper.NewDNSMetricUrlProvider(cfg.DNSFile, cfg.ScrapePort),
 	}
 }
 
