@@ -52,9 +52,13 @@ var _ = Describe("App", func() {
 			dnsFilePath = createDNSFile(u.Hostname())
 
 			cfg := app.Config{
-				ClientKeyPath:          testhelper.Cert("prom-scraper.key"),
-				ClientCertPath:         testhelper.Cert("prom-scraper.crt"),
+				ClientKeyPath:          testhelper.Cert("metron.key"),
+				ClientCertPath:         testhelper.Cert("metron.crt"),
 				CACertPath:             testhelper.Cert("loggregator-ca.crt"),
+				MetricsKeyPath:         testhelper.Cert("system-metrics-agent-ca.key"),
+				MetricsCertPath:        testhelper.Cert("system-metrics-agent-ca.crt"),
+				MetricsCACertPath:      testhelper.Cert("system-metrics-agent-ca.crt"),
+				MetricsCN:              "systemMetricsAgentCA",
 				LoggregatorIngressAddr: spyAgent.addr,
 				ScrapeInterval:         100 * time.Millisecond,
 				ScrapePort:             scrapePort,

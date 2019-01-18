@@ -45,10 +45,10 @@ func (m *MetricScraper) Run() {
 	}
 
 	systemMetricsClient := plumbing.NewTLSHTTPClient(
-		cfg.MetricsCertPath,
-		cfg.MetricsKeyPath,
-		cfg.MetricsCACertPath,
-		cfg.MetricsCN,
+		m.cfg.MetricsCertPath,
+		m.cfg.MetricsKeyPath,
+		m.cfg.MetricsCACertPath,
+		m.cfg.MetricsCN,
 	)
 
 	s := scraper.New(
