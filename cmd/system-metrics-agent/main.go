@@ -4,6 +4,8 @@ import (
 	"log"
 	"os"
 
+	"code.cloudfoundry.org/loggregator-agent/pkg/collector"
+
 	"code.cloudfoundry.org/loggregator-agent/cmd/system-metrics-agent/app"
 )
 
@@ -14,5 +16,6 @@ func main() {
 
 	cfg := app.LoadConfig()
 
-	app.NewSystemMetricsAgent(cfg, log).Run()
+	c := collector.New(log)
+	app.NewSystemMetricsAgent(c.Collect, cfg, log).Run()
 }

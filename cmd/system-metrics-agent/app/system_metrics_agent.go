@@ -25,12 +25,14 @@ type SystemMetricsAgent struct {
 	metricsLis    net.Listener
 	metricsServer http.Server
 	mu            sync.Mutex
+	inputFunc     collector.InputFunc
 }
 
-func NewSystemMetricsAgent(cfg Config, log *log.Logger) *SystemMetricsAgent {
+func NewSystemMetricsAgent(i collector.InputFunc, cfg Config, log *log.Logger) *SystemMetricsAgent {
 	return &SystemMetricsAgent{
-		cfg: cfg,
-		log: log,
+		cfg:       cfg,
+		log:       log,
+		inputFunc: i,
 	}
 }
 
@@ -119,9 +121,8 @@ func (a *SystemMetricsAgent) startMetricsServer(addr string) {
 	log.Printf("Metrics endpoint is listening on %s", a.metricsLis.Addr().String())
 	a.mu.Unlock()
 
-	c := collector.New(a.log)
 	go collector.NewProcessor(
-		c.Collect,
+		a.inputFunc,
 		[]collector.StatsSender{promSender},
 		a.cfg.SampleInterval,
 		a.log,
