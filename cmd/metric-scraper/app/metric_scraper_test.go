@@ -31,6 +31,7 @@ var _ = Describe("App", func() {
 		dnsFilePath string
 
 		testLogger = log.New(GinkgoWriter, "", log.LstdFlags)
+		scraper    *app.MetricScraper
 	)
 
 	Describe("when configured with a single metrics_url", func() {
@@ -55,17 +56,18 @@ var _ = Describe("App", func() {
 				ClientCertPath:         testhelper.Cert("prom-scraper.crt"),
 				CACertPath:             testhelper.Cert("loggregator-ca.crt"),
 				LoggregatorIngressAddr: spyAgent.addr,
-				ScrapeInterval:         100 * time.Millisecond,
+				ScrapeInterval:         1 * time.Millisecond,
 				ScrapePort:             scrapePort,
 				DefaultSourceID:        "default-id",
 				DNSFile:                dnsFilePath,
 			}
 
-			scraper := app.NewMetricScraper(cfg, testLogger)
+			scraper = app.NewMetricScraper(cfg, testLogger)
 			go scraper.Run()
 		})
 
 		AfterEach(func() {
+			scraper.Stop()
 			os.RemoveAll(filepath.Dir(dnsFilePath))
 		})
 
@@ -102,6 +104,9 @@ func createDNSFile(URL string) string {
 	}
 
 	tmpfn := filepath.Join(dir, "records.json")
+	tmpfn, err = filepath.Abs(tmpfn)
+	Expect(err).ToNot(HaveOccurred())
+
 	if err := ioutil.WriteFile(tmpfn, []byte(contents), 0666); err != nil {
 		log.Fatal(err)
 	}

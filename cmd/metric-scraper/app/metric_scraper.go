@@ -13,6 +13,7 @@ type MetricScraper struct {
 	cfg         Config
 	log         *log.Logger
 	urlProvider func() []string
+	doneChan    chan struct{}
 }
 
 func NewMetricScraper(cfg Config, l *log.Logger) *MetricScraper {
@@ -20,6 +21,7 @@ func NewMetricScraper(cfg Config, l *log.Logger) *MetricScraper {
 		cfg:         cfg,
 		log:         l,
 		urlProvider: scraper.NewDNSMetricUrlProvider(cfg.DNSFile, cfg.ScrapePort),
+		doneChan:    make(chan struct{}),
 	}
 }
 
@@ -49,9 +51,19 @@ func (m *MetricScraper) Run() {
 		http.DefaultClient,
 	)
 
-	for range time.Tick(m.cfg.ScrapeInterval) {
-		if err := s.Scrape(); err != nil {
-			m.log.Printf("failed to scrape: %s", err)
+	t := time.NewTicker(m.cfg.ScrapeInterval)
+	for {
+		select {
+		case <-t.C:
+			if err := s.Scrape(); err != nil {
+				m.log.Printf("failed to scrape: %s", err)
+			}
+		case <-m.doneChan:
+			return
 		}
 	}
+}
+
+func (m *MetricScraper) Stop() {
+	close(m.doneChan)
 }
