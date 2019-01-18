@@ -5,7 +5,6 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os/exec"
-	"strings"
 	"sync"
 
 	"code.cloudfoundry.org/go-loggregator/rpc/loggregator_v2"
@@ -45,7 +44,6 @@ var _ = Describe("Main", func() {
 
 			promServer.StartTLS()
 
-			scrapePort = strings.Split(promServer.URL, ":")[2]
 			session = startScraper(
 				"CLIENT_KEY_PATH="+testhelper.Cert("metron.key"),
 				"CLIENT_CERT_PATH="+testhelper.Cert("metron.crt"),
@@ -161,6 +159,14 @@ node_timex_pps_jitter_seconds 4
 # HELP node_timex_pps_jitter_total Pulse per second count of jitter limit exceeded events.
 # TYPE node_timex_pps_jitter_total counter
 node_timex_pps_jitter_total 5
+`
+)
+
+const (
+	promOutput2 = `
+# HELP node2_counter A second counter from another metrics url
+# TYPE node2_counter counter
+node2_counter 6
 `
 )
 
