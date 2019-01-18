@@ -56,7 +56,7 @@ var _ = Describe("App", func() {
 				ClientCertPath:         testhelper.Cert("prom-scraper.crt"),
 				CACertPath:             testhelper.Cert("loggregator-ca.crt"),
 				LoggregatorIngressAddr: spyAgent.addr,
-				ScrapeInterval:         1 * time.Millisecond,
+				ScrapeInterval:         100 * time.Millisecond,
 				ScrapePort:             scrapePort,
 				DefaultSourceID:        "default-id",
 				DNSFile:                dnsFilePath,
