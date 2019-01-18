@@ -12,8 +12,8 @@ var _ = Describe("DnsIpProvider", func() {
 		urls := urlProvider()
 
 		Expect(urls).To(ConsistOf(
-			"http://10.0.16.26:9100/metrics",
-			"http://10.0.16.27:9100/metrics",
+			"https://10.0.16.26:9100/metrics",
+			"https://10.0.16.27:9100/metrics",
 		))
 	})
 })

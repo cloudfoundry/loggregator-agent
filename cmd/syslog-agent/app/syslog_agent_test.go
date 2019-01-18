@@ -199,6 +199,7 @@ func emitLogs(ctx context.Context, grpcPort int) {
 				ingressClient.Emit(e)
 				ingressClient.Emit(eTLS)
 			case <-ctx.Done():
+
 				return
 			}
 		}

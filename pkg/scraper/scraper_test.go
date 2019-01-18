@@ -16,13 +16,13 @@ import (
 
 var _ = Describe("Scraper", func() {
 	var (
-		spyDoer         *spyDoer
-		spyMetricClient *spyMetricClient
-		s               *scraper.Scraper
+		spyMetricsGetter *spyMetricsGetter
+		spyMetricClient  *spyMetricClient
+		s                *scraper.Scraper
 	)
 
 	BeforeEach(func() {
-		spyDoer = newSpyDoer()
+		spyMetricsGetter = newSpyMetricsGetter()
 		spyMetricClient = newSpyMetricClient()
 		s = scraper.New(
 			"some-id",
@@ -30,12 +30,12 @@ var _ = Describe("Scraper", func() {
 				return []string{"http://some.url/metrics"}
 			},
 			spyMetricClient,
-			spyDoer,
+			spyMetricsGetter,
 		)
 	})
 
-	It("emits a gauge metric with the default source ID", func() {
-		spyDoer.resp <- &http.Response{
+	It("emits a gauge metric with a default source ID", func() {
+		spyMetricsGetter.resp <- &http.Response{
 			StatusCode: 200,
 			Body:       ioutil.NopCloser(strings.NewReader(promOutput)),
 		}
@@ -52,14 +52,13 @@ var _ = Describe("Scraper", func() {
 			ContainElement(buildEnvelope("some-id", "promhttp_metric_handler_requests_total", 8, map[string]string{"code": "503"})),
 		))
 
-		var req *http.Request
-		Eventually(spyDoer.r).Should(Receive(&req))
-		Expect(req.Method).To(Equal(http.MethodGet))
-		Expect(req.URL.String()).To(Equal("http://some.url/metrics"))
+		var addr string
+		Eventually(spyMetricsGetter.a).Should(Receive(&addr))
+		Expect(addr).To(Equal("http://some.url/metrics"))
 	})
 
 	It("emits a gauge metric with the default source ID", func() {
-		spyDoer.resp <- &http.Response{
+		spyMetricsGetter.resp <- &http.Response{
 			StatusCode: 200,
 			Body:       ioutil.NopCloser(strings.NewReader(smallPromOutput)),
 		}
@@ -70,10 +69,9 @@ var _ = Describe("Scraper", func() {
 			ContainElement(buildEnvelope("source-2", "node_timex_pps_error_total", 2, nil)),
 		))
 
-		var req *http.Request
-		Eventually(spyDoer.r).Should(Receive(&req))
-		Expect(req.Method).To(Equal(http.MethodGet))
-		Expect(req.URL.String()).To(Equal("http://some.url/metrics"))
+		var addr string
+		Eventually(spyMetricsGetter.a).Should(Receive(&addr))
+		Expect(addr).To(Equal("http://some.url/metrics"))
 	})
 
 	It("scrapes all endpoints even when one fails", func() {
@@ -86,14 +84,14 @@ var _ = Describe("Scraper", func() {
 				}
 			},
 			spyMetricClient,
-			spyDoer,
+			spyMetricsGetter,
 		)
 
-		spyDoer.resp <- &http.Response{
+		spyMetricsGetter.resp <- &http.Response{
 			StatusCode: 200,
 			Body:       ioutil.NopCloser(strings.NewReader(promInvalid)),
 		}
-		spyDoer.resp <- &http.Response{
+		spyMetricsGetter.resp <- &http.Response{
 			StatusCode: 200,
 			Body:       ioutil.NopCloser(strings.NewReader(smallPromOutput)),
 		}
@@ -106,20 +104,20 @@ var _ = Describe("Scraper", func() {
 	})
 
 	It("returns an error if the parser fails", func() {
-		spyDoer.resp <- &http.Response{
+		spyMetricsGetter.resp <- &http.Response{
 			StatusCode: 200,
 			Body:       ioutil.NopCloser(strings.NewReader(promInvalid)),
 		}
 		Expect(s.Scrape()).To(HaveOccurred())
 	})
 
-	It("returns an error if Doer returns an error", func() {
-		spyDoer.err = errors.New("some-error")
+	It("returns an error if MetricsGetter returns an error", func() {
+		spyMetricsGetter.err = errors.New("some-error")
 		Expect(s.Scrape()).To(MatchError("some-error"))
 	})
 
 	It("returns an error if the response is not a 200 OK", func() {
-		spyDoer.resp <- &http.Response{
+		spyMetricsGetter.resp <- &http.Response{
 			StatusCode: 400,
 			Body:       ioutil.NopCloser(strings.NewReader("")),
 		}
@@ -127,7 +125,7 @@ var _ = Describe("Scraper", func() {
 	})
 
 	It("ignores unknown metric types", func() {
-		spyDoer.resp <- &http.Response{
+		spyMetricsGetter.resp <- &http.Response{
 			StatusCode: 200,
 			Body:       ioutil.NopCloser(strings.NewReader(promSummary)),
 		}
@@ -231,21 +229,21 @@ func (s *spyMetricClient) EmitGauge(opts ...loggregator.EmitGaugeOption) {
 	s.envelopes = append(s.envelopes, e)
 }
 
-type spyDoer struct {
-	r    chan *http.Request
+type spyMetricsGetter struct {
+	a    chan string
 	resp chan *http.Response
 	err  error
 }
 
-func newSpyDoer() *spyDoer {
-	return &spyDoer{
-		r:    make(chan *http.Request, 100),
+func newSpyMetricsGetter() *spyMetricsGetter {
+	return &spyMetricsGetter{
+		a:    make(chan string, 100),
 		resp: make(chan *http.Response, 100),
 	}
 }
 
-func (s *spyDoer) Do(r *http.Request) (*http.Response, error) {
-	s.r <- r
+func (s *spyMetricsGetter) Get(addr string) (*http.Response, error) {
+	s.a <- addr
 
 	var resp *http.Response
 	select {

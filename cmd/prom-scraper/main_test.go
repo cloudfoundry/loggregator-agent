@@ -32,9 +32,13 @@ var _ = Describe("Main", func() {
 			}))
 
 			session = startScraper(
-				"CLIENT_KEY_PATH="+testhelper.Cert("prom-scraper.key"),
-				"CLIENT_CERT_PATH="+testhelper.Cert("prom-scraper.crt"),
+				"CLIENT_KEY_PATH="+testhelper.Cert("metron.key"),
+				"CLIENT_CERT_PATH="+testhelper.Cert("metron.crt"),
 				"CA_CERT_PATH="+testhelper.Cert("loggregator-ca.crt"),
+				"METRICS_KEY_PATH="+testhelper.Cert("system-metrics-agent-ca.key"),
+				"METRICS_CERT_PATH="+testhelper.Cert("system-metrics-agent-ca.crt"),
+				"METRICS_CA_CERT_PATH="+testhelper.Cert("system-metrics-agent-ca.crt"),
+				"METRICS_CA_CN=systemMetricsAgentCA",
 				"LOGGREGATOR_AGENT_ADDR="+spyAgent.addr,
 				"METRICS_URLS="+promServer.URL,
 				"SOURCE_ID=some-id",

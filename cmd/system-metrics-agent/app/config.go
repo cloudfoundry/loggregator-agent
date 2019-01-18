@@ -17,6 +17,10 @@ type Config struct {
 
 	DebugPort  uint16 `env:"DEBUG_PORT, report"`
 	MetricPort uint16 `env:"METRIC_PORT, report, required"`
+
+	CACertPath string `env:"CA_CERT_PATH, required, report"`
+	CertPath   string `env:"CERT_PATH, required, report"`
+	KeyPath    string `env:"KEY_PATH, required, report"`
 }
 
 func LoadConfig() Config {

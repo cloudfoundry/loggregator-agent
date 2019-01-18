@@ -5,15 +5,15 @@ import (
 	"io/ioutil"
 	"log"
 	"net/http"
-	"strings"
 	"time"
 
 	"code.cloudfoundry.org/loggregator-agent/pkg/collector"
 
 	"code.cloudfoundry.org/loggregator-agent/cmd/system-metrics-agent/app"
+	"code.cloudfoundry.org/loggregator-agent/internal/testhelper"
+	"code.cloudfoundry.org/loggregator-agent/pkg/plumbing"
 
 	. "github.com/onsi/ginkgo"
-	. "github.com/onsi/ginkgo/extensions/table"
 	. "github.com/onsi/gomega"
 )
 
@@ -35,6 +35,9 @@ var _ = Describe("SystemMetricsAgent", func() {
 				Job:            "some-job",
 				Index:          "some-index",
 				IP:             "some-ip",
+				CACertPath:     testhelper.Cert("system-metrics-agent-ca.crt"),
+				CertPath:       testhelper.Cert("system-metrics-agent-ca.crt"),
+				KeyPath:        testhelper.Cert("system-metrics-agent-ca.key"),
 			},
 			log.New(GinkgoWriter, "", log.LstdFlags),
 		)
@@ -65,12 +68,18 @@ var _ = Describe("SystemMetricsAgent", func() {
 			return len(addr)
 		}).ShouldNot(Equal(0))
 
-		resp, err := http.Get("http://" + addr + "/metrics")
+		client := plumbing.NewTLSHTTPClient(
+			testhelper.Cert("system-metrics-agent-ca.crt"),
+			testhelper.Cert("system-metrics-agent-ca.key"),
+			testhelper.Cert("system-metrics-agent-ca.crt"),
+			"systemMetricsCA",
+		)
+		resp, err := client.Get("https://" + addr + "/metrics")
 		Expect(err).ToNot(HaveOccurred())
 		Expect(resp.StatusCode).To(Equal(http.StatusOK))
 	})
 
-	DescribeTable("default prom labels", func(label string) {
+	It("contains default prom labels", func() {
 		go agent.Run()
 		defer agent.Shutdown(context.Background())
 
@@ -80,27 +89,38 @@ var _ = Describe("SystemMetricsAgent", func() {
 			return len(addr)
 		}).ShouldNot(Equal(0))
 
-		Eventually(hasLabel(addr, label)).Should(BeTrue())
-	},
-		Entry("origin", `origin="system_metrics_agent"`),
-		Entry("source_id", `source_id="system_metrics_agent"`),
-		Entry("deployment", `deployment="some-deployment"`),
-		Entry("job", `job="some-job"`),
-		Entry("index", `index="some-index"`),
-		Entry("ip", `ip="some-ip"`),
-	)
+		Eventually(hasDefaultLabels(addr)).Should(BeTrue())
+	})
 })
 
-func hasLabel(addr, label string) func() bool {
+func hasDefaultLabels(addr string) func() bool {
 	return func() bool {
-		resp, err := http.Get("http://" + addr + "/metrics")
+		client := plumbing.NewTLSHTTPClient(
+			testhelper.Cert("system-metrics-agent-ca.crt"),
+			testhelper.Cert("system-metrics-agent-ca.key"),
+			testhelper.Cert("system-metrics-agent-ca.crt"),
+			"systemMetricsCA",
+		)
+		resp, err := client.Get("https://" + addr + "/metrics")
 		Expect(err).ToNot(HaveOccurred())
 		Expect(resp.StatusCode).To(Equal(http.StatusOK))
 
 		body, err := ioutil.ReadAll(resp.Body)
 		Expect(err).ToNot(HaveOccurred())
 
-		return strings.Contains(string(body), label)
+		if len(body) > 0 {
+			bodyStr := string(body)
+			Expect(bodyStr).To(ContainSubstring(`origin="system_metrics_agent"`))
+			Expect(bodyStr).To(ContainSubstring(`source_id="system_metrics_agent"`))
+			Expect(bodyStr).To(ContainSubstring(`deployment="some-deployment"`))
+			Expect(bodyStr).To(ContainSubstring(`job="some-job"`))
+			Expect(bodyStr).To(ContainSubstring(`index="some-index"`))
+			Expect(bodyStr).To(ContainSubstring(`ip="some-ip"`))
+
+			return true
+		}
+
+		return false
 	}
 }
 

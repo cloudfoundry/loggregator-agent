@@ -30,7 +30,7 @@ func NewDNSMetricUrlProvider(dnsFile string, port int) func() []string {
 		var metricAddrs []string
 		for _, r := range d.Records {
 			ip := r[0]
-			metricAddrs = append(metricAddrs, fmt.Sprintf("http://%s:%d/metrics", ip, port))
+			metricAddrs = append(metricAddrs, fmt.Sprintf("https://%s:%d/metrics", ip, port))
 		}
 
 		return metricAddrs

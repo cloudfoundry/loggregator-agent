@@ -38,11 +38,22 @@ var _ = Describe("App", func() {
 	Describe("when configured with a single metrics_url", func() {
 		BeforeEach(func() {
 			spyAgent = newSpyAgent()
-			promServer = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+			promServer = httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
 				Expect(req.URL.Path).To(Equal("/metrics"))
 
 				w.Write([]byte(promOutput))
 			}))
+
+			tlsConfig, err := plumbing.NewServerMutualTLSConfig(
+				testhelper.Cert("system-metrics-agent-ca.crt"),
+				testhelper.Cert("system-metrics-agent-ca.key"),
+				testhelper.Cert("system-metrics-agent-ca.crt"),
+			)
+			Expect(err).ToNot(HaveOccurred())
+
+			promServer.TLS = tlsConfig
+
+			promServer.StartTLS()
 
 			u, err := url.Parse(promServer.URL)
 			Expect(err).ToNot(HaveOccurred())
@@ -53,9 +64,13 @@ var _ = Describe("App", func() {
 			dnsFilePath = createDNSFile(u.Hostname())
 
 			cfg = app.Config{
-				ClientKeyPath:          testhelper.Cert("prom-scraper.key"),
-				ClientCertPath:         testhelper.Cert("prom-scraper.crt"),
+				ClientKeyPath:          testhelper.Cert("metron.key"),
+				ClientCertPath:         testhelper.Cert("metron.crt"),
 				CACertPath:             testhelper.Cert("loggregator-ca.crt"),
+				MetricsKeyPath:         testhelper.Cert("system-metrics-agent-ca.key"),
+				MetricsCertPath:        testhelper.Cert("system-metrics-agent-ca.crt"),
+				MetricsCACertPath:      testhelper.Cert("system-metrics-agent-ca.crt"),
+				MetricsCN:              "systemMetricsCA",
 				LoggregatorIngressAddr: spyAgent.addr,
 				ScrapeInterval:         100 * time.Millisecond,
 				ScrapePort:             scrapePort,
