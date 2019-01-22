@@ -26,6 +26,15 @@ func NewMetricScraper(cfg Config, l *log.Logger) *MetricScraper {
 }
 
 func (m *MetricScraper) Run() {
+	if m.cfg.ShouldScrape {
+		m.scrape()
+		return
+	}
+
+	<-m.doneChan
+}
+
+func (m *MetricScraper) scrape() {
 	creds, err := loggregator.NewIngressTLSConfig(
 		m.cfg.CACertPath,
 		m.cfg.ClientCertPath,

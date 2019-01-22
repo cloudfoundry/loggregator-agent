@@ -18,8 +18,9 @@ type Config struct {
 
 	ScrapeInterval time.Duration `env:"SCRAPE_INTERVAL, report"`
 	ScrapePort     int           `env:"SCRAPE_PORT, report, required"`
+	ShouldScrape   bool          `env:"SHOULD_SCRAPE, report"`
 
-	DNSFile string `env:"DNS_FILE", report, required`
+	DNSFile string `env:"DNS_FILE, report, required"`
 }
 
 func LoadConfig(log *log.Logger) Config {

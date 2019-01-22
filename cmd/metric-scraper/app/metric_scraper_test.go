@@ -29,9 +29,10 @@ var _ = Describe("App", func() {
 		promServer  *httptest.Server
 		spyAgent    *spyAgent
 		dnsFilePath string
+		scraper     *app.MetricScraper
+		cfg         app.Config
 
 		testLogger = log.New(GinkgoWriter, "", log.LstdFlags)
-		scraper    *app.MetricScraper
 	)
 
 	Describe("when configured with a single metrics_url", func() {
@@ -51,7 +52,7 @@ var _ = Describe("App", func() {
 
 			dnsFilePath = createDNSFile(u.Hostname())
 
-			cfg := app.Config{
+			cfg = app.Config{
 				ClientKeyPath:          testhelper.Cert("prom-scraper.key"),
 				ClientCertPath:         testhelper.Cert("prom-scraper.crt"),
 				CACertPath:             testhelper.Cert("loggregator-ca.crt"),
@@ -60,10 +61,8 @@ var _ = Describe("App", func() {
 				ScrapePort:             scrapePort,
 				DefaultSourceID:        "default-id",
 				DNSFile:                dnsFilePath,
+				ShouldScrape:           true,
 			}
-
-			scraper = app.NewMetricScraper(cfg, testLogger)
-			go scraper.Run()
 		})
 
 		AfterEach(func() {
@@ -72,6 +71,9 @@ var _ = Describe("App", func() {
 		})
 
 		It("scrapes a prometheus endpoint and sends those metrics to a loggregator agent", func() {
+			scraper = app.NewMetricScraper(cfg, testLogger)
+			go scraper.Run()
+
 			Eventually(spyAgent.Envelopes).Should(And(
 				ContainElement(buildEnvelope("source-1", "node_timex_pps_calibration_total", 1)),
 				ContainElement(buildEnvelope("source-1", "node_timex_pps_error_total", 2)),
@@ -79,6 +81,14 @@ var _ = Describe("App", func() {
 				ContainElement(buildEnvelope("source-2", "node_timex_pps_jitter_seconds", 4)),
 				ContainElement(buildEnvelope("default-id", "node_timex_pps_jitter_total", 5)),
 			))
+		})
+
+		It("doesn't scrape when ShouldScrape is false", func() {
+			cfg.ShouldScrape = false
+			scraper = app.NewMetricScraper(cfg, testLogger)
+			go scraper.Run()
+
+			Consistently(spyAgent.Envelopes, 1).Should(HaveLen(0))
 		})
 	})
 })
