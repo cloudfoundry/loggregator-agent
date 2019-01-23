@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"log"
+	"strings"
 	"sync/atomic"
 	"time"
 
@@ -315,6 +316,26 @@ var _ = Describe("Manager", func() {
 			return len(m.GetDrains("app-1"))
 		}).Should(Equal(1))
 	})
+
+	It("should not return a drain for binding to an invalid address", func() {
+		bf.bindings <- []syslog.Binding{
+			{"app-1", "host-1", "syslog-v3-v3://drain.url.com"},
+		}
+
+		m := binding.NewManager(
+			bf,
+			c,
+			sm,
+			10*time.Millisecond,
+			10*time.Minute,
+			log.New(GinkgoWriter, "", 0),
+		)
+		go m.Run()
+
+		Consistently(func() int {
+			return len(m.GetDrains("app-1"))
+		}).Should(Equal(0))
+	})
 })
 
 type spyDrain struct {
@@ -349,9 +370,13 @@ func (c *spyConnector) ConnectionCount() int64 {
 }
 
 func (c *spyConnector) Connect(ctx context.Context, b syslog.Binding) (egress.Writer, error) {
-	c.bindingContextMap[b] = ctx
-	atomic.AddInt64(&c.connectionCount, 1)
-	return newSpyDrain(), nil
+	if strings.HasPrefix(b.Drain, "syslog://") {
+		c.bindingContextMap[b] = ctx
+		atomic.AddInt64(&c.connectionCount, 1)
+		return newSpyDrain(), nil
+	}
+
+	return nil, errors.New("invalid hostname")
 }
 
 type stubBindingFetcher struct {
