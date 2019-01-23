@@ -34,8 +34,6 @@ func (r *PromRegistry) Get(name, origin, unit string, tags map[string]string) Ga
 
 	g = prometheus.NewGauge(
 		prometheus.GaugeOpts{
-			Namespace:   origin,
-			Subsystem:   "",
 			Name:        name,
 			Help:        "vm metric",
 			ConstLabels: tags,
