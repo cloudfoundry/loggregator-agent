@@ -87,7 +87,6 @@ func (m *Manager) Run() {
 
 		m.drainCountMetric(float64(len(bindings)))
 		m.updateDrains(bindings)
-		m.log.Printf("updated drain bindings with %d bindings", len(bindings))
 	}
 }
 
@@ -191,11 +190,9 @@ func (m *Manager) idleCleanup() {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	m.log.Println("starting cleanup of idle drains")
 	currentTime := time.Now()
 	for sID, ts := range m.sourceAccessTimes {
 		if ts.Before(currentTime.Add(-m.idleTimeout)) {
-			m.log.Println("removing idle drain for source", sID)
 			for b, dh := range m.sourceDrainMap[sID] {
 				dh.cancel()
 
