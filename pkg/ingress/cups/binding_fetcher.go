@@ -24,19 +24,21 @@ type Getter interface {
 
 // BindingFetcher uses a Getter to fetch and decode Bindings
 type BindingFetcher struct {
-	refreshCount func(uint64)
-	maxLatency   func(float64)
-	limit        int
-	getter       Getter
+	refreshCount  func(uint64)
+	maxLatency    func(float64)
+	invalidDrains func(float64)
+	limit         int
+	getter        Getter
 }
 
 // NewBindingFetcher returns a new BindingFetcher
 func NewBindingFetcher(limit int, g Getter, m Metrics) *BindingFetcher {
 	return &BindingFetcher{
-		limit:        limit,
-		getter:       g,
-		refreshCount: m.NewCounter("BindingRefreshCount"),
-		maxLatency:   m.NewGauge("LatencyForLastBindingRefreshMS"),
+		limit:         limit,
+		getter:        g,
+		refreshCount:  m.NewCounter("BindingRefreshCount"),
+		maxLatency:    m.NewGauge("LatencyForLastBindingRefreshMS"),
+		invalidDrains: m.NewGauge("InvalidDrains"),
 	}
 }
 
@@ -56,7 +58,7 @@ func (f *BindingFetcher) FetchBindings() ([]syslog.Binding, error) {
 		return nil, err
 	}
 	latency = time.Since(start).Nanoseconds()
-	syslogBindings := toSyslogBindings(bindings, f.limit)
+	syslogBindings := f.toSyslogBindings(bindings, f.limit)
 
 	return syslogBindings, nil
 }
@@ -65,7 +67,7 @@ func (f *BindingFetcher) DrainLimit() int {
 	return f.limit
 }
 
-func toSyslogBindings(bs []binding.Binding, perAppLimit int) []syslog.Binding {
+func (f *BindingFetcher) toSyslogBindings(bs []binding.Binding, perAppLimit int) []syslog.Binding {
 	var bindings []syslog.Binding
 	for _, b := range bs {
 		drains := b.Drains
@@ -74,9 +76,12 @@ func toSyslogBindings(bs []binding.Binding, perAppLimit int) []syslog.Binding {
 		if perAppLimit < len(drains) {
 			drains = drains[:perAppLimit]
 		}
+
+		var invalidDrains int
 		for _, d := range drains {
 			// TODO: remove prefix when forwarder-agent is no longer
 			// feature-flagged
+
 			u, err := url.Parse(d)
 			if err != nil {
 				continue
@@ -84,6 +89,11 @@ func toSyslogBindings(bs []binding.Binding, perAppLimit int) []syslog.Binding {
 
 			if strings.HasSuffix(u.Scheme, "-v3") {
 				u.Scheme = strings.TrimSuffix(u.Scheme, "-v3")
+				if !syslog.IsValidSyslogScheme(u.Scheme) {
+					invalidDrains++
+					continue
+				}
+
 				binding := syslog.Binding{
 					AppId:    b.AppID,
 					Hostname: b.Hostname,
@@ -92,6 +102,7 @@ func toSyslogBindings(bs []binding.Binding, perAppLimit int) []syslog.Binding {
 				bindings = append(bindings, binding)
 			}
 		}
+		f.invalidDrains(float64(invalidDrains))
 	}
 	return bindings
 }

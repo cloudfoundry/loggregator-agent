@@ -332,19 +332,9 @@ var _ = Describe("Manager", func() {
 		)
 		go m.Run()
 
-		var maxInvalidDrains float64
 		Consistently(func() []egress.Writer {
-			drains := m.GetDrains("app-1")
-
-			invalidDrains := sm.GetMetric("InvalidDrains").GaugeValue()
-			if invalidDrains > maxInvalidDrains {
-				maxInvalidDrains = invalidDrains
-			}
-
-			return drains
+			return m.GetDrains("app-1")
 		}).Should(HaveLen(0))
-
-		Expect(maxInvalidDrains).To(Equal(1.0))
 	})
 })
 
