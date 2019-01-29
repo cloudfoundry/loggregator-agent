@@ -332,14 +332,23 @@ var _ = Describe("Manager", func() {
 		)
 		go m.Run()
 
-		Consistently(func() int {
-			return len(m.GetDrains("app-1"))
-		}).Should(Equal(0))
+		var maxInvalidDrains float64
+		Consistently(func() []egress.Writer {
+			drains := m.GetDrains("app-1")
+
+			invalidDrains := sm.GetMetric("InvalidDrains").GaugeValue()
+			if invalidDrains > maxInvalidDrains {
+				maxInvalidDrains = invalidDrains
+			}
+
+			return drains
+		}).Should(HaveLen(0))
+
+		Expect(maxInvalidDrains).To(Equal(1.0))
 	})
 })
 
 type spyDrain struct {
-	// mu sync.Mutex
 	envelopes chan *loggregator_v2.Envelope
 }
 

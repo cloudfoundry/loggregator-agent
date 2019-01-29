@@ -35,9 +35,10 @@ type Manager struct {
 	pollingInterval time.Duration
 	idleTimeout     time.Duration
 
-	drainCountMetric       func(float64)
-	activeDrainCountMetric func(float64)
-	activeDrainCount       int64
+	drainCountMetric        func(float64)
+	activeDrainCountMetric  func(float64)
+	invalidDrainCountMetric func(float64)
+	activeDrainCount        int64
 
 	sourceDrainMap    map[string]map[syslog.Binding]drainHolder
 	sourceAccessTimes map[string]time.Time
@@ -52,16 +53,17 @@ func NewManager(
 	log *log.Logger,
 ) *Manager {
 	manager := &Manager{
-		bf:                     bf,
-		bfLimit:                bf.DrainLimit(),
-		pollingInterval:        pollingInterval,
-		idleTimeout:            idleTimeout,
-		connector:              c,
-		drainCountMetric:       m.NewGauge("DrainCount"),
-		activeDrainCountMetric: m.NewGauge("ActiveDrainCount"),
-		sourceDrainMap:         make(map[string]map[syslog.Binding]drainHolder),
-		sourceAccessTimes:      make(map[string]time.Time),
-		log:                    log,
+		bf:                      bf,
+		bfLimit:                 bf.DrainLimit(),
+		pollingInterval:         pollingInterval,
+		idleTimeout:             idleTimeout,
+		connector:               c,
+		drainCountMetric:        m.NewGauge("DrainCount"),
+		activeDrainCountMetric:  m.NewGauge("ActiveDrainCount"),
+		invalidDrainCountMetric: m.NewGauge("InvalidDrains"),
+		sourceDrainMap:          make(map[string]map[syslog.Binding]drainHolder),
+		sourceAccessTimes:       make(map[string]time.Time),
+		log:                     log,
 	}
 
 	go manager.idleCleanupLoop()
@@ -93,6 +95,7 @@ func (m *Manager) GetDrains(sourceID string) []egress.Writer {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
+	var invalidDrains int
 	m.sourceAccessTimes[sourceID] = time.Now()
 	drains := make([]egress.Writer, 0, m.bfLimit)
 	for binding, dh := range m.sourceDrainMap[sourceID] {
@@ -100,6 +103,7 @@ func (m *Manager) GetDrains(sourceID string) []egress.Writer {
 		if dh.drainWriter == nil {
 			writer, err := m.connector.Connect(dh.ctx, binding)
 			if err != nil {
+				invalidDrains++
 				m.log.Printf("failed to create binding: %s", err)
 				continue
 			}
@@ -113,6 +117,8 @@ func (m *Manager) GetDrains(sourceID string) []egress.Writer {
 
 		drains = append(drains, dh.drainWriter)
 	}
+
+	m.invalidDrainCountMetric(float64(invalidDrains))
 
 	return drains
 }
