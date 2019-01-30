@@ -100,6 +100,7 @@ func (m *Manager) GetDrains(sourceID string) []egress.Writer {
 			writer, err := m.connector.Connect(dh.ctx, binding)
 			if err != nil {
 				m.log.Printf("failed to create binding: %s", err)
+				continue
 			}
 
 			dh.drainWriter = writer
