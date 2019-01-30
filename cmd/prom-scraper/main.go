@@ -41,7 +41,7 @@ func main() {
 	}
 
 	s := scraper.New(
-		cfg.SourceID,
+		cfg.DefaultSourceID,
 		func() []string { return URLs },
 		client,
 		http.DefaultClient,

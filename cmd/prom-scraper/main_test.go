@@ -41,7 +41,7 @@ var _ = Describe("Main", func() {
 				"METRICS_CA_CN=systemMetricsAgentCA",
 				"LOGGREGATOR_AGENT_ADDR="+spyAgent.addr,
 				"METRICS_URLS="+promServer.URL,
-				"SOURCE_ID=some-id",
+				"DEFAULT_SOURCE_ID=some-id",
 				"SCRAPE_INTERVAL=100ms",
 			)
 		})
@@ -82,7 +82,7 @@ var _ = Describe("Main", func() {
 				"CA_CERT_PATH="+testhelper.Cert("loggregator-ca.crt"),
 				"LOGGREGATOR_AGENT_ADDR="+spyAgent.addr,
 				"METRICS_URLS="+promServer.URL+","+promServer2.URL,
-				"SOURCE_ID=some-id",
+				"DEFAULT_SOURCE_ID=some-id",
 				"SCRAPE_INTERVAL=100ms",
 			)
 		})

@@ -15,7 +15,7 @@ type config struct {
 	CACertPath     string `env:"CA_CERT_PATH, report, required"`
 
 	LoggregatorIngressAddr string        `env:"LOGGREGATOR_AGENT_ADDR, report, required"`
-	SourceID               string        `env:"SOURCE_ID, report, required"`
+	DefaultSourceID        string        `env:"DEFAULT_SOURCE_ID, report, required"`
 	MetricsUrls            []*url.URL    `env:"METRICS_URLS, report, required"`
 	ScrapeInterval         time.Duration `env:"SCRAPE_INTERVAL, report"`
 }
