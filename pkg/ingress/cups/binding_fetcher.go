@@ -68,6 +68,8 @@ func (f *BindingFetcher) DrainLimit() int {
 }
 
 func (f *BindingFetcher) toSyslogBindings(bs []binding.Binding, perAppLimit int) []syslog.Binding {
+	var invalidDrains int
+
 	var bindings []syslog.Binding
 	for _, b := range bs {
 		drains := b.Drains
@@ -77,7 +79,6 @@ func (f *BindingFetcher) toSyslogBindings(bs []binding.Binding, perAppLimit int)
 			drains = drains[:perAppLimit]
 		}
 
-		var invalidDrains int
 		for _, d := range drains {
 			// TODO: remove prefix when forwarder-agent is no longer
 			// feature-flagged
@@ -102,8 +103,9 @@ func (f *BindingFetcher) toSyslogBindings(bs []binding.Binding, perAppLimit int)
 				bindings = append(bindings, binding)
 			}
 		}
-		f.invalidDrains(float64(invalidDrains))
 	}
+
+	f.invalidDrains(float64(invalidDrains))
 	return bindings
 }
 

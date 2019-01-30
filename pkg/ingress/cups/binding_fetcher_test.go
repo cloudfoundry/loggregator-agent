@@ -137,7 +137,7 @@ var _ = Describe("BindingFetcher", func() {
 		_, err := fetcher.FetchBindings()
 		Expect(err).ToNot(HaveOccurred())
 
-		Expect(metrics.GetMetric("InvalidDrains").GaugeValue()).To(Equal(1.0))
+		Expect(metrics.GetMetric("InvalidDrains").GaugeValue()).To(Equal(2.0))
 	})
 
 	It("returns all the bindings when there are fewer bindings than the limit", func() {
