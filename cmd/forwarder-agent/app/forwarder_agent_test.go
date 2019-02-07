@@ -3,9 +3,13 @@ package app_test
 import (
 	"context"
 	"fmt"
+	"io/ioutil"
 	"log"
 	"net"
+	"os"
 	"os/exec"
+	"path/filepath"
+	"strings"
 	"sync"
 	"time"
 
@@ -20,6 +24,14 @@ import (
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
+)
+
+const forwardConfigTemplate = `---
+ingress: %s
+`
+
+var (
+	fConfigDir string
 )
 
 var _ = Describe("Main", func() {
@@ -66,6 +78,8 @@ var _ = Describe("Main", func() {
 	)
 
 	BeforeEach(func() {
+		fConfigDir = forwarderPortConfigDir()
+
 		mc = testhelper.NewMetricClient()
 		cfg = app.Config{
 			GRPC: app.GRPC{
@@ -74,7 +88,8 @@ var _ = Describe("Main", func() {
 				CertFile: testhelper.Cert("metron.crt"),
 				KeyFile:  testhelper.Cert("metron.key"),
 			},
-			DebugPort: 7392,
+			DownstreamIngressPortCfg: fmt.Sprintf("%s/*/ingress_port.yml", fConfigDir),
+			DebugPort:                7392,
 			Tags: map[string]string{
 				"some-tag": "some-value",
 			},
@@ -83,6 +98,8 @@ var _ = Describe("Main", func() {
 	})
 
 	AfterEach(func() {
+		os.RemoveAll(fConfigDir)
+
 		gexec.CleanupBuildArtifacts()
 		grpcPort++
 	})
@@ -100,7 +117,6 @@ var _ = Describe("Main", func() {
 		downstream1 := startSpyLoggregatorV2Ingress()
 		downstream2 := startSpyLoggregatorV2Ingress()
 
-		cfg.DownstreamIngressAddrs = []string{downstream1.addr, downstream2.addr}
 		forwarderAgent = app.NewForwarderAgent(cfg, mc, testLogger)
 		go forwarderAgent.Run()
 
@@ -123,7 +139,6 @@ var _ = Describe("Main", func() {
 	It("aggregates counter events before forwarding downstream", func() {
 		downstream1 := startSpyLoggregatorV2Ingress()
 
-		cfg.DownstreamIngressAddrs = []string{downstream1.addr}
 		forwarderAgent = app.NewForwarderAgent(cfg, mc, testLogger)
 		go forwarderAgent.Run()
 
@@ -144,7 +159,6 @@ var _ = Describe("Main", func() {
 	It("tags before forwarding downstream", func() {
 		downstream1 := startSpyLoggregatorV2Ingress()
 
-		cfg.DownstreamIngressAddrs = []string{downstream1.addr}
 		forwarderAgent = app.NewForwarderAgent(cfg, mc, testLogger)
 		go forwarderAgent.Run()
 
@@ -165,9 +179,8 @@ var _ = Describe("Main", func() {
 
 	It("continues writing to other consumers if one is slow", func() {
 		downstreamNormal := startSpyLoggregatorV2Ingress()
-		downstreamBlocking := startSpyLoggregatorV2BlockingIngress()
+		startSpyLoggregatorV2BlockingIngress()
 
-		cfg.DownstreamIngressAddrs = []string{downstreamBlocking.addr, downstreamNormal.addr}
 		forwarderAgent = app.NewForwarderAgent(cfg, mc, testLogger)
 		go forwarderAgent.Run()
 
@@ -268,7 +281,9 @@ func startSpyLoggregatorV2Ingress() *spyLoggregatorV2Ingress {
 		lis.Close()
 	}
 	s.addr = lis.Addr().String()
+	port := strings.Split(s.addr, ":")
 
+	createForwarderPortConfigFile(port[len(port)-1])
 	go grpcServer.Serve(lis)
 
 	return s
@@ -321,6 +336,8 @@ func startSpyLoggregatorV2BlockingIngress() *spyLoggregatorV2BlockingIngress {
 	}
 	s.addr = lis.Addr().String()
 
+	port := strings.Split(s.addr, ":")
+	createForwarderPortConfigFile(port[len(port)-1])
 	go grpcServer.Serve(lis)
 
 	return s
@@ -348,5 +365,30 @@ func (s *spyLoggregatorV2BlockingIngress) BatchSender(srv loggregator_v2.Ingress
 		}
 
 		<-c
+	}
+}
+
+func forwarderPortConfigDir() string {
+	dir, err := ioutil.TempDir(".", "")
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	return dir
+}
+
+func createForwarderPortConfigFile(port string) {
+	fDir, err := ioutil.TempDir(fConfigDir, "")
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	tmpfn := filepath.Join(fDir, "ingress_port.yml")
+	tmpfn, err = filepath.Abs(tmpfn)
+	Expect(err).ToNot(HaveOccurred())
+
+	contents := fmt.Sprintf(forwardConfigTemplate, port)
+	if err := ioutil.WriteFile(tmpfn, []byte(contents), 0666); err != nil {
+		log.Fatal(err)
 	}
 }

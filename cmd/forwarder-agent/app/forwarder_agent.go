@@ -3,11 +3,14 @@ package app
 import (
 	"context"
 	"fmt"
+	"io/ioutil"
 	"log"
 	"os"
+	"path/filepath"
 	"time"
 
 	"net/http"
+
 	_ "net/http/pprof"
 
 	gendiodes "code.cloudfoundry.org/go-diodes"
@@ -17,20 +20,21 @@ import (
 	"code.cloudfoundry.org/loggregator-agent/pkg/egress"
 	"code.cloudfoundry.org/loggregator-agent/pkg/egress/syslog"
 	egress_v2 "code.cloudfoundry.org/loggregator-agent/pkg/egress/v2"
-	"code.cloudfoundry.org/loggregator-agent/pkg/ingress/v2"
+	v2 "code.cloudfoundry.org/loggregator-agent/pkg/ingress/v2"
 	"code.cloudfoundry.org/loggregator-agent/pkg/plumbing"
 	"code.cloudfoundry.org/loggregator-agent/pkg/timeoutwaitgroup"
 	"google.golang.org/grpc"
+	yaml "gopkg.in/yaml.v2"
 )
 
 // ForwarderAgent manages starting the forwarder agent service.
 type ForwarderAgent struct {
-	debugPort       uint16
-	m               Metrics
-	grpc            GRPC
-	downstreamAddrs []string
-	log             *log.Logger
-	tags            map[string]string
+	debugPort          uint16
+	m                  Metrics
+	grpc               GRPC
+	downstreamPortsCfg string
+	log                *log.Logger
+	tags               map[string]string
 }
 
 type Metrics interface {
@@ -53,12 +57,12 @@ func NewForwarderAgent(
 	log *log.Logger,
 ) *ForwarderAgent {
 	return &ForwarderAgent{
-		debugPort:       cfg.DebugPort,
-		grpc:            cfg.GRPC,
-		m:               m,
-		downstreamAddrs: cfg.DownstreamIngressAddrs,
-		log:             log,
-		tags:            cfg.Tags,
+		debugPort:          cfg.DebugPort,
+		grpc:               cfg.GRPC,
+		m:                  m,
+		downstreamPortsCfg: cfg.DownstreamIngressPortCfg,
+		log:                log,
+		tags:               cfg.Tags,
 	}
 }
 
@@ -70,7 +74,8 @@ func (s ForwarderAgent) Run() {
 		ingressDropped(uint64(missed))
 	}))
 
-	clients := ingressClients(s.downstreamAddrs, s.grpc, s.log, s.tags)
+	downstreamAddrs := getDownstreamAddresses(s.downstreamPortsCfg, s.log)
+	clients := ingressClients(downstreamAddrs, s.grpc, s.log, s.tags)
 	go func() {
 		for {
 			e := diode.Next()
@@ -115,6 +120,35 @@ func (c clientWriter) Write(e *loggregator_v2.Envelope) error {
 
 func (c clientWriter) Close() error {
 	return c.c.CloseSend()
+}
+
+type portConfig struct {
+	Ingress string `yaml:"ingress"`
+}
+
+func getDownstreamAddresses(glob string, l *log.Logger) []string {
+	files, err := filepath.Glob(glob)
+	if err != nil {
+		l.Fatal("Unable to read downstream port location")
+	}
+
+	var addrs []string
+	for _, f := range files {
+		yamlFile, err := ioutil.ReadFile(f)
+		if err != nil {
+			l.Fatalf("cannot read file: %s", err)
+		}
+
+		var c portConfig
+		err = yaml.Unmarshal(yamlFile, &c)
+		if err != nil {
+			l.Fatalf("Unmarshal: %v", err)
+		}
+
+		addrs = append(addrs, fmt.Sprintf("127.0.0.1:%s", c.Ingress))
+	}
+
+	return addrs
 }
 
 func ingressClients(downstreamAddrs []string,

@@ -18,13 +18,13 @@ type GRPC struct {
 
 // Config holds the configuration for the forwarder agent
 type Config struct {
-	// DownstreamIngressAddrs will receive each envelope. It is assumed to
-	// adhere to the Loggregator Ingress Service and use the provided TLS
-	// configuration.
-	DownstreamIngressAddrs []string `env:"DOWNSTREAM_INGRESS_ADDRS, report"`
-	DebugPort              uint16   `env:"DEBUG_PORT, report"`
-	GRPC                   GRPC
-	Tags                   map[string]string `env:"AGENT_TAGS"`
+	// DownstreamIngressPortCfg will define consumers on localhost that will
+	// receive each envelope. It is assumed to adhere to the Loggregator Ingress
+	// Service and use the provided TLS configuration.
+	DownstreamIngressPortCfg string `env:"DOWNSTREAM_INGRESS_PORT_GLOB, report"`
+	DebugPort                uint16 `env:"DEBUG_PORT, report"`
+	GRPC                     GRPC
+	Tags                     map[string]string `env:"AGENT_TAGS"`
 }
 
 // LoadConfig will load the configuration for the forwarder agent from the
