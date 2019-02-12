@@ -33,6 +33,7 @@ var _ = Describe("App", func() {
 		cfg         app.Config
 
 		testLogger = log.New(GinkgoWriter, "", log.LstdFlags)
+		leadership *spyLeadership
 	)
 
 	Describe("when configured with a single metrics_url", func() {
@@ -43,6 +44,8 @@ var _ = Describe("App", func() {
 
 				w.Write([]byte(promOutput))
 			}))
+
+			leadership = newSpyLeadership()
 
 			tlsConfig, err := plumbing.NewServerMutualTLSConfig(
 				testhelper.Cert("system-metrics-agent-ca.crt"),
@@ -76,7 +79,7 @@ var _ = Describe("App", func() {
 				ScrapePort:             scrapePort,
 				DefaultSourceID:        "default-id",
 				DNSFile:                dnsFilePath,
-				ShouldScrape:           true,
+				LeadershipServerAddr:   leadership.server.URL,
 			}
 		})
 
@@ -98,12 +101,34 @@ var _ = Describe("App", func() {
 			))
 		})
 
-		It("doesn't scrape when ShouldScrape is false", func() {
-			cfg.ShouldScrape = false
+		It("does not scrape when leadership server returns 423", func() {
+			leadership.setReturnCode(http.StatusLocked)
+
 			scraper = app.NewMetricScraper(cfg, testLogger)
 			go scraper.Run()
 
-			Consistently(spyAgent.Envelopes, 1).Should(HaveLen(0))
+			Consistently(spyAgent.Envelopes, 2).Should(HaveLen(0))
+		})
+
+		It("should scrape if leadership server returns non 423", func() {
+			leadership.setReturnCode(http.StatusInternalServerError)
+
+			scraper = app.NewMetricScraper(cfg, testLogger)
+			go scraper.Run()
+
+			Eventually(func() int {
+				return len(spyAgent.Envelopes())
+			}).Should(BeNumerically(">", 0))
+		})
+
+		It("should scrape if no leadership server endpoint is found", func() {
+			cfg.LeadershipServerAddr = ""
+			scraper = app.NewMetricScraper(cfg, testLogger)
+			go scraper.Run()
+
+			Eventually(func() int {
+				return len(spyAgent.Envelopes())
+			}).Should(BeNumerically(">", 0))
 		})
 	})
 })
@@ -229,4 +254,32 @@ func (s *spyAgent) Envelopes() []*loggregator_v2.Envelope {
 	results := make([]*loggregator_v2.Envelope, len(s.envelopes))
 	copy(results, s.envelopes)
 	return results
+}
+
+type spyLeadership struct {
+	sync.Mutex
+	statusCode int
+	server     *httptest.Server
+}
+
+func (l *spyLeadership) setReturnCode(code int) {
+	l.Lock()
+	defer l.Unlock()
+
+	l.statusCode = code
+}
+
+func (l *spyLeadership) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	l.Lock()
+	defer l.Unlock()
+
+	w.WriteHeader(l.statusCode)
+}
+
+func newSpyLeadership() *spyLeadership {
+	leadership := &spyLeadership{}
+
+	leadership.server = httptest.NewServer(leadership)
+
+	return leadership
 }

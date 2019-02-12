@@ -2,6 +2,7 @@ package app
 
 import (
 	"log"
+	"net/http"
 	"time"
 
 	loggregator "code.cloudfoundry.org/go-loggregator"
@@ -26,12 +27,7 @@ func NewMetricScraper(cfg Config, l *log.Logger) *MetricScraper {
 }
 
 func (m *MetricScraper) Run() {
-	if m.cfg.ShouldScrape {
-		m.scrape()
-		return
-	}
-
-	<-m.doneChan
+	m.scrape()
 }
 
 func (m *MetricScraper) scrape() {
@@ -67,10 +63,19 @@ func (m *MetricScraper) scrape() {
 		systemMetricsClient,
 	)
 
+	leadershipClient := &http.Client{
+		Timeout: 5 * time.Second,
+	}
+
 	t := time.NewTicker(m.cfg.ScrapeInterval)
 	for {
 		select {
 		case <-t.C:
+			resp, err := leadershipClient.Get(m.cfg.LeadershipServerAddr)
+			if err == nil && resp.StatusCode == http.StatusLocked {
+				continue
+			}
+
 			if err := s.Scrape(); err != nil {
 				m.log.Printf("failed to scrape: %s", err)
 			}
