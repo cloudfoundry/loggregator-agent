@@ -68,8 +68,13 @@ func NewSyslogAgent(
 		cfg.Cache.CommonName,
 	)
 	cacheClient := cache.NewClient(cfg.Cache.URL, tlsClient)
-	bindingManager := binding.NewManager(
+	fetcher := cups.NewFilteredBindingFetcher(
+		&cfg.Cache.Blacklist,
 		cups.NewBindingFetcher(cfg.BindingsPerAppLimit, cacheClient, m),
+		l,
+	)
+	bindingManager := binding.NewManager(
+		fetcher,
 		connector,
 		m,
 		cfg.Cache.PollingInterval,

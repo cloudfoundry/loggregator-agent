@@ -1,6 +1,7 @@
 package app_test
 
 import (
+	"code.cloudfoundry.org/loggregator-agent/pkg/ingress/cups"
 	"context"
 	"crypto/tls"
 	"encoding/json"
@@ -62,7 +63,7 @@ var _ = Describe("SyslogAgent", func() {
 					AppID:    "some-id-tls",
 					Hostname: "org.space.name",
 					Drains: []string{
-						"syslog-tls-v3://" + syslogTLS.lis.Addr().String(),
+						fmt.Sprintf("syslog-tls-v3://localhost:%s", syslogTLS.port()),
 					},
 				},
 			},
@@ -123,6 +124,7 @@ var _ = Describe("SyslogAgent", func() {
 				KeyFile:         testhelper.Cert("binding-cache-ca.key"),
 				CommonName:      "bindingCacheCA",
 				PollingInterval: 10 * time.Millisecond,
+				Blacklist:       cups.BlacklistRanges{},
 			},
 			GRPC: app.GRPC{
 				Port:     grpcPort,
@@ -131,6 +133,7 @@ var _ = Describe("SyslogAgent", func() {
 				KeyFile:  testhelper.Cert("metron.key"),
 			},
 		}
+
 		go app.NewSyslogAgent(cfg, mc, testLogger).Run()
 
 		ctx, cancel := context.WithCancel(context.Background())
@@ -153,6 +156,46 @@ var _ = Describe("SyslogAgent", func() {
 
 		Eventually(syslogTLS.receivedMessages, 5).Should(Receive(&msg))
 		Expect(msg.AppName).To(Equal("some-id-tls"))
+	})
+
+	It("should not send logs to blacklisted IPs", func() {
+		mc := testhelper.NewMetricClient()
+		cfg := app.Config{
+			BindingsPerAppLimit: 5,
+			DebugPort:           7392,
+			IdleDrainTimeout:    10 * time.Minute,
+			DrainSkipCertVerify: true,
+			Cache: app.Cache{
+				URL:             cupsProvider.URL,
+				CAFile:          testhelper.Cert("binding-cache-ca.crt"),
+				CertFile:        testhelper.Cert("binding-cache-ca.crt"),
+				KeyFile:         testhelper.Cert("binding-cache-ca.key"),
+				CommonName:      "bindingCacheCA",
+				PollingInterval: 10 * time.Millisecond,
+				Blacklist: cups.BlacklistRanges{
+					Ranges: []cups.BlacklistRange{
+						{
+							Start: "127.0.0.1",
+							End:   "127.0.0.1",
+						},
+					},
+				},
+			},
+			GRPC: app.GRPC{
+				Port:     grpcPort,
+				CAFile:   testhelper.Cert("loggregator-ca.crt"),
+				CertFile: testhelper.Cert("metron.crt"),
+				KeyFile:  testhelper.Cert("metron.key"),
+			},
+		}
+		go app.NewSyslogAgent(cfg, mc, testLogger).Run()
+
+		ctx, cancel := context.WithCancel(context.Background())
+		defer cancel()
+		emitLogs(ctx, grpcPort)
+
+		var msg *rfc5424.Message
+		Consistently(syslogHTTPS.receivedMessages, 5).ShouldNot(Receive(&msg))
 	})
 })
 
@@ -359,4 +402,9 @@ func (m *syslogTCPServer) handleConn(conn net.Conn) {
 
 func (m *syslogTCPServer) addr() net.Addr {
 	return m.lis.Addr()
+}
+
+func (m *syslogTCPServer) port() string {
+	tokens := strings.Split(m.lis.Addr().String(), ":")
+	return tokens[len(tokens)-1]
 }
