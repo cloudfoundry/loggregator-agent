@@ -277,7 +277,9 @@ func (l *spyLeadership) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 }
 
 func newSpyLeadership() *spyLeadership {
-	leadership := &spyLeadership{}
+	leadership := &spyLeadership{
+		statusCode: http.StatusOK,
+	}
 
 	leadership.server = httptest.NewServer(leadership)
 
