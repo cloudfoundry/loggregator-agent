@@ -14,19 +14,6 @@ type WriterFactory struct {
 	egressMetric func(uint64)
 }
 
-func IsValidSyslogScheme(scheme string) bool {
-	switch scheme {
-	case "https":
-		fallthrough
-	case "syslog":
-		fallthrough
-	case "syslog-tls":
-		return true
-	default:
-		return false
-	}
-}
-
 func NewWriterFactory(m metrics) WriterFactory {
 	return WriterFactory{
 		egressMetric: m.NewCounter("Egress"),

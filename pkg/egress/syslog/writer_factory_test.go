@@ -78,16 +78,6 @@ var _ = Describe("EgressFactory", func() {
 		_, err = f.NewWriter(urlBinding, syslog.NetworkTimeoutConfig{}, skipSSL)
 		Expect(err).To(MatchError("unsupported protocol"))
 	})
-
-	Describe("validation factory", func() {
-		It("return true when the scheme is valid", func() {
-			Expect(syslog.IsValidSyslogScheme("https")).To(BeTrue())
-			Expect(syslog.IsValidSyslogScheme("syslog")).To(BeTrue())
-			Expect(syslog.IsValidSyslogScheme("syslog-tls")).To(BeTrue())
-
-			Expect(syslog.IsValidSyslogScheme("foo")).To(BeFalse())
-		})
-	})
 })
 
 type spyMetrics struct {

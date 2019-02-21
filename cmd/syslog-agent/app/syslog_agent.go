@@ -71,6 +71,7 @@ func NewSyslogAgent(
 	fetcher := cups.NewFilteredBindingFetcher(
 		&cfg.Cache.Blacklist,
 		cups.NewBindingFetcher(cfg.BindingsPerAppLimit, cacheClient, m),
+		m,
 		l,
 	)
 	bindingManager := binding.NewManager(

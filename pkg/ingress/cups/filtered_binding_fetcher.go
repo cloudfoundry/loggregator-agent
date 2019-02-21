@@ -17,17 +17,24 @@ type IPChecker interface {
 	CheckBlacklist(ip net.IP) error
 }
 
-type FilteredBindingFetcher struct {
-	ipChecker IPChecker
-	br        binding.Fetcher
-	logger    *log.Logger
+// Metrics is the client used to expose gauge and counter metrics.
+type metrics interface {
+	NewGauge(string) func(float64)
 }
 
-func NewFilteredBindingFetcher(c IPChecker, b binding.Fetcher, lc *log.Logger) *FilteredBindingFetcher {
+type FilteredBindingFetcher struct {
+	ipChecker     IPChecker
+	br            binding.Fetcher
+	logger        *log.Logger
+	invalidDrains func(float64)
+}
+
+func NewFilteredBindingFetcher(c IPChecker, b binding.Fetcher, m metrics, lc *log.Logger) *FilteredBindingFetcher {
 	return &FilteredBindingFetcher{
 		ipChecker: c,
 		br:        b,
 		logger:    lc,
+		invalidDrains: m.NewGauge("InvalidDrains"),
 	}
 }
 
@@ -42,14 +49,17 @@ func (f *FilteredBindingFetcher) FetchBindings() ([]syslog.Binding, error) {
 	}
 	newBindings := []syslog.Binding{}
 
-	for _, binding := range sourceBindings {
-		scheme, host, err := f.ipChecker.ParseHost(binding.Drain)
+	var invalidDrains float64
+	for _, b := range sourceBindings {
+		scheme, host, err := f.ipChecker.ParseHost(b.Drain)
 		if err != nil {
 			f.logger.Printf("failed to parse host for drain URL: %s", err)
+			invalidDrains += 1
 			continue
 		}
 
 		if invalidScheme(scheme) {
+			invalidDrains += 1
 			continue
 		}
 
@@ -57,6 +67,7 @@ func (f *FilteredBindingFetcher) FetchBindings() ([]syslog.Binding, error) {
 		if err != nil {
 			msg := fmt.Sprintf("failed to resolve syslog drain host: %s", host)
 			f.logger.Println(msg, err)
+			invalidDrains += 1
 			continue
 		}
 
@@ -64,12 +75,14 @@ func (f *FilteredBindingFetcher) FetchBindings() ([]syslog.Binding, error) {
 		if err != nil {
 			msg := fmt.Sprintf("syslog drain blacklisted: %s (%s)", host, ip)
 			f.logger.Println(msg, err)
+			invalidDrains += 1
 			continue
 		}
 
-		newBindings = append(newBindings, binding)
+		newBindings = append(newBindings, b)
 	}
 
+	f.invalidDrains(invalidDrains)
 	return newBindings, nil
 }
 

@@ -116,30 +116,6 @@ var _ = Describe("BindingFetcher", func() {
 		).To(BeNumerically(">", 0))
 	})
 
-	It("tracks the number of drains with invalid urls", func() {
-		getter.bindings = []binding.Binding{
-			{
-				AppID: "9be15160-4845-4f05-b089-40e827ba61f1",
-				Drains: []string{
-					"syslog-v3-v3://some.url",
-				},
-				Hostname: "org.space.logspinner",
-			},
-			{
-				AppID: "blah",
-				Drains: []string{
-					"https-v3-v3://v3.other.url",
-				},
-				Hostname: "org.space.logspinner",
-			},
-		}
-
-		_, err := fetcher.FetchBindings()
-		Expect(err).ToNot(HaveOccurred())
-
-		Expect(metrics.GetMetric("InvalidDrains").GaugeValue()).To(Equal(2.0))
-	})
-
 	It("returns all the bindings when there are fewer bindings than the limit", func() {
 		getter.bindings = []binding.Binding{
 			{

@@ -26,7 +26,6 @@ type Getter interface {
 type BindingFetcher struct {
 	refreshCount  func(uint64)
 	maxLatency    func(float64)
-	invalidDrains func(float64)
 	limit         int
 	getter        Getter
 }
@@ -38,7 +37,6 @@ func NewBindingFetcher(limit int, g Getter, m Metrics) *BindingFetcher {
 		getter:        g,
 		refreshCount:  m.NewCounter("BindingRefreshCount"),
 		maxLatency:    m.NewGauge("LatencyForLastBindingRefreshMS"),
-		invalidDrains: m.NewGauge("InvalidDrains"),
 	}
 }
 
@@ -68,8 +66,6 @@ func (f *BindingFetcher) DrainLimit() int {
 }
 
 func (f *BindingFetcher) toSyslogBindings(bs []binding.Binding, perAppLimit int) []syslog.Binding {
-	var invalidDrains int
-
 	var bindings []syslog.Binding
 	for _, b := range bs {
 		drains := b.Drains
@@ -90,10 +86,6 @@ func (f *BindingFetcher) toSyslogBindings(bs []binding.Binding, perAppLimit int)
 
 			if strings.HasSuffix(u.Scheme, "-v3") {
 				u.Scheme = strings.TrimSuffix(u.Scheme, "-v3")
-				if !syslog.IsValidSyslogScheme(u.Scheme) {
-					invalidDrains++
-					continue
-				}
 
 				binding := syslog.Binding{
 					AppId:    b.AppID,
@@ -105,7 +97,6 @@ func (f *BindingFetcher) toSyslogBindings(bs []binding.Binding, perAppLimit int)
 		}
 	}
 
-	f.invalidDrains(float64(invalidDrains))
 	return bindings
 }
 

@@ -3,6 +3,7 @@ package cups_test
 import (
 	"code.cloudfoundry.org/loggregator-agent/pkg/egress/syslog"
 	"code.cloudfoundry.org/loggregator-agent/pkg/ingress/cups"
+	"code.cloudfoundry.org/loggregator-agent/internal/testhelper"
 	"errors"
 	"log"
 	"net"
@@ -16,7 +17,12 @@ var _ = Describe("FilteredBindingFetcher", func() {
 	var (
 		log    = log.New(GinkgoWriter, "", log.LstdFlags)
 		filter *cups.FilteredBindingFetcher
+		metrics *testhelper.SpyMetricClient
 	)
+
+	BeforeEach(func() {
+		metrics = testhelper.NewMetricClient()
+	})
 
 	It("returns valid bindings", func() {
 		input := []syslog.Binding{
@@ -26,7 +32,7 @@ var _ = Describe("FilteredBindingFetcher", func() {
 		}
 		bindingReader := &SpyBindingReader{bindings: input}
 
-		filter = cups.NewFilteredBindingFetcher(&spyIPChecker{}, bindingReader, log)
+		filter = cups.NewFilteredBindingFetcher(&spyIPChecker{}, bindingReader, metrics, log)
 		actual, err := filter.FetchBindings()
 
 		Expect(err).ToNot(HaveOccurred())
@@ -36,7 +42,7 @@ var _ = Describe("FilteredBindingFetcher", func() {
 	It("returns an error if the binding reader cannot fetch bindings", func() {
 		bindingReader := &SpyBindingReader{nil, errors.New("Woops")}
 
-		filter := cups.NewFilteredBindingFetcher(&spyIPChecker{}, bindingReader, log)
+		filter := cups.NewFilteredBindingFetcher(&spyIPChecker{}, bindingReader, metrics, log)
 		actual, err := filter.FetchBindings()
 
 		Expect(err).To(HaveOccurred())
@@ -52,6 +58,7 @@ var _ = Describe("FilteredBindingFetcher", func() {
 			filter = cups.NewFilteredBindingFetcher(
 				&spyIPChecker{parseHostError: errors.New("parse error")},
 				&SpyBindingReader{bindings: input},
+				metrics,
 				log,
 			)
 		})
@@ -61,6 +68,7 @@ var _ = Describe("FilteredBindingFetcher", func() {
 
 			Expect(err).ToNot(HaveOccurred())
 			Expect(actual).To(Equal([]syslog.Binding{}))
+			Expect(metrics.GetMetric("InvalidDrains").GaugeValue()).To(Equal(1.0))
 		})
 	})
 
@@ -78,9 +86,11 @@ var _ = Describe("FilteredBindingFetcher", func() {
 				{AppId: "app-id", Hostname: "we.dont.care", Drain: "blah://10.10.10.10"},
 			}
 
+			metrics = testhelper.NewMetricClient()
 			filter = cups.NewFilteredBindingFetcher(
 				&spyIPChecker{},
 				&SpyBindingReader{bindings: input},
+				metrics,
 				log,
 			)
 		})
@@ -90,6 +100,7 @@ var _ = Describe("FilteredBindingFetcher", func() {
 
 			Expect(err).ToNot(HaveOccurred())
 			Expect(actual).To(Equal(input[:3]))
+			Expect(metrics.GetMetric("InvalidDrains").GaugeValue()).To(Equal(2.0))
 		})
 	})
 
@@ -105,6 +116,7 @@ var _ = Describe("FilteredBindingFetcher", func() {
 					parsedHost:       "some.invalid.host",
 				},
 				&SpyBindingReader{bindings: input},
+				metrics,
 				log,
 			)
 		})
@@ -114,6 +126,7 @@ var _ = Describe("FilteredBindingFetcher", func() {
 
 			Expect(err).ToNot(HaveOccurred())
 			Expect(actual).To(Equal([]syslog.Binding{}))
+			Expect(metrics.GetMetric("InvalidDrains").GaugeValue()).To(Equal(1.0))
 		})
 	})
 
@@ -130,6 +143,7 @@ var _ = Describe("FilteredBindingFetcher", func() {
 					resolvedIP:          net.ParseIP("127.0.0.1"),
 				},
 				&SpyBindingReader{bindings: input},
+				metrics,
 				log,
 			)
 		})
@@ -139,6 +153,7 @@ var _ = Describe("FilteredBindingFetcher", func() {
 
 			Expect(err).ToNot(HaveOccurred())
 			Expect(actual).To(Equal([]syslog.Binding{}))
+			Expect(metrics.GetMetric("InvalidDrains").GaugeValue()).To(Equal(1.0))
 		})
 	})
 })
