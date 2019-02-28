@@ -154,6 +154,7 @@ var _ = Describe("FilteredBindingFetcher", func() {
 			Expect(err).ToNot(HaveOccurred())
 			Expect(actual).To(Equal([]syslog.Binding{}))
 			Expect(metrics.GetMetric("InvalidDrains").GaugeValue()).To(Equal(1.0))
+			Expect(metrics.GetMetric("BlacklistedDrains").GaugeValue()).To(Equal(1.0))
 		})
 	})
 })

@@ -23,18 +23,20 @@ type metrics interface {
 }
 
 type FilteredBindingFetcher struct {
-	ipChecker     IPChecker
-	br            binding.Fetcher
-	logger        *log.Logger
-	invalidDrains func(float64)
+	ipChecker         IPChecker
+	br                binding.Fetcher
+	logger            *log.Logger
+	invalidDrains     func(float64)
+	blacklistedDrains func(float64)
 }
 
 func NewFilteredBindingFetcher(c IPChecker, b binding.Fetcher, m metrics, lc *log.Logger) *FilteredBindingFetcher {
 	return &FilteredBindingFetcher{
-		ipChecker: c,
-		br:        b,
-		logger:    lc,
-		invalidDrains: m.NewGauge("InvalidDrains"),
+		ipChecker:         c,
+		br:                b,
+		logger:            lc,
+		invalidDrains:     m.NewGauge("InvalidDrains"),
+		blacklistedDrains: m.NewGauge("BlacklistedDrains"),
 	}
 }
 
@@ -50,6 +52,7 @@ func (f *FilteredBindingFetcher) FetchBindings() ([]syslog.Binding, error) {
 	newBindings := []syslog.Binding{}
 
 	var invalidDrains float64
+	var blacklistedDrains float64
 	for _, b := range sourceBindings {
 		scheme, host, err := f.ipChecker.ParseHost(b.Drain)
 		if err != nil {
@@ -76,12 +79,14 @@ func (f *FilteredBindingFetcher) FetchBindings() ([]syslog.Binding, error) {
 			msg := fmt.Sprintf("syslog drain blacklisted: %s (%s)", host, ip)
 			f.logger.Println(msg, err)
 			invalidDrains += 1
+			blacklistedDrains += 1
 			continue
 		}
 
 		newBindings = append(newBindings, b)
 	}
 
+	f.blacklistedDrains(blacklistedDrains)
 	f.invalidDrains(invalidDrains)
 	return newBindings, nil
 }
