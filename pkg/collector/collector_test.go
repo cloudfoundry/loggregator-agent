@@ -87,6 +87,23 @@ var _ = Describe("Collector", func() {
 		Expect(stats.Wait).To(Equal(40.0))
 	})
 
+	It("returns cpu per core metrics", func() {
+		stats, err := c.Collect()
+		Expect(err).ToNot(HaveOccurred())
+
+		Expect(stats.CPUCoreStats).To(HaveLen(4))
+
+		Expect(stats.CPUCoreStats[0].CPU).To(Equal("cpu1"))
+		Expect(stats.CPUCoreStats[0].User).To(Equal(10.0))
+		Expect(stats.CPUCoreStats[0].System).To(Equal(20.0))
+		Expect(stats.CPUCoreStats[0].Idle).To(Equal(30.0))
+		Expect(stats.CPUCoreStats[0].Wait).To(Equal(40.0))
+
+		Expect(stats.CPUCoreStats[1].CPU).To(Equal("cpu2"))
+		Expect(stats.CPUCoreStats[2].CPU).To(Equal("cpu3"))
+		Expect(stats.CPUCoreStats[3].CPU).To(Equal("cpu4"))
+	})
+
 	It("returns network metrics", func() {
 		stats, err := c.Collect()
 		Expect(err).ToNot(HaveOccurred())
@@ -415,12 +432,77 @@ func (s *stubRawCollector) AvgWithContext(context.Context) (*load.AvgStat, error
 	}, nil
 }
 
-func (s *stubRawCollector) TimesWithContext(context.Context, bool) ([]cpu.TimesStat, error) {
+func (s *stubRawCollector) TimesWithContext(_ context.Context, perCPU bool) ([]cpu.TimesStat, error) {
 	if s.cpuTimesErr != nil {
 		return nil, s.cpuTimesErr
 	}
 
 	s.timesCallCount += 1.0
+
+	if perCPU {
+		return []cpu.TimesStat{
+			{
+				CPU:    "cpu1",
+				User:   500.0 * s.timesCallCount,
+				System: 1000.0 * s.timesCallCount,
+				Idle:   1500.0 * s.timesCallCount,
+				Iowait: 2000.0 * s.timesCallCount,
+
+				Nice:      1000.0,
+				Irq:       1000.0,
+				Softirq:   1000.0,
+				Steal:     1000.0,
+				Guest:     1000.0,
+				GuestNice: 1000.0,
+				Stolen:    1000.0,
+			},
+			{
+				CPU:    "cpu2",
+				User:   500.0 * s.timesCallCount,
+				System: 1000.0 * s.timesCallCount,
+				Idle:   1500.0 * s.timesCallCount,
+				Iowait: 2000.0 * s.timesCallCount,
+
+				Nice:      1000.0,
+				Irq:       1000.0,
+				Softirq:   1000.0,
+				Steal:     1000.0,
+				Guest:     1000.0,
+				GuestNice: 1000.0,
+				Stolen:    1000.0,
+			},
+			{
+				CPU:    "cpu3",
+				User:   500.0 * s.timesCallCount,
+				System: 1000.0 * s.timesCallCount,
+				Idle:   1500.0 * s.timesCallCount,
+				Iowait: 2000.0 * s.timesCallCount,
+
+				Nice:      1000.0,
+				Irq:       1000.0,
+				Softirq:   1000.0,
+				Steal:     1000.0,
+				Guest:     1000.0,
+				GuestNice: 1000.0,
+				Stolen:    1000.0,
+			},
+			{
+				CPU:    "cpu4",
+				User:   500.0 * s.timesCallCount,
+				System: 1000.0 * s.timesCallCount,
+				Idle:   1500.0 * s.timesCallCount,
+				Iowait: 2000.0 * s.timesCallCount,
+
+				Nice:      1000.0,
+				Irq:       1000.0,
+				Softirq:   1000.0,
+				Steal:     1000.0,
+				Guest:     1000.0,
+				GuestNice: 1000.0,
+				Stolen:    1000.0,
+			},
+		}, nil
+	}
 
 	return []cpu.TimesStat{
 		{

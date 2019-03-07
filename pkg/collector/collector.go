@@ -26,6 +26,7 @@ const (
 
 type SystemStat struct {
 	CPUStat
+	CPUCoreStats []CPUCoreStat
 
 	MemKB      uint64
 	MemPercent float64
@@ -46,6 +47,11 @@ type SystemStat struct {
 	Networks []NetworkStat
 
 	Health HealthStat
+}
+
+type CPUCoreStat struct {
+	CPU string
+	CPUStat
 }
 
 type CPUStat struct {
@@ -83,6 +89,7 @@ type ProtoCountersStat struct {
 type Collector struct {
 	rawCollector  RawCollector
 	prevTimesStat cpu.TimesStat
+	prevCoreStats []cpu.TimesStat
 }
 
 type NetworkStat struct {
@@ -120,6 +127,11 @@ func New(log *log.Logger, opts ...CollectorOption) Collector {
 	}
 	c.prevTimesStat = firstTS[0]
 
+	c.prevCoreStats, err = c.rawCollector.TimesWithContext(ctx, true)
+	if err != nil {
+		log.Panicf("failed to collect initial CPU Core times: %s", err)
+	}
+
 	return c
 }
 
@@ -150,6 +162,21 @@ func (c Collector) Collect() (SystemStat, error) {
 	cpu := calculateCPUStat(c.prevTimesStat, ts[0])
 	c.prevTimesStat = ts[0]
 
+	coreTs, err := c.rawCollector.TimesWithContext(ctx, true)
+	if err != nil {
+		return SystemStat{}, err
+	}
+
+	coreStats := make([]CPUCoreStat, len(coreTs))
+	for i, core := range coreTs {
+		coreStats[i] = CPUCoreStat{
+			CPU:     core.CPU,
+			CPUStat: calculateCPUStat(c.prevCoreStats[i], core),
+		}
+	}
+
+	c.prevCoreStats = coreTs
+
 	sdisk, err := c.diskStat(ctx, systemDiskPath)
 	if err != nil {
 		return SystemStat{}, err
@@ -176,7 +203,8 @@ func (c Collector) Collect() (SystemStat, error) {
 	}
 
 	return SystemStat{
-		CPUStat: cpu,
+		CPUStat:      cpu,
+		CPUCoreStats: coreStats,
 
 		MemKB:      m.Used / 1024,
 		MemPercent: m.UsedPercent,
