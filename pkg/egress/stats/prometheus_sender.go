@@ -1,6 +1,8 @@
 package stats
 
-import "code.cloudfoundry.org/loggregator-agent/pkg/collector"
+import (
+	"code.cloudfoundry.org/loggregator-agent/pkg/collector"
+)
 
 type Gauge interface {
 	Set(float64)
@@ -39,6 +41,14 @@ func (p PromSender) Send(stats collector.SystemStat) {
 	}
 }
 
+func clone(source map[string]string) map[string]string {
+	copy := make(map[string]string)
+	for k, v := range source {
+		copy[k] = v
+	}
+	return copy
+}
+
 func (p PromSender) setSystemStats(stats collector.SystemStat) {
 	labels := p.labels
 
@@ -53,6 +63,23 @@ func (p PromSender) setSystemStats(stats collector.SystemStat) {
 
 	gauge = p.registry.Get("system_cpu_user", p.origin, "Percent", labels)
 	gauge.Set(float64(stats.CPUStat.User))
+
+	for _, perCoreStat := range stats.CPUCoreStats {
+		perCoreLabels := clone(p.labels)
+		perCoreLabels["cpu_name"] = perCoreStat.CPU
+
+		gauge = p.registry.Get("system_cpu_core_sys", p.origin, "Percent", perCoreLabels)
+		gauge.Set(float64(perCoreStat.CPUStat.System))
+
+		gauge = p.registry.Get("system_cpu_core_wait", p.origin, "Percent", perCoreLabels)
+		gauge.Set(float64(perCoreStat.CPUStat.Wait))
+
+		gauge = p.registry.Get("system_cpu_core_idle", p.origin, "Percent", perCoreLabels)
+		gauge.Set(float64(perCoreStat.CPUStat.Idle))
+
+		gauge = p.registry.Get("system_cpu_core_user", p.origin, "Percent", perCoreLabels)
+		gauge.Set(float64(perCoreStat.CPUStat.User))
+	}
 
 	gauge = p.registry.Get("system_mem_kb", p.origin, "KiB", labels)
 	gauge.Set(float64(stats.MemKB))
@@ -108,11 +135,8 @@ func (p PromSender) setSystemStats(stats collector.SystemStat) {
 }
 
 func (p PromSender) setNetworkGauges(network collector.NetworkStat) {
-	labels := map[string]string{"network_interface": network.Name}
-
-	for k, v := range p.labels {
-		labels[k] = v
-	}
+	labels := clone(p.labels)
+	labels["network_interface"] = network.Name
 
 	gauge := p.registry.Get("system_network_bytes_sent", p.origin, "Bytes", labels)
 	gauge.Set(float64(network.BytesSent))

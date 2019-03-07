@@ -31,7 +31,7 @@ var _ = Describe("Prometheus Sender", func() {
 	It("gets the correct number of metrics from the registry", func() {
 		sender.Send(defaultInput)
 
-		Expect(registry.gaugeCount).To(Equal(40))
+		Expect(registry.gaugeCount).To(Equal(52))
 	})
 
 	It("does not panic with no default labels", func() {
@@ -53,47 +53,65 @@ var _ = Describe("Prometheus Sender", func() {
 		Entry("ip", "ip", "test-ip"),
 	)
 
-	DescribeTable("default metrics", func(name, origin, unit string, value float64) {
+	DescribeTable("default metrics", func(name string, tags map[string]string, unit string, value float64) {
 		sender.Send(defaultInput)
 
-		gauge := registry.gauges[name+origin+unit]
+		cpuName := ""
+		if cpuTag, ok := tags["cpu_name"]; ok {
+			cpuName = cpuTag
+		}
 
+		keyName := name + tags["origin"] + unit + cpuName
+		gauge := registry.gauges[keyName]
+
+		Expect(gauge).NotTo(BeNil())
 		Expect(gauge.value).To(BeNumerically("==", value))
-		Expect(gauge.tags["origin"]).To(Equal("test-origin"))
+
+		for k, v := range tags {
+			Expect(gauge.tags[k]).To(Equal(v))
+		}
 	},
-		Entry("system_mem_kb", "system_mem_kb", "test-origin", "KiB", 1025.0),
-		Entry("system_mem_percent", "system_mem_percent", "test-origin", "Percent", 10.01),
-		Entry("system_swap_kb", "system_swap_kb", "test-origin", "KiB", 2049.0),
-		Entry("system_swap_percent", "system_swap_percent", "test-origin", "Percent", 20.01),
-		Entry("system_load_1m", "system_load_1m", "test-origin", "Load", 1.1),
-		Entry("system_load_5m", "system_load_5m", "test-origin", "Load", 5.5),
-		Entry("system_load_15m", "system_load_15m", "test-origin", "Load", 15.15),
-		Entry("system_cpu_user", "system_cpu_user", "test-origin", "Percent", 25.25),
-		Entry("system_cpu_sys", "system_cpu_sys", "test-origin", "Percent", 52.52),
-		Entry("system_cpu_idle", "system_cpu_idle", "test-origin", "Percent", 10.10),
-		Entry("system_cpu_wait", "system_cpu_wait", "test-origin", "Percent", 22.22),
-		Entry("system_disk_system_percent", "system_disk_system_percent", "test-origin", "Percent", 35.0),
-		Entry("system_disk_system_inode_percent", "system_disk_system_inode_percent", "test-origin", "Percent", 45.0),
-		Entry("system_disk_system_read_bytes", "system_disk_system_read_bytes", "test-origin", "Bytes", 10.0),
-		Entry("system_disk_system_write_bytes", "system_disk_system_write_bytes", "test-origin", "Bytes", 20.0),
-		Entry("system_disk_system_read_time", "system_disk_system_read_time", "test-origin", "ms", 30.0),
-		Entry("system_disk_system_write_time", "system_disk_system_write_time", "test-origin", "ms", 40.0),
-		Entry("system_disk_system_io_time", "system_disk_system_io_time", "test-origin", "ms", 50.0),
-		Entry("system_disk_ephemeral_percent", "system_disk_ephemeral_percent", "test-origin", "Percent", 55.0),
-		Entry("system_disk_ephemeral_inode_percent", "system_disk_ephemeral_inode_percent", "test-origin", "Percent", 65.0),
-		Entry("system_disk_ephemeral_read_bytes", "system_disk_ephemeral_read_bytes", "test-origin", "Bytes", 100.0),
-		Entry("system_disk_ephemeral_write_bytes", "system_disk_ephemeral_write_bytes", "test-origin", "Bytes", 200.0),
-		Entry("system_disk_ephemeral_read_time", "system_disk_ephemeral_read_time", "test-origin", "ms", 300.0),
-		Entry("system_disk_ephemeral_write_time", "system_disk_ephemeral_write_time", "test-origin", "ms", 400.0),
-		Entry("system_disk_ephemeral_io_time", "system_disk_ephemeral_io_time", "test-origin", "ms", 500.0),
-		Entry("system_disk_persistent_percent", "system_disk_persistent_percent", "test-origin", "Percent", 75.0),
-		Entry("system_disk_persistent_inode_percent", "system_disk_persistent_inode_percent", "test-origin", "Percent", 85.0),
-		Entry("system_disk_persistent_read_bytes", "system_disk_persistent_read_bytes", "test-origin", "Bytes", 1000.0),
-		Entry("system_disk_persistent_write_bytes", "system_disk_persistent_write_bytes", "test-origin", "Bytes", 2000.0),
-		Entry("system_disk_persistent_read_time", "system_disk_persistent_read_time", "test-origin", "ms", 3000.0),
-		Entry("system_disk_persistent_write_time", "system_disk_persistent_write_time", "test-origin", "ms", 4000.0),
-		Entry("system_disk_persistent_io_time", "system_disk_persistent_io_time", "test-origin", "ms", 5000.0),
-		Entry("system_healthy", "system_healthy", "test-origin", "", 1.0),
+		Entry("system_mem_kb", "system_mem_kb", map[string]string{"origin": "test-origin"}, "KiB", 1025.0),
+		Entry("system_mem_percent", "system_mem_percent", map[string]string{"origin": "test-origin"}, "Percent", 10.01),
+		Entry("system_swap_kb", "system_swap_kb", map[string]string{"origin": "test-origin"}, "KiB", 2049.0),
+		Entry("system_swap_percent", "system_swap_percent", map[string]string{"origin": "test-origin"}, "Percent", 20.01),
+		Entry("system_load_1m", "system_load_1m", map[string]string{"origin": "test-origin"}, "Load", 1.1),
+		Entry("system_load_5m", "system_load_5m", map[string]string{"origin": "test-origin"}, "Load", 5.5),
+		Entry("system_load_15m", "system_load_15m", map[string]string{"origin": "test-origin"}, "Load", 15.15),
+		Entry("system_cpu_user", "system_cpu_user", map[string]string{"origin": "test-origin"}, "Percent", 25.25),
+		Entry("system_cpu_sys", "system_cpu_sys", map[string]string{"origin": "test-origin"}, "Percent", 52.52),
+		Entry("system_cpu_idle", "system_cpu_idle", map[string]string{"origin": "test-origin"}, "Percent", 10.10),
+		Entry("system_cpu_wait", "system_cpu_wait", map[string]string{"origin": "test-origin"}, "Percent", 22.22),
+		Entry("system cpu core 1 user", "system_cpu_core_user", map[string]string{"origin": "test-origin", "cpu_name": "cpu1"}, "Percent", 25.25),
+		Entry("system cpu core 1 sys", "system_cpu_core_sys", map[string]string{"origin": "test-origin", "cpu_name": "cpu1"}, "Percent", 52.52),
+		Entry("system cpu core 1 idle", "system_cpu_core_idle", map[string]string{"origin": "test-origin", "cpu_name": "cpu1"}, "Percent", 10.10),
+		Entry("system cpu core 1 wait", "system_cpu_core_wait", map[string]string{"origin": "test-origin", "cpu_name": "cpu1"}, "Percent", 22.22),
+		Entry("system cpu core 2 user", "system_cpu_core_user", map[string]string{"origin": "test-origin", "cpu_name": "cpu2"}, "Percent", 25.25),
+		Entry("system cpu core 2 sys", "system_cpu_core_sys", map[string]string{"origin": "test-origin", "cpu_name": "cpu2"}, "Percent", 52.52),
+		Entry("system cpu core 2 idle", "system_cpu_core_idle", map[string]string{"origin": "test-origin", "cpu_name": "cpu2"}, "Percent", 10.10),
+		Entry("system cpu core 2 wait", "system_cpu_core_wait", map[string]string{"origin": "test-origin", "cpu_name": "cpu2"}, "Percent", 22.22),
+		Entry("system_disk_system_percent", "system_disk_system_percent", map[string]string{"origin": "test-origin"}, "Percent", 35.0),
+		Entry("system_disk_system_inode_percent", "system_disk_system_inode_percent", map[string]string{"origin": "test-origin"}, "Percent", 45.0),
+		Entry("system_disk_system_read_bytes", "system_disk_system_read_bytes", map[string]string{"origin": "test-origin"}, "Bytes", 10.0),
+		Entry("system_disk_system_write_bytes", "system_disk_system_write_bytes", map[string]string{"origin": "test-origin"}, "Bytes", 20.0),
+		Entry("system_disk_system_read_time", "system_disk_system_read_time", map[string]string{"origin": "test-origin"}, "ms", 30.0),
+		Entry("system_disk_system_write_time", "system_disk_system_write_time", map[string]string{"origin": "test-origin"}, "ms", 40.0),
+		Entry("system_disk_system_io_time", "system_disk_system_io_time", map[string]string{"origin": "test-origin"}, "ms", 50.0),
+		Entry("system_disk_ephemeral_percent", "system_disk_ephemeral_percent", map[string]string{"origin": "test-origin"}, "Percent", 55.0),
+		Entry("system_disk_ephemeral_inode_percent", "system_disk_ephemeral_inode_percent", map[string]string{"origin": "test-origin"}, "Percent", 65.0),
+		Entry("system_disk_ephemeral_read_bytes", "system_disk_ephemeral_read_bytes", map[string]string{"origin": "test-origin"}, "Bytes", 100.0),
+		Entry("system_disk_ephemeral_write_bytes", "system_disk_ephemeral_write_bytes", map[string]string{"origin": "test-origin"}, "Bytes", 200.0),
+		Entry("system_disk_ephemeral_read_time", "system_disk_ephemeral_read_time", map[string]string{"origin": "test-origin"}, "ms", 300.0),
+		Entry("system_disk_ephemeral_write_time", "system_disk_ephemeral_write_time", map[string]string{"origin": "test-origin"}, "ms", 400.0),
+		Entry("system_disk_ephemeral_io_time", "system_disk_ephemeral_io_time", map[string]string{"origin": "test-origin"}, "ms", 500.0),
+		Entry("system_disk_persistent_percent", "system_disk_persistent_percent", map[string]string{"origin": "test-origin"}, "Percent", 75.0),
+		Entry("system_disk_persistent_inode_percent", "system_disk_persistent_inode_percent", map[string]string{"origin": "test-origin"}, "Percent", 85.0),
+		Entry("system_disk_persistent_read_bytes", "system_disk_persistent_read_bytes", map[string]string{"origin": "test-origin"}, "Bytes", 1000.0),
+		Entry("system_disk_persistent_write_bytes", "system_disk_persistent_write_bytes", map[string]string{"origin": "test-origin"}, "Bytes", 2000.0),
+		Entry("system_disk_persistent_read_time", "system_disk_persistent_read_time", map[string]string{"origin": "test-origin"}, "ms", 3000.0),
+		Entry("system_disk_persistent_write_time", "system_disk_persistent_write_time", map[string]string{"origin": "test-origin"}, "ms", 4000.0),
+		Entry("system_disk_persistent_io_time", "system_disk_persistent_io_time", map[string]string{"origin": "test-origin"}, "ms", 5000.0),
+		Entry("system_healthy", "system_healthy", map[string]string{"origin": "test-origin"}, "", 1.0),
 	)
 
 	DescribeTable("network metrics", func(name, origin, unit, networkName string, value float64) {
@@ -197,7 +215,13 @@ func (r *stubRegistry) Get(gaugeName, origin, unit string, tags map[string]strin
 	if tags != nil {
 		networkName = tags["network_interface"]
 	}
-	key := gaugeName + origin + unit + networkName
+
+	cpuName := ""
+	if cpuTag, ok := tags["cpu_name"]; ok {
+		cpuName = cpuTag
+	}
+
+	key := gaugeName + origin + unit + networkName + cpuName
 
 	r.gauges[key] = &spyGauge{
 		tags: tags,
