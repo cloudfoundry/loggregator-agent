@@ -39,8 +39,8 @@ var _ = Describe("Prometheus Registry", func() {
 	})
 
 	It("gauges with different tags are different gauges", func() {
-		gauge := toPromGauge(registry.Get("metric_name", "origin", "unit", nil))
-		Expect(gauge.Desc().String()).To(Equal(`Desc{fqName: "metric_name", help: "vm metric", constLabels: {unit="unit"}, variableLabels: []}`))
+		gauge := toPromGauge(registry.Get("metric_name", "origin", "unit", map[string]string{"foo":"bar2"}))
+		Expect(gauge.Desc().String()).To(Equal(`Desc{fqName: "metric_name", help: "vm metric", constLabels: {foo="bar2",unit="unit"}, variableLabels: []}`))
 
 		gauge = toPromGauge(registry.Get("metric_name", "origin", "unit", map[string]string{"foo": "bar"}))
 		Expect(gauge.Desc().String()).To(Equal(`Desc{fqName: "metric_name", help: "vm metric", constLabels: {foo="bar",unit="unit"}, variableLabels: []}`))

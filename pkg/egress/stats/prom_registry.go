@@ -58,7 +58,7 @@ func sortedTags(tags map[string]string) string {
 
 	var t []string
 	for _, k := range keys {
-		t = append(keys, k, tags[k])
+		t = append(t, k, tags[k])
 	}
 	return strings.Join(t, "_")
 }
