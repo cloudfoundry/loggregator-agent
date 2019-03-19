@@ -1,27 +1,29 @@
-package main_test
+package app_test
 
 import (
+	"code.cloudfoundry.org/loggregator-agent/cmd/prom-scraper/app"
+	"log"
 	"net"
 	"net/http"
 	"net/http/httptest"
-	"os/exec"
+	"net/url"
 	"sync"
+	"time"
 
 	"code.cloudfoundry.org/go-loggregator/rpc/loggregator_v2"
 	"code.cloudfoundry.org/loggregator-agent/internal/testhelper"
 	"code.cloudfoundry.org/loggregator-agent/pkg/plumbing"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
-	"github.com/onsi/gomega/gexec"
 	"google.golang.org/grpc"
 )
 
-var _ = Describe("Main", func() {
+var _ = Describe("PromScraper", func() {
 	var (
 		promServer *httptest.Server
 		spyAgent   *spyAgent
-
-		session *gexec.Session
+		cfg        app.Config
+		testLogger = log.New(GinkgoWriter, "", log.LstdFlags)
 	)
 
 	Describe("when configured with a single metrics_url", func() {
@@ -31,27 +33,23 @@ var _ = Describe("Main", func() {
 				w.Write([]byte(promOutput))
 			}))
 
-			session = startScraper(
-				"CLIENT_KEY_PATH="+testhelper.Cert("metron.key"),
-				"CLIENT_CERT_PATH="+testhelper.Cert("metron.crt"),
-				"CA_CERT_PATH="+testhelper.Cert("loggregator-ca.crt"),
-				"METRICS_KEY_PATH="+testhelper.Cert("system-metrics-agent-ca.key"),
-				"METRICS_CERT_PATH="+testhelper.Cert("system-metrics-agent-ca.crt"),
-				"METRICS_CA_CERT_PATH="+testhelper.Cert("system-metrics-agent-ca.crt"),
-				"METRICS_CA_CN=systemMetricsAgentCA",
-				"LOGGREGATOR_AGENT_ADDR="+spyAgent.addr,
-				"METRICS_URLS="+promServer.URL,
-				"DEFAULT_SOURCE_ID=some-id",
-				"SCRAPE_INTERVAL=100ms",
-			)
-		})
+			parsedUrl, _ := url.Parse(promServer.URL)
 
-		AfterEach(func() {
-			session.Kill()
-			gexec.CleanupBuildArtifacts()
+			cfg = app.Config{
+				ClientKeyPath:  testhelper.Cert("metron.key"),
+				ClientCertPath: testhelper.Cert("metron.crt"),
+				CACertPath:     testhelper.Cert("loggregator-ca.crt"),
+				LoggregatorIngressAddr: spyAgent.addr,
+				DefaultSourceID:        "some-id",
+				MetricsUrls:            []*url.URL{parsedUrl},
+				ScrapeInterval:         100 * time.Millisecond,
+			}
 		})
 
 		It("scrapes a prometheus endpoint and sends those metrics to a loggregator agent", func() {
+			ps := app.NewPromScraper(cfg, testLogger)
+			go ps.Run()
+
 			Eventually(spyAgent.Envelopes).Should(And(
 				ContainElement(buildEnvelope("node_timex_pps_calibration_total", 1)),
 				ContainElement(buildEnvelope("node_timex_pps_error_total", 2)),
@@ -76,18 +74,30 @@ var _ = Describe("Main", func() {
 				w.Write([]byte(promOutput2))
 			}))
 
-			session = startScraper(
-				"CLIENT_KEY_PATH="+testhelper.Cert("prom-scraper.key"),
-				"CLIENT_CERT_PATH="+testhelper.Cert("prom-scraper.crt"),
-				"CA_CERT_PATH="+testhelper.Cert("loggregator-ca.crt"),
-				"LOGGREGATOR_AGENT_ADDR="+spyAgent.addr,
-				"METRICS_URLS="+promServer.URL+","+promServer2.URL,
-				"DEFAULT_SOURCE_ID=some-id",
-				"SCRAPE_INTERVAL=100ms",
-			)
+			psUrl, err := url.Parse(promServer.URL)
+			Expect(err).ToNot(HaveOccurred())
+
+			ps2Url, err := url.Parse(promServer2.URL)
+			Expect(err).ToNot(HaveOccurred())
+
+			cfg = app.Config{
+				ClientKeyPath:  testhelper.Cert("prom-scraper.key"),
+				ClientCertPath: testhelper.Cert("prom-scraper.crt"),
+				CACertPath:     testhelper.Cert("loggregator-ca.crt"),
+				LoggregatorIngressAddr: spyAgent.addr,
+				DefaultSourceID:        "some-id",
+				MetricsUrls: []*url.URL{
+					psUrl,
+					ps2Url,
+				},
+				ScrapeInterval: 100 * time.Millisecond,
+			}
 		})
 
 		It("scrapes multiple prometheus endpoints and sends those metrics to a loggregator agent", func() {
+			ps := app.NewPromScraper(cfg, testLogger)
+			go ps.Run()
+
 			Eventually(spyAgent.Envelopes).Should(And(
 				ContainElement(buildEnvelope("node_timex_pps_calibration_total", 1)),
 				ContainElement(buildEnvelope("node_timex_pps_error_total", 2)),
@@ -111,22 +121,6 @@ func buildEnvelope(name string, value float64) *loggregator_v2.Envelope {
 			},
 		},
 	}
-}
-
-func startScraper(envs ...string) *gexec.Session {
-	path, err := gexec.Build("code.cloudfoundry.org/loggregator-agent/cmd/prom-scraper")
-	if err != nil {
-		panic(err)
-	}
-
-	cmd := exec.Command(path)
-	cmd.Env = envs
-	session, err := gexec.Start(cmd, GinkgoWriter, GinkgoWriter)
-	if err != nil {
-		panic(err)
-	}
-
-	return session
 }
 
 const (

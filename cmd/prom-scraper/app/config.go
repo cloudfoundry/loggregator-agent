@@ -1,14 +1,14 @@
-package main
+package app
 
 import (
 	"log"
 	"net/url"
 	"time"
 
-	envstruct "code.cloudfoundry.org/go-envstruct"
+	"code.cloudfoundry.org/go-envstruct"
 )
 
-type config struct {
+type Config struct {
 	// Loggregator Agent Certs
 	ClientKeyPath  string `env:"CLIENT_KEY_PATH, report, required"`
 	ClientCertPath string `env:"CLIENT_CERT_PATH, report, required"`
@@ -20,8 +20,8 @@ type config struct {
 	ScrapeInterval         time.Duration `env:"SCRAPE_INTERVAL, report"`
 }
 
-func loadConfig(log *log.Logger) config {
-	cfg := config{
+func LoadConfig(log *log.Logger) Config {
+	cfg := Config{
 		ScrapeInterval: 15 * time.Second,
 	}
 
