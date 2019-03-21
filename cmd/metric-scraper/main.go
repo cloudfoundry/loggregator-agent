@@ -9,8 +9,8 @@ import (
 
 func main() {
 	log := log.New(os.Stderr, "", log.LstdFlags)
-	log.Printf("starting Metrics Scraper...")
-	defer log.Printf("closing Metrics Scraper...")
+	log.Printf("starting MetricClient Scraper...")
+	defer log.Printf("closing MetricClient Scraper...")
 
 	cfg := app.LoadConfig(log)
 	app.NewMetricScraper(cfg, log).Run()
