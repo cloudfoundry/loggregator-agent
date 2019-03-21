@@ -26,17 +26,31 @@ type Gauge interface {
 	Set(float64)
 }
 
-func NewPromRegistry(defaultSourceID string, port int, logger *log.Logger) *PromRegistry {
+func NewPromRegistry(defaultSourceID string, port int, logger *log.Logger, opts ...RegistryOption) *PromRegistry {
 	registry := prometheus.NewRegistry()
 	p := serveRegistry(registry, port, logger)
 
 	pr := &PromRegistry{
 		registry:    registry,
 		defaultTags: map[string]string{"source_id": defaultSourceID, "origin": defaultSourceID},
-		port: p,
+		port:        p,
+	}
+
+	for _, o := range opts {
+		o(pr)
 	}
 
 	return pr
+}
+
+type RegistryOption func(r *PromRegistry)
+
+func WithDefaultTags(tags map[string]string) RegistryOption {
+	return func(r *PromRegistry) {
+		for k, v := range tags {
+			r.defaultTags[k] = v
+		}
+	}
 }
 
 func serveRegistry(registry *prometheus.Registry, port int, logger *log.Logger) string {
@@ -58,7 +72,7 @@ func serveRegistry(registry *prometheus.Registry, port int, logger *log.Logger) 
 	go s.Serve(lis)
 
 	parts := strings.Split(lis.Addr().String(), ":")
-	return parts[len(parts) - 1]
+	return parts[len(parts)-1]
 }
 
 func (p *PromRegistry) NewCounter(name string, opts ...MetricOption) (Counter, error) {
