@@ -1,7 +1,6 @@
 package main
 
 import (
-	"expvar"
 	"log"
 	"os"
 
@@ -17,7 +16,7 @@ func main() {
 	defer log.Println("closing UDP Forwarder...")
 
 	cfg := app.LoadConfig(log)
-	m := metrics.New(expvar.NewMap("UDPForwarder"))
+	m := metrics.NewPromRegistry("udp_forwarder", cfg.DebugPort, log)
 
 	forwarder := app.NewUDPForwarder(cfg, log, m)
 	forwarder.Run()
