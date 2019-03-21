@@ -1,6 +1,7 @@
 package app
 
 import (
+	"code.cloudfoundry.org/loggregator-agent/pkg/metrics"
 	"fmt"
 	"log"
 	"math/rand"
@@ -21,9 +22,8 @@ import (
 
 // MetricClient is used to serve metrics.
 type MetricClient interface {
-	NewCounter(name string) func(uint64)
-	NewGauge(name string) func(float64)
-	NewSumGauge(name string) func(float64)
+	NewCounter(name string, opts ...metrics.MetricOption) (metrics.Counter, error)
+	NewGauge(name string, opts ...metrics.MetricOption) (metrics.Gauge, error)
 }
 
 // AppV2Option configures AppV2 options.
@@ -71,11 +71,15 @@ func (a *AppV2) Start() {
 		log.Panic("Failed to load TLS server config")
 	}
 
-	droppedMetric := a.metricClient.NewCounter("DroppedIngressV2")
+	// TODO: Err checking
+	droppedMetric, _ := a.metricClient.NewCounter(
+		"dropped",
+		metrics.WithMetricTags(map[string]string{"direction": "ingress"}),
+	)
 	envelopeBuffer := diodes.NewManyToOneEnvelopeV2(10000, gendiodes.AlertFunc(func(missed int) {
 		// metric-documentation-v2: (loggregator.metron.dropped) Number of v2 envelopes
 		// dropped from the agent ingress diode
-		droppedMetric(uint64(missed))
+		droppedMetric.Add(float64(missed))
 
 		log.Printf("Dropped %d v2 envelopes", missed)
 	}))
@@ -129,9 +133,12 @@ func (a *AppV2) initializePool() *clientpoolv2.ClientPool {
 		clientpoolv2.WithLookup(a.lookup)),
 	)
 
-	avgEnvelopeSize := a.metricClient.NewGauge("AverageEnvelopeV2")
+	//TODO: Err handling
+	avgEnvelopeSize, _ := a.metricClient.NewGauge("average_envelope")
 	tracker := plumbing.NewEnvelopeAverager()
-	tracker.Start(60*time.Second, avgEnvelopeSize)
+	tracker.Start(60*time.Second, func(average float64) {
+		avgEnvelopeSize.Set(average)
+	})
 	statsHandler := clientpool.NewStatsHandler(tracker)
 
 	kp := keepalive.ClientParameters{

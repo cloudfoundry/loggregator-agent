@@ -1,9 +1,9 @@
 package app
 
 import (
-	"expvar"
 	"log"
 	"net"
+	"os"
 
 	"code.cloudfoundry.org/loggregator-agent/pkg/metrics"
 	"code.cloudfoundry.org/loggregator-agent/pkg/plumbing"
@@ -66,7 +66,8 @@ func (a *Agent) Start() {
 		log.Fatalf("Could not use GRPC creds for server: %s", err)
 	}
 
-	metricClient := metrics.New(expvar.NewMap("Agent"))
+	logger := log.New(os.Stderr, "", log.LstdFlags)
+	metricClient := metrics.NewPromRegistry("metron", int(a.config.PProfPort), logger)
 
 	appV1 := NewV1App(a.config, clientCreds, metricClient)
 	go appV1.Start()

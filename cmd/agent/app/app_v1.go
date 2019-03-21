@@ -1,6 +1,7 @@
 package app
 
 import (
+	"code.cloudfoundry.org/loggregator-agent/pkg/metrics"
 	"fmt"
 	"log"
 	"math/rand"
@@ -117,9 +118,15 @@ func (a *AppV1) setupGRPC() *clientpoolv1.ClientPool {
 		clientpoolv1.WithLookup(a.lookup),
 	))
 
-	avgEnvelopeSize := a.metricClient.NewGauge("AverageEnvelope")
+	// TODO: err checking
+	avgEnvelopeSize, _ := a.metricClient.NewGauge(
+		"average_envelope",
+		metrics.WithMetricTags(map[string]string{"unit": "bytes/minute", "loggregator": "v1"}),
+	)
 	tracker := plumbing.NewEnvelopeAverager()
-	tracker.Start(60*time.Second, avgEnvelopeSize)
+	tracker.Start(60*time.Second, func(average float64) {
+		avgEnvelopeSize.Set(average)
+	})
 	statsHandler := clientpool.NewStatsHandler(tracker)
 
 	kp := keepalive.ClientParameters{
