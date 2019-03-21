@@ -13,7 +13,7 @@ import (
 	"sync"
 	"time"
 
-	loggregator "code.cloudfoundry.org/go-loggregator"
+	"code.cloudfoundry.org/go-loggregator"
 	"code.cloudfoundry.org/go-loggregator/rpc/loggregator_v2"
 	"code.cloudfoundry.org/loggregator-agent/cmd/forwarder-agent/app"
 	"code.cloudfoundry.org/loggregator-agent/internal/testhelper"
@@ -104,13 +104,22 @@ var _ = Describe("Main", func() {
 		grpcPort++
 	})
 
-	It("has a health endpoint", func() {
+	It("has a dropped metric with direction", func() {
 		forwarderAgent = app.NewForwarderAgent(cfg, mc, testLogger)
 		go forwarderAgent.Run()
 
+		et := map[string]string {
+			"direction": "ingress",
+		}
+
 		Eventually(func() bool {
-			return mc.HasMetric("IngressDropped")
+			return mc.HasMetric("dropped", et)
 		}).Should(BeTrue())
+
+		m := mc.GetMetric("dropped", et)
+
+		Expect(m).ToNot(BeNil())
+		Expect(m.Opts.ConstLabels).To(HaveKeyWithValue("direction", "ingress"))
 	})
 
 	It("forwards all envelopes downstream", func() {
