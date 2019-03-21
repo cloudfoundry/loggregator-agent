@@ -1,6 +1,7 @@
 package app
 
 import (
+	"code.cloudfoundry.org/loggregator-agent/pkg/metrics"
 	"fmt"
 	"log"
 	"time"
@@ -24,7 +25,7 @@ import (
 // SyslogAgent manages starting the syslog agent service.
 type SyslogAgent struct {
 	debugPort           uint16
-	metrics             Metrics
+	metrics             MetricClient
 	bindingManager      BindingManager
 	grpc                GRPC
 	log                 *log.Logger
@@ -33,9 +34,9 @@ type SyslogAgent struct {
 	drainSkipCertVerify bool
 }
 
-type Metrics interface {
-	NewGauge(string) func(float64)
-	NewCounter(name string) func(uint64)
+type MetricClient interface {
+	NewGauge(name string , opts ...metrics.MetricOption) (metrics.Gauge, error)
+	NewCounter(name string , opts ...metrics.MetricOption) (metrics.Counter, error)
 }
 
 type BindingManager interface {
@@ -46,7 +47,7 @@ type BindingManager interface {
 // NewSyslogAgent intializes and returns a new syslog agent.
 func NewSyslogAgent(
 	cfg Config,
-	m Metrics,
+	m MetricClient,
 	l *log.Logger,
 ) *SyslogAgent {
 	connector := syslog.NewSyslogConnector(
@@ -97,12 +98,15 @@ func NewSyslogAgent(
 func (s *SyslogAgent) Run() {
 	go http.ListenAndServe(fmt.Sprintf("127.0.0.1:%d", s.debugPort), nil)
 
-	ingressDropped := s.metrics.NewCounter("IngressDropped")
+	//TODO: err handling
+
+	tags := map[string]string{"direction": "ingress"}
+	ingressDropped, _ := s.metrics.NewCounter("dropped", metrics.WithMetricTags(tags))
 	diode := diodes.NewManyToOneEnvelopeV2(10000, gendiodes.AlertFunc(func(missed int) {
-		ingressDropped(uint64(missed))
+		ingressDropped.Add(float64(missed))
 	}))
 
-	drainIngress := s.metrics.NewCounter("DrainIngress")
+	drainIngress, _ := s.metrics.NewCounter("ingress", metrics.WithMetricTags(map[string]string{"scope": "all_drains"}))
 	go s.bindingManager.Run()
 	go func() {
 		for {
@@ -110,7 +114,7 @@ func (s *SyslogAgent) Run() {
 
 			drainWriters := s.bindingManager.GetDrains(e.SourceId)
 			for _, w := range drainWriters {
-				drainIngress(1)
+				drainIngress.Add(1)
 
 				// Ignore this because we typically wrap everything in a diode
 				// writer which doesn't return an error

@@ -6,12 +6,12 @@ import (
 	"crypto/tls"
 	"encoding/json"
 	"fmt"
+	. "github.com/onsi/ginkgo/extensions/table"
 	"io/ioutil"
 	"log"
 	"net"
 	"net/http"
 	"net/http/httptest"
-	"os/exec"
 	"strings"
 	"sync"
 	"time"
@@ -20,7 +20,7 @@ import (
 	. "github.com/onsi/gomega"
 	"github.com/onsi/gomega/gexec"
 
-	loggregator "code.cloudfoundry.org/go-loggregator"
+	"code.cloudfoundry.org/go-loggregator"
 	"code.cloudfoundry.org/go-loggregator/rpc/loggregator_v2"
 	"code.cloudfoundry.org/loggregator-agent/cmd/syslog-agent/app"
 	"code.cloudfoundry.org/loggregator-agent/internal/testhelper"
@@ -76,7 +76,7 @@ var _ = Describe("SyslogAgent", func() {
 		grpcPort++
 	})
 
-	It("has a health endpoint", func() {
+	DescribeTable("has metric and expected tags", func(name string, tags map[string]string) {
 		mc := testhelper.NewMetricClient()
 		cfg := app.Config{
 			BindingsPerAppLimit: 5,
@@ -99,16 +99,30 @@ var _ = Describe("SyslogAgent", func() {
 		}
 		go app.NewSyslogAgent(cfg, mc, testLogger).Run()
 
-		Eventually(hasMetric(mc, "IngressDropped")).Should(BeTrue())
-		Eventually(hasMetric(mc, "IngressV2")).Should(BeTrue())
-		Eventually(hasMetric(mc, "DrainCount")).Should(BeTrue())
-		Eventually(hasMetric(mc, "BindingRefreshCount")).Should(BeTrue())
-		Eventually(hasMetric(mc, "LatencyForLastBindingRefreshMS")).Should(BeTrue())
-		Eventually(hasMetric(mc, "DrainIngress")).Should(BeTrue())
+		Eventually(func() bool {
+			return mc.HasMetric(name, tags)
+		}).Should(BeTrue())
 
-		Eventually(hasMetric(mc, "EgressDropped")).Should(BeTrue())
-		Eventually(hasMetric(mc, "Egress")).Should(BeTrue())
-	})
+		m := mc.GetMetric(name, tags)
+		for k, v := range tags {
+			Expect(m.Opts.ConstLabels).To(HaveKeyWithValue(k, v))
+		}
+	},
+		//Need to find a place to test that the ingress metric receives the scope tag
+		Entry("IngressV2", "ingress", map[string]string{}),
+		Entry("OriginMappingsV2", "origin_mappings", map[string]string{}),
+		Entry("IngressDropped", "dropped", map[string]string{"direction": "ingress"}),
+		Entry("BindingRefreshCount", "binding_refresh_count", map[string]string{}),
+		Entry("DrainCount", "drains", map[string]string{"unit": "count"}),
+		Entry("ActiveDrainCount", "active_drains", map[string]string{"unit": "count"}),
+		Entry("LatencyForLastBindingRefreshMS", "latency_for_last_binding_refresh", map[string]string{"unit": "ms"}),
+		Entry("InvalidDrains", "invalid_drains", map[string]string{"unit": "total"}),
+		Entry("BlacklistedDrains", "blacklisted_drains", map[string]string{"unit": "total"}),
+		Entry("DrainIngress", "ingress", map[string]string{"scope": "all_drains"}),
+
+		Entry("Egress", "egress", map[string]string{}),
+		Entry("EgressDropped", "dropped", map[string]string{"direction": "egress"}),
+	)
 
 	It("forwards envelopes to syslog drains", func() {
 		mc := testhelper.NewMetricClient()
@@ -247,28 +261,6 @@ func emitLogs(ctx context.Context, grpcPort int) {
 			}
 		}
 	}()
-}
-
-func hasMetric(mc *testhelper.SpyMetricClient, metricName string) func() bool {
-	return func() bool {
-		return mc.HasMetric(metricName)
-	}
-}
-
-func startSyslogAgent(envs ...string) *gexec.Session {
-	path, err := gexec.Build("code.cloudfoundry.org/loggregator-agent/cmd/syslog-agent")
-	if err != nil {
-		panic(err)
-	}
-
-	cmd := exec.Command(path)
-	cmd.Env = envs
-	session, err := gexec.Start(cmd, GinkgoWriter, GinkgoWriter)
-	if err != nil {
-		panic(err)
-	}
-
-	return session
 }
 
 type fakeBindingCache struct {
