@@ -103,7 +103,7 @@ var _ = Describe("BindingFetcher", func() {
 		Expect(err).ToNot(HaveOccurred())
 
 		Expect(
-			metrics.GetMetric("BindingRefreshCount").Delta(),
+			metrics.GetMetric("binding_refresh_count", map[string]string{}).Delta(),
 		).To(Equal(uint64(1)))
 	})
 
@@ -112,7 +112,7 @@ var _ = Describe("BindingFetcher", func() {
 		Expect(err).ToNot(HaveOccurred())
 
 		Expect(
-			metrics.GetMetric("LatencyForLastBindingRefreshMS").GaugeValue(),
+			metrics.GetMetric("latency_for_last_binding_refresh", map[string]string{"unit": "ms"}).GaugeValue(),
 		).To(BeNumerically(">", 0))
 	})
 

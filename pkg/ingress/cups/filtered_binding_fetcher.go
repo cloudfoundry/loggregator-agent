@@ -1,6 +1,7 @@
 package cups
 
 import (
+	"code.cloudfoundry.org/loggregator-agent/pkg/metrics"
 	"code.cloudfoundry.org/loggregator-agent/pkg/binding"
 	"fmt"
 	"log"
@@ -17,26 +18,29 @@ type IPChecker interface {
 	CheckBlacklist(ip net.IP) error
 }
 
-// Metrics is the client used to expose gauge and counter metrics.
-type metrics interface {
-	NewGauge(string) func(float64)
+type MetricClient interface {
+	NewGauge(name string, opts ...metrics.MetricOption) (metrics.Gauge, error)
 }
 
 type FilteredBindingFetcher struct {
 	ipChecker         IPChecker
 	br                binding.Fetcher
 	logger            *log.Logger
-	invalidDrains     func(float64)
-	blacklistedDrains func(float64)
+	invalidDrains     metrics.Gauge
+	blacklistedDrains metrics.Gauge
 }
 
-func NewFilteredBindingFetcher(c IPChecker, b binding.Fetcher, m metrics, lc *log.Logger) *FilteredBindingFetcher {
+func NewFilteredBindingFetcher(c IPChecker, b binding.Fetcher, m MetricClient, lc *log.Logger) *FilteredBindingFetcher {
+	// TODO: err checking
+	invalidDrain, _ := m.NewGauge("invalid_drains", metrics.WithMetricTags(map[string]string{"unit": "total"}))
+	blacklistedDrains, _ := m.NewGauge("blacklisted_drains", metrics.WithMetricTags(map[string]string{"unit": "total"}))
+
 	return &FilteredBindingFetcher{
 		ipChecker:         c,
 		br:                b,
 		logger:            lc,
-		invalidDrains:     m.NewGauge("InvalidDrains"),
-		blacklistedDrains: m.NewGauge("BlacklistedDrains"),
+		invalidDrains:     invalidDrain,
+		blacklistedDrains: blacklistedDrains,
 	}
 }
 
@@ -86,8 +90,8 @@ func (f *FilteredBindingFetcher) FetchBindings() ([]syslog.Binding, error) {
 		newBindings = append(newBindings, b)
 	}
 
-	f.blacklistedDrains(blacklistedDrains)
-	f.invalidDrains(invalidDrains)
+	f.blacklistedDrains.Set(blacklistedDrains)
+	f.invalidDrains.Set(invalidDrains)
 	return newBindings, nil
 }
 

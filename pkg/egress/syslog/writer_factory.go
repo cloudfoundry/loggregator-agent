@@ -1,22 +1,25 @@
 package syslog
 
 import (
+	"code.cloudfoundry.org/loggregator-agent/pkg/metrics"
 	"errors"
 
 	"code.cloudfoundry.org/loggregator-agent/pkg/egress"
 )
 
-type metrics interface {
-	NewCounter(string) func(uint64)
+type metricClient interface {
+	NewCounter(name string, opts ...metrics.MetricOption) (metrics.Counter, error)
 }
 
 type WriterFactory struct {
-	egressMetric func(uint64)
+	egressMetric metrics.Counter
 }
 
-func NewWriterFactory(m metrics) WriterFactory {
+func NewWriterFactory(m metricClient) WriterFactory {
+	// TODO: err checking
+	egressMetric, _ := m.NewCounter("egress")
 	return WriterFactory{
-		egressMetric: m.NewCounter("Egress"),
+		egressMetric: egressMetric,
 	}
 }
 

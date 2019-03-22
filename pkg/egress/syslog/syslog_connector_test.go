@@ -1,6 +1,7 @@
 package syslog_test
 
 import (
+	"code.cloudfoundry.org/loggregator-agent/internal/testhelper"
 	"errors"
 	"io"
 	"sync/atomic"
@@ -22,11 +23,11 @@ var _ = Describe("SyslogConnector", func() {
 		spyWaitGroup  *SpyWaitGroup
 		netConf       syslog.NetworkTimeoutConfig
 		writerFactory *stubWriterFactory
-		sm            *spyMetrics
+		sm            *testhelper.SpyMetricClient
 	)
 
 	BeforeEach(func() {
-		sm = newSpyMetrics()
+		sm = testhelper.NewMetricClient()
 		ctx, _ = context.WithCancel(context.Background())
 		spyWaitGroup = &SpyWaitGroup{}
 		writerFactory = &stubWriterFactory{}
@@ -202,7 +203,7 @@ var _ = Describe("SyslogConnector", func() {
 			Eventually(logClient.sourceInstance).Should(HaveKey("3"))
 		})
 
-		It("does not panic on unknown dropped metrics", func() {
+		It("does not panic on unknown dropped metricClient", func() {
 			binding := syslog.Binding{Drain: "dropping://"}
 
 			connector := syslog.NewSyslogConnector(

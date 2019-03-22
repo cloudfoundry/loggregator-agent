@@ -68,7 +68,7 @@ var _ = Describe("FilteredBindingFetcher", func() {
 
 			Expect(err).ToNot(HaveOccurred())
 			Expect(actual).To(Equal([]syslog.Binding{}))
-			Expect(metrics.GetMetric("InvalidDrains").GaugeValue()).To(Equal(1.0))
+			Expect(metrics.GetMetric("invalid_drains", map[string]string{"unit": "total"}).GaugeValue()).To(Equal(1.0))
 		})
 	})
 
@@ -100,7 +100,7 @@ var _ = Describe("FilteredBindingFetcher", func() {
 
 			Expect(err).ToNot(HaveOccurred())
 			Expect(actual).To(Equal(input[:3]))
-			Expect(metrics.GetMetric("InvalidDrains").GaugeValue()).To(Equal(2.0))
+			Expect(metrics.GetMetric("invalid_drains", map[string]string{"unit": "total"}).GaugeValue()).To(Equal(2.0))
 		})
 	})
 
@@ -126,7 +126,7 @@ var _ = Describe("FilteredBindingFetcher", func() {
 
 			Expect(err).ToNot(HaveOccurred())
 			Expect(actual).To(Equal([]syslog.Binding{}))
-			Expect(metrics.GetMetric("InvalidDrains").GaugeValue()).To(Equal(1.0))
+			Expect(metrics.GetMetric("invalid_drains", map[string]string{"unit": "total"}).GaugeValue()).To(Equal(1.0))
 		})
 	})
 
@@ -153,8 +153,8 @@ var _ = Describe("FilteredBindingFetcher", func() {
 
 			Expect(err).ToNot(HaveOccurred())
 			Expect(actual).To(Equal([]syslog.Binding{}))
-			Expect(metrics.GetMetric("InvalidDrains").GaugeValue()).To(Equal(1.0))
-			Expect(metrics.GetMetric("BlacklistedDrains").GaugeValue()).To(Equal(1.0))
+			Expect(metrics.GetMetric("invalid_drains", map[string]string{"unit": "total"}).GaugeValue()).To(Equal(1.0))
+			Expect(metrics.GetMetric("blacklisted_drains", map[string]string{"unit": "total"}).GaugeValue()).To(Equal(1.0))
 		})
 	})
 })

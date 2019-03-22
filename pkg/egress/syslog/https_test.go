@@ -1,6 +1,7 @@
 package syslog_test
 
 import (
+	"code.cloudfoundry.org/loggregator-agent/internal/testhelper"
 	"io/ioutil"
 	"net/http"
 	"net/http/httptest"
@@ -25,7 +26,7 @@ var _ = Describe("HTTPWriter", func() {
 			b,
 			netConf,
 			false,
-			func(uint64) {},
+			&testhelper.SpyMetric{},
 		)
 
 		env := buildLogEnvelope("APP", "1", "just a test", loggregator_v2.Log_OUT)
@@ -44,7 +45,7 @@ var _ = Describe("HTTPWriter", func() {
 			b,
 			netConf,
 			true,
-			func(uint64) {},
+			&testhelper.SpyMetric{},
 		)
 
 		env := buildLogEnvelope("APP", "1", "just a test", loggregator_v2.Log_OUT)
@@ -64,7 +65,7 @@ var _ = Describe("HTTPWriter", func() {
 			b,
 			netConf,
 			true,
-			func(uint64) {},
+			&testhelper.SpyMetric{},
 		)
 
 		env := buildLogEnvelope("APP", "1", "just a test", loggregator_v2.Log_OUT)
@@ -82,7 +83,7 @@ var _ = Describe("HTTPWriter", func() {
 			b,
 			netConf,
 			true,
-			func(uint64) {},
+			&testhelper.SpyMetric{},
 		)
 
 		env := buildLogEnvelope("APP", "1", "just a test", loggregator_v2.Log_OUT)
@@ -106,7 +107,7 @@ var _ = Describe("HTTPWriter", func() {
 			b,
 			netConf,
 			true,
-			func(uint64) {},
+			&testhelper.SpyMetric{},
 		)
 
 		env1 := buildLogEnvelope("APP", "1", "just a test", loggregator_v2.Log_OUT)
@@ -146,7 +147,7 @@ var _ = Describe("HTTPWriter", func() {
 		Expect(drain.messages[2].ProcessID).To(Equal("[CELL]"))
 	})
 
-	It("writes gauge metrics to the http drain", func() {
+	It("writes gauge metricClient to the http drain", func() {
 		drain := newMockOKDrain()
 
 		b := buildURLBinding(
@@ -159,7 +160,7 @@ var _ = Describe("HTTPWriter", func() {
 			b,
 			netConf,
 			true,
-			func(uint64) {},
+			&testhelper.SpyMetric{},
 		)
 
 		env1 := buildGaugeEnvelope("1")
@@ -194,7 +195,7 @@ var _ = Describe("HTTPWriter", func() {
 		Expect(sdValues(drain.messages, "memory_quota")).To(ConsistOf("memory_quota", "8000", "bytes"))
 	})
 
-	It("writes counter metrics to the http drain", func() {
+	It("writes counter metricClient to the http drain", func() {
 		drain := newMockOKDrain()
 
 		b := buildURLBinding(
@@ -207,7 +208,7 @@ var _ = Describe("HTTPWriter", func() {
 			b,
 			netConf,
 			true,
-			func(uint64) {},
+			&testhelper.SpyMetric{},
 		)
 
 		env1 := buildCounterEnvelope("1")
@@ -232,7 +233,7 @@ var _ = Describe("HTTPWriter", func() {
 		drain := newMockOKDrain()
 
 		var delta uint64
-		metric := func(d uint64) { delta = d }
+		metric := &testhelper.SpyMetric{}
 
 		b := buildURLBinding(
 			drain.URL,
@@ -266,7 +267,7 @@ var _ = Describe("HTTPWriter", func() {
 			b,
 			netConf,
 			true,
-			func(uint64) {},
+			&testhelper.SpyMetric{},
 		)
 
 		counterEnv := buildTimerEnvelope()

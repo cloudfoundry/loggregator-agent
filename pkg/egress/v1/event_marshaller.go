@@ -1,6 +1,7 @@
 package v1
 
 import (
+	"code.cloudfoundry.org/loggregator-agent/pkg/metrics"
 	"log"
 	"sync"
 
@@ -12,7 +13,7 @@ import (
 
 // MetricClient creates new CounterMetrics to be emitted periodically.
 type MetricClient interface {
-	NewCounter(name string) func(uint64)
+	NewCounter(name string, opts ...metrics.MetricOption) (metrics.Counter, error)
 }
 
 type BatchChainByteWriter interface {
@@ -20,14 +21,15 @@ type BatchChainByteWriter interface {
 }
 
 type EventMarshaller struct {
-	egressCounter func(uint64)
+	egressCounter metrics.Counter
 	byteWriter    BatchChainByteWriter
 	bwLock        sync.RWMutex
 }
 
 func NewMarshaller(mc MetricClient) *EventMarshaller {
+	egressCounter, _ := mc.NewCounter("egress")
 	return &EventMarshaller{
-		egressCounter: mc.NewCounter("Egress"),
+		egressCounter: egressCounter,
 	}
 }
 
@@ -57,5 +59,5 @@ func (m *EventMarshaller) Write(envelope *events.Envelope) {
 	}
 
 	writer.Write(envelopeBytes)
-	m.egressCounter(1)
+	m.egressCounter.Add(1)
 }

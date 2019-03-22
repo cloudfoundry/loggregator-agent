@@ -1,6 +1,7 @@
 package v1
 
 import (
+	"code.cloudfoundry.org/loggregator-agent/pkg/metrics"
 	"log"
 	"net"
 
@@ -14,13 +15,13 @@ type ByteArrayWriter interface {
 
 // MetricClient creates new CounterMetrics to be emitted periodically.
 type MetricClient interface {
-	NewCounter(name string) func(uint64)
+	NewCounter(name string, opts ...metrics.MetricOption) (metrics.Counter, error)
 }
 
 type NetworkReader struct {
 	connection  net.PacketConn
 	writer      ByteArrayWriter
-	rxMsgCount  func(uint64)
+	rxMsgCount  metrics.Counter
 	contextName string
 	buffer      *diodes.OneToOne
 }
@@ -35,15 +36,17 @@ func NewNetworkReader(
 		return nil, err
 	}
 	log.Printf("udp bound to: %s", connection.LocalAddr())
-	rxErrCount := m.NewCounter("Dropped")
+	//TODO: err handling
+	rxErrCount, err := m.NewCounter("dropped")
+	rxMsgCount, err := m.NewCounter("ingress")
 
 	return &NetworkReader{
 		connection: connection,
-		rxMsgCount: m.NewCounter("Ingress"),
+		rxMsgCount: rxMsgCount,
 		writer:     writer,
 		buffer: diodes.NewOneToOne(10000, gendiodes.AlertFunc(func(missed int) {
 			log.Printf("network reader dropped messages %d", missed)
-			rxErrCount(uint64(missed))
+			rxErrCount.Add(float64(missed))
 		})),
 	}, nil
 }
@@ -66,7 +69,7 @@ func (nr *NetworkReader) StartReading() {
 func (nr *NetworkReader) StartWriting() {
 	for {
 		data := nr.buffer.Next()
-		nr.rxMsgCount(1)
+		nr.rxMsgCount.Add(1)
 		nr.writer.Write(data)
 	}
 }

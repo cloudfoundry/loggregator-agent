@@ -1,6 +1,7 @@
 package v2
 
 import (
+	"code.cloudfoundry.org/loggregator-agent/pkg/metrics"
 	"context"
 	"fmt"
 	"io"
@@ -11,20 +12,23 @@ import (
 )
 
 type MetricClient interface {
-	NewSumGauge(string) func(float64)
+	NewGauge(name string, opts ...metrics.MetricOption) (metrics.Gauge, error)
 }
 
 type SenderFetcher struct {
 	opts               []grpc.DialOption
-	dopplerConnections func(float64)
-	dopplerV2Streams   func(float64)
+	dopplerConnections metrics.Gauge
+	dopplerV2Streams   metrics.Gauge
 }
 
 func NewSenderFetcher(mc MetricClient, opts ...grpc.DialOption) *SenderFetcher {
+	//TODO: Err handling
+	dopplerConnections, _ := mc.NewGauge("DopplerConnections")
+	dopplerV2Streams, _ := mc.NewGauge("DopplerV2Streams")
 	return &SenderFetcher{
 		opts:               opts,
-		dopplerConnections: mc.NewSumGauge("DopplerConnections"),
-		dopplerV2Streams:   mc.NewSumGauge("DopplerV2Streams"),
+		dopplerConnections: dopplerConnections,
+		dopplerV2Streams:   dopplerV2Streams,
 	}
 }
 
@@ -41,8 +45,8 @@ func (p *SenderFetcher) Fetch(addr string) (io.Closer, loggregator_v2.Ingress_Ba
 		return nil, nil, fmt.Errorf("failed to establish stream to doppler (%s): %s", addr, err)
 	}
 
-	p.dopplerConnections(1)
-	p.dopplerV2Streams(1)
+	p.dopplerConnections.Set(1)
+	p.dopplerV2Streams.Set(1)
 
 	log.Printf("successfully established a stream to doppler %s", addr)
 
@@ -56,13 +60,13 @@ func (p *SenderFetcher) Fetch(addr string) (io.Closer, loggregator_v2.Ingress_Ba
 
 type decrementingCloser struct {
 	closer             io.Closer
-	dopplerConnections func(float64)
-	dopplerV2Streams   func(float64)
+	dopplerConnections metrics.Gauge
+	dopplerV2Streams   metrics.Gauge
 }
 
 func (d *decrementingCloser) Close() error {
-	d.dopplerConnections(-1)
-	d.dopplerV2Streams(-1)
+	d.dopplerConnections.Add(-1)
+	d.dopplerV2Streams.Add(-1)
 
 	return d.closer.Close()
 }

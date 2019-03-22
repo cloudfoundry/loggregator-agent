@@ -1,6 +1,7 @@
 package v2_test
 
 import (
+	"code.cloudfoundry.org/loggregator-agent/pkg/metrics"
 	"context"
 	"errors"
 	"io"
@@ -24,6 +25,20 @@ var _ = Describe("Receiver", func() {
 		spySetter = NewSpySetter()
 		metricClient = testhelper.NewMetricClient()
 		rx = ingress.NewReceiver(spySetter, metricClient)
+	})
+
+	Describe("NewReceiver", func() {
+		It("should pass metric options to ingressMetric and originMappingsMetric", func() {
+			testTags := map[string]string{"test-tag": "test-value"}
+			ingress.NewReceiver(
+				spySetter,
+				metricClient,
+				metrics.WithMetricTags(testTags),
+			)
+
+			Expect(metricClient.GetMetric("ingress", testTags).Opts.ConstLabels).To(HaveKeyWithValue("test-tag", "test-value"))
+			Expect(metricClient.GetMetric("origin_mappings", testTags).Opts.ConstLabels).To(HaveKeyWithValue("test-tag", "test-value"))
+		})
 	})
 
 	Describe("Sender()", func() {
@@ -87,8 +102,8 @@ var _ = Describe("Receiver", func() {
 
 			rx.Sender(spySender)
 
-			metric := metricClient.GetMetric("IngressV2")
-			Expect(metric.Delta()).To(Equal(uint64(2)))
+			metric := metricClient.GetMetric("ingress", map[string]string{})
+			Expect(metric.GaugeValue()).To(BeNumerically("==", 2))
 		})
 
 		Context("when source ID is not set", func() {
@@ -113,8 +128,8 @@ var _ = Describe("Receiver", func() {
 
 				Expect(spySetter.envelopes).To(Receive(Equal(eExpected)))
 
-				metric := metricClient.GetMetric("OriginMappingsV2")
-				Expect(metric.Delta()).To(Equal(uint64(1)))
+				metric := metricClient.GetMetric("origin_mappings", map[string]string{})
+				Expect(metric.GaugeValue()).To(BeNumerically("==", 1))
 			})
 
 			Context("when the origin tag is not set", func() {
@@ -151,8 +166,8 @@ var _ = Describe("Receiver", func() {
 
 					Expect(spySetter.envelopes).To(Receive(Equal(eExpected)))
 
-					metric := metricClient.GetMetric("OriginMappingsV2")
-					Expect(metric.Delta()).To(Equal(uint64(1)))
+					metric := metricClient.GetMetric("origin_mappings", map[string]string{})
+					Expect(metric.GaugeValue()).To(BeNumerically("==", 1))
 				})
 			})
 
@@ -171,8 +186,8 @@ var _ = Describe("Receiver", func() {
 
 					Expect(spySetter.envelopes).To(Receive(Equal(eActual)))
 
-					metric := metricClient.GetMetric("OriginMappingsV2")
-					Expect(metric.Delta()).To(Equal(uint64(0)))
+					metric := metricClient.GetMetric("origin_mappings", map[string]string{})
+					Expect(metric.GaugeValue()).To(BeNumerically("==", 0))
 				})
 			})
 		})
@@ -230,8 +245,8 @@ var _ = Describe("Receiver", func() {
 
 			Expect(spySetter.envelopes).Should(HaveLen(5))
 
-			metric := metricClient.GetMetric("IngressV2")
-			Expect(metric.Delta()).To(Equal(uint64(5)))
+			metric := metricClient.GetMetric("ingress", map[string]string{})
+			Expect(metric.GaugeValue()).To(BeNumerically("==", 5))
 		})
 
 		It("sets the source ID with the origin value when missing source ID", func() {
@@ -266,8 +281,8 @@ var _ = Describe("Receiver", func() {
 			Expect(spySetter.envelopes).Should(Receive(Equal(e1Expected)))
 			Expect(spySetter.envelopes).Should(Receive(Equal(e2Expected)))
 
-			metric := metricClient.GetMetric("OriginMappingsV2")
-			Expect(metric.Delta()).To(Equal(uint64(1)))
+			metric := metricClient.GetMetric("origin_mappings", map[string]string{})
+			Expect(metric.GaugeValue()).To(BeNumerically("==", 1))
 		})
 
 		Context("when the origin tag is not set", func() {
@@ -304,8 +319,8 @@ var _ = Describe("Receiver", func() {
 
 				Expect(spySetter.envelopes).To(Receive(Equal(eExpected)))
 
-				metric := metricClient.GetMetric("OriginMappingsV2")
-				Expect(metric.Delta()).To(Equal(uint64(1)))
+				metric := metricClient.GetMetric("origin_mappings", map[string]string{})
+				Expect(metric.GaugeValue()).To(BeNumerically("==", 1))
 			})
 		})
 	})
@@ -346,8 +361,8 @@ var _ = Describe("Receiver", func() {
 				Batch: []*loggregator_v2.Envelope{e},
 			})
 
-			metric := metricClient.GetMetric("IngressV2")
-			Expect(metric.Delta()).To(Equal(uint64(1)))
+			metric := metricClient.GetMetric("ingress", map[string]string{})
+			Expect(metric.GaugeValue()).To(BeNumerically("==", 1))
 		})
 
 		It("increments the origin_mappings metric", func() {
@@ -359,8 +374,8 @@ var _ = Describe("Receiver", func() {
 				Batch: []*loggregator_v2.Envelope{e},
 			})
 
-			metric := metricClient.GetMetric("OriginMappingsV2")
-			Expect(metric.Delta()).To(Equal(uint64(1)))
+			metric := metricClient.GetMetric("origin_mappings", map[string]string{})
+			Expect(metric.GaugeValue()).To(BeNumerically("==", 1))
 		})
 
 		Context("when source ID is not set", func() {
@@ -410,8 +425,8 @@ var _ = Describe("Receiver", func() {
 
 					Expect(spySetter.envelopes).To(Receive(Equal(eExpected)))
 
-					metric := metricClient.GetMetric("OriginMappingsV2")
-					Expect(metric.Delta()).To(Equal(uint64(1)))
+					metric := metricClient.GetMetric("origin_mappings", map[string]string{})
+					Expect(metric.GaugeValue()).To(BeNumerically("==", 1))
 				})
 			})
 
@@ -425,8 +440,8 @@ var _ = Describe("Receiver", func() {
 
 					Expect(spySetter.envelopes).To(Receive(Equal(eActual)))
 
-					metric := metricClient.GetMetric("OriginMappingsV2")
-					Expect(metric.Delta()).To(Equal(uint64(0)))
+					metric := metricClient.GetMetric("origin_mappings", map[string]string{})
+					Expect(metric.GaugeValue()).To(BeNumerically("==", 0))
 				})
 			})
 		})

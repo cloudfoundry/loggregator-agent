@@ -101,7 +101,7 @@ var _ = Describe("TCPWriter", func() {
 			Entry("other source type", "other", "1", "OTHER/1", 91),
 		)
 
-		It("writes gauge metrics to the tcp drain", func() {
+		It("writes gauge metricClient to the tcp drain", func() {
 			env := buildGaugeEnvelope("1")
 			Expect(writer.Write(env)).To(Succeed())
 
@@ -126,7 +126,7 @@ var _ = Describe("TCPWriter", func() {
 			))
 		})
 
-		It("writes counter metrics to tcp drain", func() {
+		It("writes counter metricClient to tcp drain", func() {
 			env := buildCounterEnvelope("1")
 			Expect(writer.Write(env)).To(Succeed())
 

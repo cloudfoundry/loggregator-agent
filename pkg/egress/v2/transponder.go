@@ -1,6 +1,7 @@
 package v2
 
 import (
+	"code.cloudfoundry.org/loggregator-agent/pkg/metrics"
 	"time"
 
 	"code.cloudfoundry.org/go-loggregator/rpc/loggregator_v2"
@@ -17,7 +18,7 @@ type BatchWriter interface {
 
 // MetricClient creates new CounterMetrics.
 type MetricClient interface {
-	NewCounter(name string) func(uint64)
+	NewCounter(name string, opts ...metrics.MetricOption) (metrics.Counter, error)
 }
 
 type Transponder struct {
@@ -26,8 +27,8 @@ type Transponder struct {
 	batcher       *batching.V2EnvelopeBatcher
 	batchSize     int
 	batchInterval time.Duration
-	droppedMetric func(uint64)
-	egressMetric  func(uint64)
+	droppedMetric metrics.Counter
+	egressMetric  metrics.Counter
 }
 
 func NewTransponder(
@@ -37,11 +38,17 @@ func NewTransponder(
 	batchInterval time.Duration,
 	metricClient MetricClient,
 ) *Transponder {
+	//TODO: Err handling
+	droppedMetric, _ := metricClient.NewCounter(
+		"dropped",
+		metrics.WithMetricTags(map[string]string{"direction": "egress"}),
+	)
+	egressMetric, _ := metricClient.NewCounter("egress")
 	return &Transponder{
 		nexter:        n,
 		writer:        w,
-		droppedMetric: metricClient.NewCounter("DroppedEgressV2"),
-		egressMetric:  metricClient.NewCounter("EgressV2"),
+		droppedMetric: droppedMetric,
+		egressMetric:  egressMetric,
 		batchSize:     batchSize,
 		batchInterval: batchInterval,
 	}
@@ -70,11 +77,11 @@ func (t *Transponder) write(batch []*loggregator_v2.Envelope) {
 	if err := t.writer.Write(batch); err != nil {
 		// metric-documentation-v2: (loggregator.metron.dropped) Number of messages
 		// dropped when failing to write to Dopplers v2 API
-		t.droppedMetric(uint64(len(batch)))
+		t.droppedMetric.Add(float64(len(batch)))
 		return
 	}
 
 	// metric-documentation-v2: (loggregator.metron.egress)
 	// Number of messages written to Doppler's v2 API
-	t.egressMetric(uint64(len(batch)))
+	t.egressMetric.Add(float64(len(batch)))
 }

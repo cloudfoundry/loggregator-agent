@@ -1,6 +1,7 @@
 package syslog
 
 import (
+	"code.cloudfoundry.org/loggregator-agent/pkg/metrics"
 	"fmt"
 	"log"
 	"time"
@@ -44,8 +45,8 @@ type SyslogConnector struct {
 	wg             egress.WaitGroup
 	sourceIndex    string
 	writerFactory  writerFactory
-	m              metrics
-	droppedMetric  func(uint64)
+	m              metricClient
+	droppedMetric  metrics.Counter
 }
 
 // NewSyslogConnector configures and returns a new SyslogConnector.
@@ -54,9 +55,11 @@ func NewSyslogConnector(
 	skipCertVerify bool,
 	wg egress.WaitGroup,
 	f writerFactory,
-	m metrics,
+	m metricClient,
 	opts ...ConnectorOption,
 ) *SyslogConnector {
+	// TODO: err checking
+	droppedMetric, _ := m.NewCounter("dropped", metrics.WithMetricTags(map[string]string {"direction": "egress"}))
 	sc := &SyslogConnector{
 		keepalive:      netConf.Keepalive,
 		ioTimeout:      netConf.WriteTimeout,
@@ -65,7 +68,7 @@ func NewSyslogConnector(
 		wg:             wg,
 		logClient:      nullLogClient{},
 		writerFactory:  f,
-		droppedMetric:  m.NewCounter("EgressDropped"),
+		droppedMetric:  droppedMetric,
 	}
 	for _, o := range opts {
 		o(sc)
@@ -122,7 +125,7 @@ func (w *SyslogConnector) Connect(ctx context.Context, b Binding) (egress.Writer
 	anonymousUrl.RawQuery = ""
 
 	dw := egress.NewDiodeWriter(ctx, writer, diodes.AlertFunc(func(missed int) {
-		w.droppedMetric(uint64(missed))
+		w.droppedMetric.Add(float64(missed))
 
 		w.emitErrorLog(b.AppId, fmt.Sprintf("%d messages lost in user provided syslog drain", missed))
 

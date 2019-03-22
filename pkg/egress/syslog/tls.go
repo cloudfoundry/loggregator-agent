@@ -1,6 +1,7 @@
 package syslog
 
 import (
+	"code.cloudfoundry.org/loggregator-agent/pkg/metrics"
 	"crypto/tls"
 	"net"
 	"time"
@@ -24,7 +25,7 @@ func NewTLSWriter(
 	binding *URLBinding,
 	netConf NetworkTimeoutConfig,
 	skipCertVerify bool,
-	egressMetric func(uint64),
+	egressMetric metrics.Counter,
 ) egress.WriteCloser {
 
 	dialer := &net.Dialer{
