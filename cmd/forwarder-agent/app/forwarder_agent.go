@@ -1,6 +1,7 @@
 package app
 
 import (
+	"code.cloudfoundry.org/loggregator-agent/pkg/metrics"
 	"context"
 	"fmt"
 	"io/ioutil"
@@ -38,8 +39,8 @@ type ForwarderAgent struct {
 }
 
 type Metrics interface {
-	NewGauge(string) func(float64)
-	NewCounter(name string) func(uint64)
+	NewGauge(name string, opts ...metrics.MetricOption) (metrics.Gauge, error)
+	NewCounter(name string, opts ...metrics.MetricOption) (metrics.Counter, error)
 }
 
 type BindingFetcher interface {
@@ -69,9 +70,9 @@ func NewForwarderAgent(
 func (s ForwarderAgent) Run() {
 	go http.ListenAndServe(fmt.Sprintf("127.0.0.1:%d", s.debugPort), nil)
 
-	ingressDropped := s.m.NewCounter("IngressDropped")
+	ingressDropped, err := s.m.NewCounter("dropped", metrics.WithMetricTags(map[string]string{"direction": "ingress"}))
 	diode := diodes.NewManyToOneEnvelopeV2(10000, gendiodes.AlertFunc(func(missed int) {
-		ingressDropped(uint64(missed))
+		ingressDropped.Add(float64(missed))
 	}))
 
 	downstreamAddrs := getDownstreamAddresses(s.downstreamPortsCfg, s.log)
@@ -100,7 +101,7 @@ func (s ForwarderAgent) Run() {
 		s.log.Fatalf("failed to configure server TLS: %s", err)
 	}
 
-	rx := v2.NewReceiver(diode, s.m)
+	rx := v2.NewReceiverV2(diode, s.m)
 	srv := v2.NewServer(
 		fmt.Sprintf("127.0.0.1:%d", s.grpc.Port),
 		rx,

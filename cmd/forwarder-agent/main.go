@@ -1,7 +1,6 @@
 package main
 
 import (
-	"expvar"
 	"log"
 	"os"
 
@@ -10,16 +9,20 @@ import (
 )
 
 func main() {
-	log := log.New(os.Stderr, "", log.LstdFlags)
-	log.Println("starting forwarder-agent")
-	defer log.Println("stopping forwarder-agent")
+	logger := log.New(os.Stderr, "", log.LstdFlags)
+	logger.Println("starting forwarder-agent")
+	defer logger.Println("stopping forwarder-agent")
 
 	cfg := app.LoadConfig()
-	metrics := metrics.New(expvar.NewMap("ForwarderAgent"))
+	dt := map[string]string {
+		"metrics_version": "2.0",
+	}
+
+	metrics := metrics.NewPromRegistry("forwarder_agent", int(cfg.DebugPort), logger, metrics.WithDefaultTags(dt))
 
 	app.NewForwarderAgent(
 		cfg,
 		metrics,
-		log,
+		logger,
 	).Run()
 }

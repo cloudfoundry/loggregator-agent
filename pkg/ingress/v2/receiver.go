@@ -1,6 +1,7 @@
 package v2
 
 import (
+	"code.cloudfoundry.org/loggregator-agent/pkg/metrics"
 	"log"
 
 	"code.cloudfoundry.org/go-loggregator/rpc/loggregator_v2"
@@ -16,10 +17,25 @@ type MetricClient interface {
 	NewCounter(name string) func(uint64)
 }
 
+type MetricClientV2 interface {
+	NewCounter(name string, opts ...metrics.MetricOption) (metrics.Counter, error)
+}
+
 type Receiver struct {
 	dataSetter           DataSetter
 	ingressMetric        func(uint64)
 	originMappingsMetric func(uint64)
+}
+
+func NewReceiverV2(setter DataSetter, metricClient MetricClientV2)  *Receiver {
+	im, _ := metricClient.NewCounter("ingress")
+	omm, _ := metricClient.NewCounter("origin_mappings")
+
+	return &Receiver{
+		dataSetter:           setter,
+		ingressMetric:        func(i uint64) { im.Add(float64(i)) },
+		originMappingsMetric: func(i uint64) { omm.Add(float64(i)) },
+	}
 }
 
 func NewReceiver(dataSetter DataSetter, metricClient MetricClient) *Receiver {
