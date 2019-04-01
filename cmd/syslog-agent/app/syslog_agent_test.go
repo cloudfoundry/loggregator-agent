@@ -20,7 +20,7 @@ import (
 	. "github.com/onsi/gomega"
 	"github.com/onsi/gomega/gexec"
 
-	loggregator "code.cloudfoundry.org/go-loggregator"
+	"code.cloudfoundry.org/go-loggregator"
 	"code.cloudfoundry.org/go-loggregator/rpc/loggregator_v2"
 	"code.cloudfoundry.org/loggregator-agent/cmd/syslog-agent/app"
 	"code.cloudfoundry.org/loggregator-agent/internal/testhelper"
@@ -77,7 +77,7 @@ var _ = Describe("SyslogAgent", func() {
 	})
 
 	It("has a health endpoint", func() {
-		mc := testhelper.NewMetricClient()
+		mc := testhelper.NewMetricClientV2()
 		cfg := app.Config{
 			BindingsPerAppLimit: 5,
 			DebugPort:           7392,
@@ -99,67 +99,20 @@ var _ = Describe("SyslogAgent", func() {
 		}
 		go app.NewSyslogAgent(cfg, mc, testLogger).Run()
 
-		Eventually(hasMetric(mc, "IngressDropped")).Should(BeTrue())
-		Eventually(hasMetric(mc, "IngressV2")).Should(BeTrue())
-		Eventually(hasMetric(mc, "DrainCount")).Should(BeTrue())
-		Eventually(hasMetric(mc, "BindingRefreshCount")).Should(BeTrue())
-		Eventually(hasMetric(mc, "LatencyForLastBindingRefreshMS")).Should(BeTrue())
-		Eventually(hasMetric(mc, "DrainIngress")).Should(BeTrue())
+		Eventually(hasMetric(mc, "dropped", map[string]string{"direction": "ingress"})).Should(BeTrue())
+		Eventually(hasMetric(mc, "ingress", map[string]string{"scope": "agent"})).Should(BeTrue())
+		Eventually(hasMetric(mc, "drains", map[string]string{"unit": "count"})).Should(BeTrue())
+		Eventually(hasMetric(mc, "active_drains", map[string]string{"unit": "count"})).Should(BeTrue())
+		Eventually(hasMetric(mc, "binding_refresh_count", nil)).Should(BeTrue())
+		Eventually(hasMetric(mc, "latency_for_last_binding_refresh", map[string]string{"unit": "ms"})).Should(BeTrue())
+		Eventually(hasMetric(mc, "ingress", map[string]string{"scope": "all_drains"})).Should(BeTrue())
 
-		Eventually(hasMetric(mc, "EgressDropped")).Should(BeTrue())
-		Eventually(hasMetric(mc, "Egress")).Should(BeTrue())
-	})
-
-	It("forwards envelopes to syslog drains", func() {
-		mc := testhelper.NewMetricClient()
-		cfg := app.Config{
-			BindingsPerAppLimit: 5,
-			DebugPort:           7392,
-			IdleDrainTimeout:    10 * time.Minute,
-			DrainSkipCertVerify: true,
-			Cache: app.Cache{
-				URL:             cupsProvider.URL,
-				CAFile:          testhelper.Cert("binding-cache-ca.crt"),
-				CertFile:        testhelper.Cert("binding-cache-ca.crt"),
-				KeyFile:         testhelper.Cert("binding-cache-ca.key"),
-				CommonName:      "bindingCacheCA",
-				PollingInterval: 10 * time.Millisecond,
-				Blacklist:       cups.BlacklistRanges{},
-			},
-			GRPC: app.GRPC{
-				Port:     grpcPort,
-				CAFile:   testhelper.Cert("loggregator-ca.crt"),
-				CertFile: testhelper.Cert("metron.crt"),
-				KeyFile:  testhelper.Cert("metron.key"),
-			},
-		}
-
-		go app.NewSyslogAgent(cfg, mc, testLogger).Run()
-
-		ctx, cancel := context.WithCancel(context.Background())
-		defer cancel()
-		emitLogs(ctx, grpcPort)
-
-		var msg *rfc5424.Message
-		Eventually(syslogHTTPS.receivedMessages, 5).Should(Receive(&msg))
-		Expect(msg.AppName).To(Equal("some-id"))
-
-		//Tests Crosstalk between the drains
-		Consistently(func() string {
-			select {
-			case msg := <-syslogHTTPS.receivedMessages:
-				return msg.AppName
-			default:
-				return ""
-			}
-		}).ShouldNot(Equal("some-id-tls"))
-
-		Eventually(syslogTLS.receivedMessages, 5).Should(Receive(&msg))
-		Expect(msg.AppName).To(Equal("some-id-tls"))
+		Eventually(hasMetric(mc, "dropped", map[string]string{"direction": "egress"})).Should(BeTrue())
+		Eventually(hasMetric(mc, "egress", nil)).Should(BeTrue())
 	})
 
 	It("should not send logs to blacklisted IPs", func() {
-		mc := testhelper.NewMetricClient()
+		mc := testhelper.NewMetricClientV2()
 		cfg := app.Config{
 			BindingsPerAppLimit: 5,
 			DebugPort:           7392,
@@ -249,9 +202,9 @@ func emitLogs(ctx context.Context, grpcPort int) {
 	}()
 }
 
-func hasMetric(mc *testhelper.SpyMetricClient, metricName string) func() bool {
+func hasMetric(mc *testhelper.SpyMetricClientV2, metricName string, tags map[string]string) func() bool {
 	return func() bool {
-		return mc.HasMetric(metricName)
+		return mc.HasMetric(metricName, tags)
 	}
 }
 

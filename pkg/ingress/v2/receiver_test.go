@@ -15,15 +15,13 @@ import (
 
 var _ = Describe("Receiver", func() {
 	var (
-		rx           *ingress.Receiver
-		spySetter    *SpySetter
-		metricClient *testhelper.SpyMetricClient
+		rx        *ingress.Receiver
+		spySetter *SpySetter
 	)
 
 	BeforeEach(func() {
 		spySetter = NewSpySetter()
-		metricClient = testhelper.NewMetricClient()
-		rx = ingress.NewReceiver(spySetter, metricClient)
+		rx = ingress.NewReceiverV2(spySetter, &testhelper.SpyMetricV2{}, &testhelper.SpyMetricV2{})
 	})
 
 	Describe("Sender()", func() {
@@ -71,6 +69,9 @@ var _ = Describe("Receiver", func() {
 		})
 
 		It("increments the ingress metric", func() {
+			ingressMetric := &testhelper.SpyMetricV2{}
+			rx = ingress.NewReceiverV2(spySetter, ingressMetric, &testhelper.SpyMetricV2{})
+
 			e := &loggregator_v2.Envelope{
 				SourceId: "some-id",
 			}
@@ -87,12 +88,14 @@ var _ = Describe("Receiver", func() {
 
 			rx.Sender(spySender)
 
-			metric := metricClient.GetMetric("IngressV2")
-			Expect(metric.Delta()).To(Equal(uint64(2)))
+			Expect(ingressMetric.Value()).To(BeNumerically("==", 2))
 		})
 
 		Context("when source ID is not set", func() {
 			It("sets the source ID with the origin tag value", func() {
+				originMappingMetric := &testhelper.SpyMetricV2{}
+				rx = ingress.NewReceiverV2(spySetter, &testhelper.SpyMetricV2{}, originMappingMetric)
+
 				eActual := &loggregator_v2.Envelope{
 					Tags: map[string]string{"origin": "some-origin"},
 				}
@@ -113,12 +116,14 @@ var _ = Describe("Receiver", func() {
 
 				Expect(spySetter.envelopes).To(Receive(Equal(eExpected)))
 
-				metric := metricClient.GetMetric("OriginMappingsV2")
-				Expect(metric.Delta()).To(Equal(uint64(1)))
+				Expect(originMappingMetric.Value()).To(BeNumerically("==", 1))
 			})
 
 			Context("when the origin tag is not set", func() {
 				It("sets the source ID with the origin deprecated tag value", func() {
+					originMappingMetric := &testhelper.SpyMetricV2{}
+					rx = ingress.NewReceiverV2(spySetter, &testhelper.SpyMetricV2{}, originMappingMetric)
+
 					eActual := &loggregator_v2.Envelope{
 						DeprecatedTags: map[string]*loggregator_v2.Value{
 							"origin": {
@@ -150,14 +155,15 @@ var _ = Describe("Receiver", func() {
 					rx.Sender(spySender)
 
 					Expect(spySetter.envelopes).To(Receive(Equal(eExpected)))
-
-					metric := metricClient.GetMetric("OriginMappingsV2")
-					Expect(metric.Delta()).To(Equal(uint64(1)))
+					Expect(originMappingMetric.Value()).To(BeNumerically("==", 1))
 				})
 			})
 
 			Context("no origin or source id is set", func() {
 				It("sets the source ID with the origin deprecated tag value", func() {
+					originMappingMetric := &testhelper.SpyMetricV2{}
+					rx = ingress.NewReceiverV2(spySetter, &testhelper.SpyMetricV2{}, originMappingMetric)
+
 					eActual := &loggregator_v2.Envelope{}
 
 					spySender.recvResponses <- SenderRecvResponse{
@@ -171,8 +177,7 @@ var _ = Describe("Receiver", func() {
 
 					Expect(spySetter.envelopes).To(Receive(Equal(eActual)))
 
-					metric := metricClient.GetMetric("OriginMappingsV2")
-					Expect(metric.Delta()).To(Equal(uint64(0)))
+					Expect(originMappingMetric.Value()).To(BeNumerically("==", 0))
 				})
 			})
 		})
@@ -215,6 +220,9 @@ var _ = Describe("Receiver", func() {
 		})
 
 		It("increments the ingress metric", func() {
+			ingressMetric := &testhelper.SpyMetricV2{}
+			rx = ingress.NewReceiverV2(spySetter, ingressMetric, &testhelper.SpyMetricV2{})
+
 			e := &loggregator_v2.Envelope{
 				SourceId: "some-id",
 			}
@@ -229,12 +237,13 @@ var _ = Describe("Receiver", func() {
 			rx.BatchSender(spyBatchSender)
 
 			Expect(spySetter.envelopes).Should(HaveLen(5))
-
-			metric := metricClient.GetMetric("IngressV2")
-			Expect(metric.Delta()).To(Equal(uint64(5)))
+			Expect(ingressMetric.Value()).To(BeNumerically("==", 5))
 		})
 
 		It("sets the source ID with the origin value when missing source ID", func() {
+			originMappingMetric := &testhelper.SpyMetricV2{}
+			rx = ingress.NewReceiverV2(spySetter, &testhelper.SpyMetricV2{}, originMappingMetric)
+
 			e1Actual := &loggregator_v2.Envelope{
 				Tags: map[string]string{"origin": "some-origin"},
 			}
@@ -266,12 +275,14 @@ var _ = Describe("Receiver", func() {
 			Expect(spySetter.envelopes).Should(Receive(Equal(e1Expected)))
 			Expect(spySetter.envelopes).Should(Receive(Equal(e2Expected)))
 
-			metric := metricClient.GetMetric("OriginMappingsV2")
-			Expect(metric.Delta()).To(Equal(uint64(1)))
+			Expect(originMappingMetric.Value()).To(BeNumerically("==", 1))
 		})
 
 		Context("when the origin tag is not set", func() {
 			It("sets the source ID with the origin deprecated tag value", func() {
+				originMappingMetric := &testhelper.SpyMetricV2{}
+				rx = ingress.NewReceiverV2(spySetter, &testhelper.SpyMetricV2{}, originMappingMetric)
+
 				eActual := &loggregator_v2.Envelope{
 					DeprecatedTags: map[string]*loggregator_v2.Value{
 						"origin": {
@@ -304,8 +315,7 @@ var _ = Describe("Receiver", func() {
 
 				Expect(spySetter.envelopes).To(Receive(Equal(eExpected)))
 
-				metric := metricClient.GetMetric("OriginMappingsV2")
-				Expect(metric.Delta()).To(Equal(uint64(1)))
+				Expect(originMappingMetric.Value()).To(BeNumerically("==", 1))
 			})
 		})
 	})
@@ -338,6 +348,9 @@ var _ = Describe("Receiver", func() {
 		})
 
 		It("increments the ingress metric", func() {
+			ingressMetric := &testhelper.SpyMetricV2{}
+			rx = ingress.NewReceiverV2(spySetter, ingressMetric, &testhelper.SpyMetricV2{})
+
 			e := &loggregator_v2.Envelope{
 				SourceId: "some-id",
 			}
@@ -346,11 +359,13 @@ var _ = Describe("Receiver", func() {
 				Batch: []*loggregator_v2.Envelope{e},
 			})
 
-			metric := metricClient.GetMetric("IngressV2")
-			Expect(metric.Delta()).To(Equal(uint64(1)))
+			Expect(ingressMetric.Value()).To(BeNumerically("==", 1))
 		})
 
 		It("increments the origin_mappings metric", func() {
+			originMappingMetric := &testhelper.SpyMetricV2{}
+			rx = ingress.NewReceiverV2(spySetter, &testhelper.SpyMetricV2{}, originMappingMetric)
+
 			e := &loggregator_v2.Envelope{
 				Tags: map[string]string{"origin": "my-origin"},
 			}
@@ -359,8 +374,7 @@ var _ = Describe("Receiver", func() {
 				Batch: []*loggregator_v2.Envelope{e},
 			})
 
-			metric := metricClient.GetMetric("OriginMappingsV2")
-			Expect(metric.Delta()).To(Equal(uint64(1)))
+			Expect(originMappingMetric.Value()).To(BeNumerically("==", 1))
 		})
 
 		Context("when source ID is not set", func() {
@@ -383,6 +397,9 @@ var _ = Describe("Receiver", func() {
 
 			Context("when the origin tag is not set", func() {
 				It("sets the source ID with the origin deprecated tag value", func() {
+					originMappingMetric := &testhelper.SpyMetricV2{}
+					rx = ingress.NewReceiverV2(spySetter, &testhelper.SpyMetricV2{}, originMappingMetric)
+
 					eActual := &loggregator_v2.Envelope{
 						DeprecatedTags: map[string]*loggregator_v2.Value{
 							"origin": {
@@ -409,14 +426,15 @@ var _ = Describe("Receiver", func() {
 					})
 
 					Expect(spySetter.envelopes).To(Receive(Equal(eExpected)))
-
-					metric := metricClient.GetMetric("OriginMappingsV2")
-					Expect(metric.Delta()).To(Equal(uint64(1)))
+					Expect(originMappingMetric.Value()).To(BeNumerically("==", 1))
 				})
 			})
 
 			Context("no origin or source id is set", func() {
 				It("sets the source ID with the origin deprecated tag value", func() {
+					originMappingMetric := &testhelper.SpyMetricV2{}
+					rx = ingress.NewReceiverV2(spySetter, &testhelper.SpyMetricV2{}, originMappingMetric)
+
 					eActual := &loggregator_v2.Envelope{}
 
 					rx.Send(context.Background(), &loggregator_v2.EnvelopeBatch{
@@ -425,8 +443,7 @@ var _ = Describe("Receiver", func() {
 
 					Expect(spySetter.envelopes).To(Receive(Equal(eActual)))
 
-					metric := metricClient.GetMetric("OriginMappingsV2")
-					Expect(metric.Delta()).To(Equal(uint64(0)))
+					Expect(originMappingMetric.Value()).To(BeNumerically("==", 0))
 				})
 			})
 		})

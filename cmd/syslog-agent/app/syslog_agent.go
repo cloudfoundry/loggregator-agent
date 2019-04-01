@@ -1,6 +1,7 @@
 package app
 
 import (
+	"code.cloudfoundry.org/loggregator-agent/pkg/metrics"
 	"fmt"
 	"log"
 	"time"
@@ -34,8 +35,8 @@ type SyslogAgent struct {
 }
 
 type Metrics interface {
-	NewGauge(string) func(float64)
-	NewCounter(name string) func(uint64)
+	NewGauge(name string, options ...metrics.MetricOption) metrics.Gauge
+	NewCounter(name string, options ...metrics.MetricOption) metrics.Counter
 }
 
 type BindingManager interface {
@@ -97,12 +98,12 @@ func NewSyslogAgent(
 func (s *SyslogAgent) Run() {
 	go http.ListenAndServe(fmt.Sprintf("127.0.0.1:%d", s.debugPort), nil)
 
-	ingressDropped := s.metrics.NewCounter("IngressDropped")
+	ingressDropped := s.metrics.NewCounter("dropped", metrics.WithMetricTags(map[string]string{"direction": "ingress"}))
 	diode := diodes.NewManyToOneEnvelopeV2(10000, gendiodes.AlertFunc(func(missed int) {
-		ingressDropped(uint64(missed))
+		ingressDropped.Add(float64(missed))
 	}))
 
-	drainIngress := s.metrics.NewCounter("DrainIngress")
+	drainIngress := s.metrics.NewCounter("ingress", metrics.WithMetricTags(map[string]string{"scope": "all_drains"}))
 	go s.bindingManager.Run()
 	go func() {
 		for {
@@ -110,7 +111,7 @@ func (s *SyslogAgent) Run() {
 
 			drainWriters := s.bindingManager.GetDrains(e.SourceId)
 			for _, w := range drainWriters {
-				drainIngress(1)
+				drainIngress.Add(1)
 
 				// Ignore this because we typically wrap everything in a diode
 				// writer which doesn't return an error
@@ -134,7 +135,10 @@ func (s *SyslogAgent) Run() {
 		s.log.Fatalf("failed to configure server TLS: %s", err)
 	}
 
-	rx := v2.NewReceiver(diode, s.metrics)
+	im := s.metrics.NewCounter("ingress", metrics.WithMetricTags(map[string]string{"scope": "agent"}))
+	omm := s.metrics.NewCounter("origin_mappings")
+	rx := v2.NewReceiverV2(diode, im, omm)
+
 	srv := v2.NewServer(
 		fmt.Sprintf("127.0.0.1:%d", s.grpc.Port),
 		rx,

@@ -28,15 +28,11 @@ var _ = Describe("TLSWriter", func() {
 			WriteTimeout: time.Second,
 		}
 
-		egressTotal   uint64
-		egressCounter func(uint64)
+		egressCounter *testhelper.SpyMetricV2
 	)
 
 	BeforeEach(func() {
-		egressTotal = 0
-		egressCounter = func(delta uint64) {
-			egressTotal += delta
-		}
+		egressCounter = &testhelper.SpyMetricV2{}
 
 		tlsCert, err := tls.LoadX509KeyPair(certFile, keyFile)
 		Expect(err).ToNot(HaveOccurred())
@@ -89,6 +85,6 @@ var _ = Describe("TLSWriter", func() {
 		Expect(actual).To(Equal(expected))
 
 		By("emit an egress metric for each message")
-		Expect(egressTotal).To(Equal(uint64(1)))
+		Expect(egressCounter.Value()).To(BeNumerically("==", 1))
 	})
 })

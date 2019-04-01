@@ -1,6 +1,7 @@
 package syslog_test
 
 import (
+	"code.cloudfoundry.org/loggregator-agent/internal/testhelper"
 	"net/url"
 
 	. "github.com/onsi/ginkgo"
@@ -12,12 +13,12 @@ import (
 var _ = Describe("EgressFactory", func() {
 	var (
 		f       syslog.WriterFactory
-		sm      *spyMetrics
+		sm      *testhelper.SpyMetricClientV2
 		skipSSL = false
 	)
 
 	BeforeEach(func() {
-		sm = newSpyMetrics()
+		sm = testhelper.NewMetricClientV2()
 		f = syslog.NewWriterFactory(sm)
 	})
 
@@ -34,7 +35,8 @@ var _ = Describe("EgressFactory", func() {
 		_, ok := writer.(*syslog.HTTPSWriter)
 		Expect(ok).To(BeTrue())
 
-		Expect(sm.names).To(ConsistOf("Egress"))
+		metric := sm.GetMetric("egress", nil)
+		Expect(metric).ToNot(BeNil())
 	})
 
 	It("returns a tcp writer when the url begins with syslog://", func() {
@@ -50,7 +52,8 @@ var _ = Describe("EgressFactory", func() {
 		_, ok := writer.(*syslog.TCPWriter)
 		Expect(ok).To(BeTrue())
 
-		Expect(sm.names).To(ConsistOf("Egress"))
+		metric := sm.GetMetric("egress", nil)
+		Expect(metric).ToNot(BeNil())
 	})
 
 	It("returns a syslog-tls writer when the url begins with syslog-tls://", func() {
@@ -65,7 +68,8 @@ var _ = Describe("EgressFactory", func() {
 
 		_, ok := writer.(*syslog.TLSWriter)
 		Expect(ok).To(BeTrue())
-		Expect(sm.names).To(ConsistOf("Egress"))
+		metric := sm.GetMetric("egress", nil)
+		Expect(metric).ToNot(BeNil())
 	})
 
 	It("returns an error when given a binding with an invalid scheme", func() {
@@ -79,21 +83,3 @@ var _ = Describe("EgressFactory", func() {
 		Expect(err).To(MatchError("unsupported protocol"))
 	})
 })
-
-type spyMetrics struct {
-	names        []string
-	metricValues chan float64
-}
-
-func newSpyMetrics() *spyMetrics {
-	return &spyMetrics{
-		metricValues: make(chan float64, 100),
-	}
-}
-
-func (sm *spyMetrics) NewCounter(name string) func(uint64) {
-	sm.names = append(sm.names, name)
-	return func(val uint64) {
-		sm.metricValues <- float64(val)
-	}
-}

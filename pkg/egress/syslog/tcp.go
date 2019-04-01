@@ -2,6 +2,7 @@ package syslog
 
 import (
 	"bytes"
+	"code.cloudfoundry.org/loggregator-agent/pkg/metrics"
 	"fmt"
 	"log"
 	"net"
@@ -37,7 +38,7 @@ type TCPWriter struct {
 	scheme       string
 	conn         net.Conn
 
-	egressMetric func(delta uint64)
+	egressMetric metrics.Counter
 }
 
 // NewTCPWriter creates a new TCP syslog writer.
@@ -45,7 +46,7 @@ func NewTCPWriter(
 	binding *URLBinding,
 	netConf NetworkTimeoutConfig,
 	skipCertVerify bool,
-	egressMetric func(delta uint64),
+	egressMetric metrics.Counter,
 ) egress.WriteCloser {
 	dialer := &net.Dialer{
 		Timeout:   netConf.DialTimeout,
@@ -94,7 +95,7 @@ func (w *TCPWriter) Write(env *loggregator_v2.Envelope) error {
 			return err
 		}
 
-		w.egressMetric(1)
+		w.egressMetric.Add(1)
 	}
 
 	return nil

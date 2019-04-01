@@ -15,17 +15,17 @@ import (
 	_ "net/http/pprof"
 
 	gendiodes "code.cloudfoundry.org/go-diodes"
-	loggregator "code.cloudfoundry.org/go-loggregator"
+	"code.cloudfoundry.org/go-loggregator"
 	"code.cloudfoundry.org/go-loggregator/rpc/loggregator_v2"
 	"code.cloudfoundry.org/loggregator-agent/pkg/diodes"
 	"code.cloudfoundry.org/loggregator-agent/pkg/egress"
 	"code.cloudfoundry.org/loggregator-agent/pkg/egress/syslog"
 	egress_v2 "code.cloudfoundry.org/loggregator-agent/pkg/egress/v2"
-	v2 "code.cloudfoundry.org/loggregator-agent/pkg/ingress/v2"
+	"code.cloudfoundry.org/loggregator-agent/pkg/ingress/v2"
 	"code.cloudfoundry.org/loggregator-agent/pkg/plumbing"
 	"code.cloudfoundry.org/loggregator-agent/pkg/timeoutwaitgroup"
 	"google.golang.org/grpc"
-	yaml "gopkg.in/yaml.v2"
+	"gopkg.in/yaml.v2"
 )
 
 // ForwarderAgent manages starting the forwarder agent service.
@@ -39,8 +39,8 @@ type ForwarderAgent struct {
 }
 
 type Metrics interface {
-	NewGauge(name string, opts ...metrics.MetricOption) (metrics.Gauge, error)
-	NewCounter(name string, opts ...metrics.MetricOption) (metrics.Counter, error)
+	NewGauge(name string, opts ...metrics.MetricOption) metrics.Gauge
+	NewCounter(name string, opts ...metrics.MetricOption) metrics.Counter
 }
 
 type BindingFetcher interface {
@@ -70,7 +70,7 @@ func NewForwarderAgent(
 func (s ForwarderAgent) Run() {
 	go http.ListenAndServe(fmt.Sprintf("127.0.0.1:%d", s.debugPort), nil)
 
-	ingressDropped, err := s.m.NewCounter("dropped", metrics.WithMetricTags(map[string]string{"direction": "ingress"}))
+	ingressDropped := s.m.NewCounter("dropped", metrics.WithMetricTags(map[string]string{"direction": "ingress"}))
 	diode := diodes.NewManyToOneEnvelopeV2(10000, gendiodes.AlertFunc(func(missed int) {
 		ingressDropped.Add(float64(missed))
 	}))
@@ -101,7 +101,10 @@ func (s ForwarderAgent) Run() {
 		s.log.Fatalf("failed to configure server TLS: %s", err)
 	}
 
-	rx := v2.NewReceiverV2(diode, s.m)
+	im := s.m.NewCounter("ingress")
+	omm := s.m.NewCounter("origin_mappings")
+	rx := v2.NewReceiverV2(diode, im, omm)
+
 	srv := v2.NewServer(
 		fmt.Sprintf("127.0.0.1:%d", s.grpc.Port),
 		rx,

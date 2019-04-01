@@ -1,7 +1,6 @@
 package main
 
 import (
-	"expvar"
 	"log"
 	"os"
 
@@ -14,9 +13,13 @@ func main() {
 	log.Println("starting syslog-agent")
 	defer log.Println("stopping syslog-agent")
 
-	m := metrics.New(expvar.NewMap("SyslogAgent"))
-
 	cfg := app.LoadConfig()
+	m := metrics.NewPromRegistry(
+		"syslog_agent",
+		int(cfg.DebugPort),
+		log,
+		metrics.WithDefaultTags(map[string]string{"metrics_version": "2.0"}),
+	)
 
 	app.NewSyslogAgent(cfg, m, log).Run()
 }

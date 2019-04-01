@@ -1,6 +1,7 @@
 package syslog_test
 
 import (
+	"code.cloudfoundry.org/loggregator-agent/internal/testhelper"
 	"io/ioutil"
 	"net/http"
 	"net/http/httptest"
@@ -25,7 +26,7 @@ var _ = Describe("HTTPWriter", func() {
 			b,
 			netConf,
 			false,
-			func(uint64) {},
+			&testhelper.SpyMetricV2{},
 		)
 
 		env := buildLogEnvelope("APP", "1", "just a test", loggregator_v2.Log_OUT)
@@ -44,7 +45,7 @@ var _ = Describe("HTTPWriter", func() {
 			b,
 			netConf,
 			true,
-			func(uint64) {},
+			&testhelper.SpyMetricV2{},
 		)
 
 		env := buildLogEnvelope("APP", "1", "just a test", loggregator_v2.Log_OUT)
@@ -64,7 +65,7 @@ var _ = Describe("HTTPWriter", func() {
 			b,
 			netConf,
 			true,
-			func(uint64) {},
+			&testhelper.SpyMetricV2{},
 		)
 
 		env := buildLogEnvelope("APP", "1", "just a test", loggregator_v2.Log_OUT)
@@ -82,7 +83,7 @@ var _ = Describe("HTTPWriter", func() {
 			b,
 			netConf,
 			true,
-			func(uint64) {},
+			&testhelper.SpyMetricV2{},
 		)
 
 		env := buildLogEnvelope("APP", "1", "just a test", loggregator_v2.Log_OUT)
@@ -106,7 +107,7 @@ var _ = Describe("HTTPWriter", func() {
 			b,
 			netConf,
 			true,
-			func(uint64) {},
+			&testhelper.SpyMetricV2{},
 		)
 
 		env1 := buildLogEnvelope("APP", "1", "just a test", loggregator_v2.Log_OUT)
@@ -159,7 +160,7 @@ var _ = Describe("HTTPWriter", func() {
 			b,
 			netConf,
 			true,
-			func(uint64) {},
+			&testhelper.SpyMetricV2{},
 		)
 
 		env1 := buildGaugeEnvelope("1")
@@ -207,7 +208,7 @@ var _ = Describe("HTTPWriter", func() {
 			b,
 			netConf,
 			true,
-			func(uint64) {},
+			&testhelper.SpyMetricV2{},
 		)
 
 		env1 := buildCounterEnvelope("1")
@@ -231,26 +232,24 @@ var _ = Describe("HTTPWriter", func() {
 	It("emits an egress metric for each message", func() {
 		drain := newMockOKDrain()
 
-		var delta uint64
-		metric := func(d uint64) { delta = d }
-
 		b := buildURLBinding(
 			drain.URL,
 			"test-app-id",
 			"test-hostname",
 		)
 
+		sm := &testhelper.SpyMetricV2{}
 		writer := syslog.NewHTTPSWriter(
 			b,
 			netConf,
 			true,
-			metric,
+			sm,
 		)
 
 		env := buildLogEnvelope("APP", "1", "just a test", loggregator_v2.Log_OUT)
 		writer.Write(env)
 
-		Expect(delta).To(Equal(uint64(1)))
+		Expect(sm.Value()).To(BeNumerically("==", 1))
 	})
 
 	It("ignores non-log envelopes", func() {
@@ -266,7 +265,7 @@ var _ = Describe("HTTPWriter", func() {
 			b,
 			netConf,
 			true,
-			func(uint64) {},
+			&testhelper.SpyMetricV2{},
 		)
 
 		counterEnv := buildTimerEnvelope()

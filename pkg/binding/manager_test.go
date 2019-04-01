@@ -21,13 +21,13 @@ import (
 var _ = Describe("Manager", func() {
 	var (
 		bf *stubBindingFetcher
-		sm *testhelper.SpyMetricClient
+		sm *testhelper.SpyMetricClientV2
 		c  *spyConnector
 	)
 
 	BeforeEach(func() {
 		bf = newStubBindingFetcher()
-		sm = testhelper.NewMetricClient()
+		sm = testhelper.NewMetricClientV2()
 		c = newSpyConnector()
 	})
 
@@ -49,7 +49,7 @@ var _ = Describe("Manager", func() {
 		go m.Run()
 
 		Eventually(func() float64 {
-			return sm.GetMetric("DrainCount").GaugeValue()
+			return sm.GetMetric("drains", map[string]string{"unit": "count"}).Value()
 		}).Should(BeNumerically("==", 3))
 	})
 
@@ -87,19 +87,19 @@ var _ = Describe("Manager", func() {
 			return m.GetDrains("app-1")
 		}).Should(HaveLen(1))
 		Expect(c.ConnectionCount()).To(BeNumerically("==", 1))
-		Expect(sm.GetMetric("ActiveDrainCount").GaugeValue()).To(Equal(1.0))
+		Expect(sm.GetMetric("active_drains", map[string]string{"unit": "count"}).Value()).To(Equal(1.0))
 
 		Eventually(func() []egress.Writer {
 			return m.GetDrains("app-2")
 		}).Should(HaveLen(1))
 		Expect(c.ConnectionCount()).To(BeNumerically("==", 2))
-		Expect(sm.GetMetric("ActiveDrainCount").GaugeValue()).To(Equal(2.0))
+		Expect(sm.GetMetric("active_drains", map[string]string{"unit": "count"}).Value()).To(Equal(2.0))
 
 		Eventually(func() []egress.Writer {
 			return m.GetDrains("app-3")
 		}).Should(HaveLen(1))
 		Expect(c.ConnectionCount()).To(BeNumerically("==", 3))
-		Expect(sm.GetMetric("ActiveDrainCount").GaugeValue()).To(Equal(3.0))
+		Expect(sm.GetMetric("active_drains", map[string]string{"unit": "count"}).Value()).To(Equal(3.0))
 	})
 
 	It("polls for updates from the binding fetcher", func() {
@@ -119,7 +119,7 @@ var _ = Describe("Manager", func() {
 		go m.Run()
 
 		Eventually(func() float64 {
-			return sm.GetMetric("DrainCount").GaugeValue()
+			return sm.GetMetric("drains", map[string]string{"unit": "count"}).Value()
 		}).Should(BeNumerically("==", 2))
 
 		bf.bindings <- []syslog.Binding{
@@ -129,7 +129,7 @@ var _ = Describe("Manager", func() {
 		}
 
 		Eventually(func() float64 {
-			return sm.GetMetric("DrainCount").GaugeValue()
+			return sm.GetMetric("drains", map[string]string{"unit": "count"}).Value()
 		}).Should(BeNumerically("==", 3))
 
 		go func(bindings chan []syslog.Binding) {
@@ -182,7 +182,7 @@ var _ = Describe("Manager", func() {
 		Eventually(func() []egress.Writer {
 			return m.GetDrains("app-1")
 		}).Should(HaveLen(1))
-		Expect(sm.GetMetric("ActiveDrainCount").GaugeValue()).To(Equal(1.0))
+		Expect(sm.GetMetric("active_drains", map[string]string{"unit": "count"}).Value()).To(Equal(1.0))
 
 		go func(bindings chan []syslog.Binding) {
 			for {
@@ -196,7 +196,7 @@ var _ = Describe("Manager", func() {
 		Eventually(func() []egress.Writer {
 			return m.GetDrains("app-1")
 		}).Should(HaveLen(0))
-		Expect(sm.GetMetric("ActiveDrainCount").GaugeValue()).To(Equal(0.0))
+		Expect(sm.GetMetric("active_drains", map[string]string{"unit": "count"}).Value()).To(Equal(0.0))
 	})
 
 	It("removes drain holders for inactive drains", func() {
@@ -228,17 +228,17 @@ var _ = Describe("Manager", func() {
 		}()
 
 		Eventually(func() float64 {
-			return sm.GetMetric("ActiveDrainCount").GaugeValue()
+			return sm.GetMetric("active_drains", map[string]string{"unit": "count"}).Value()
 		}).Should(Equal(2.0))
 
 		// app-1 should eventually expire and be cleaned up.
 		Eventually(func() float64 {
-			return sm.GetMetric("ActiveDrainCount").GaugeValue()
+			return sm.GetMetric("active_drains", map[string]string{"unit": "count"}).Value()
 		}).Should(Equal(1.0))
 
 		// The active drain count metric should only be decremented once.
 		Consistently(func() float64 {
-			return sm.GetMetric("ActiveDrainCount").GaugeValue()
+			return sm.GetMetric("active_drains", map[string]string{"unit": "count"}).Value()
 		}).Should(Equal(1.0))
 
 		// It re-activates on another get drains.
@@ -247,7 +247,7 @@ var _ = Describe("Manager", func() {
 		}).Should(HaveLen(1))
 
 		Eventually(func() float64 {
-			return sm.GetMetric("ActiveDrainCount").GaugeValue()
+			return sm.GetMetric("active_drains", map[string]string{"unit": "count"}).Value()
 		}).Should(Equal(2.0))
 	})
 

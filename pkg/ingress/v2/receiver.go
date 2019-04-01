@@ -27,14 +27,11 @@ type Receiver struct {
 	originMappingsMetric func(uint64)
 }
 
-func NewReceiverV2(setter DataSetter, metricClient MetricClientV2)  *Receiver {
-	im, _ := metricClient.NewCounter("ingress")
-	omm, _ := metricClient.NewCounter("origin_mappings")
-
+func NewReceiverV2(setter DataSetter, ingress metrics.Counter, egress metrics.Counter) *Receiver {
 	return &Receiver{
 		dataSetter:           setter,
-		ingressMetric:        func(i uint64) { im.Add(float64(i)) },
-		originMappingsMetric: func(i uint64) { omm.Add(float64(i)) },
+		ingressMetric:        func(i uint64) { ingress.Add(float64(i)) },
+		originMappingsMetric: func(i uint64) { egress.Add(float64(i)) },
 	}
 }
 

@@ -1,6 +1,7 @@
 package syslog_test
 
 import (
+	"code.cloudfoundry.org/loggregator-agent/internal/testhelper"
 	"errors"
 	"io"
 	"sync/atomic"
@@ -22,11 +23,11 @@ var _ = Describe("SyslogConnector", func() {
 		spyWaitGroup  *SpyWaitGroup
 		netConf       syslog.NetworkTimeoutConfig
 		writerFactory *stubWriterFactory
-		sm            *spyMetrics
+		sm            *testhelper.SpyMetricClientV2
 	)
 
 	BeforeEach(func() {
-		sm = newSpyMetrics()
+		sm = testhelper.NewMetricClientV2()
 		ctx, _ = context.WithCancel(context.Background())
 		spyWaitGroup = &SpyWaitGroup{}
 		writerFactory = &stubWriterFactory{}
@@ -162,9 +163,9 @@ var _ = Describe("SyslogConnector", func() {
 				}
 			}(writer)
 
-			var mv float64
-			Eventually(sm.metricValues).Should(Receive(&mv))
-			Expect(mv).To(BeNumerically(">=", 10000))
+			metric := sm.GetMetric("dropped", map[string]string{"direction": "egress"})
+			Expect(metric).ToNot(BeNil())
+			Eventually(metric.Value).Should(BeNumerically(">=", 10000))
 		})
 
 		It("emits a LGR and SYS log to the log client about logs that have been dropped", func() {

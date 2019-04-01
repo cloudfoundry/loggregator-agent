@@ -24,19 +24,17 @@ var _ = Describe("PrometheusMetrics", func() {
 		r := metrics.NewPromRegistry("test-source", 0, l)
 		port := r.Port()
 
-		c, err := r.NewCounter(
+		c := r.NewCounter(
 			"test_counter",
 			metrics.WithMetricTags(map[string]string{"foo": "bar"}),
 			metrics.WithHelpText("a counter help text for test_counter"),
 		)
-		Expect(err).ToNot(HaveOccurred())
 
-		g, err := r.NewGauge(
+		g := r.NewGauge(
 			"test_gauge",
 			metrics.WithHelpText("a gauge help text for test_gauge"),
 			metrics.WithMetricTags(map[string]string{"bar": "baz"}),
 		)
-		Expect(err).ToNot(HaveOccurred())
 
 		c.Add(10)
 		g.Set(10)
@@ -56,31 +54,31 @@ var _ = Describe("PrometheusMetrics", func() {
 
 		r := metrics.NewPromRegistry("test-source", 0, l, metrics.WithDefaultTags(ct))
 
-		_, err := r.NewCounter(
+		r.NewCounter(
 			"test_counter",
 			metrics.WithHelpText("a counter help text for test_counter"),
 		)
-		Expect(err).ToNot(HaveOccurred())
 
-		_, err = r.NewGauge(
+		r.NewGauge(
 			"test_gauge",
 			metrics.WithHelpText("a gauge help text for test_gauge"),
 		)
-		Expect(err).ToNot(HaveOccurred())
 
 		resp := getMetrics(r.Port())
 		Expect(resp).To(ContainSubstring(`test_counter{origin="test-source",source_id="test-source",tag="custom"} 0`))
 		Expect(resp).To(ContainSubstring(`test_gauge{origin="test-source",source_id="test-source",tag="custom"} 0`))
 	})
 
-	It("returns an error if the metric is invalid", func() {
+	It("panics if the metric is invalid", func() {
 		r := metrics.NewPromRegistry("test-source", 0, l)
 
-		_, err := r.NewCounter("test-counter")
-		Expect(err).To(HaveOccurred())
+		Expect(func() {
+			r.NewCounter("test-counter")
+		}).To(Panic())
 
-		_, err = r.NewGauge("test-gauge")
-		Expect(err).To(HaveOccurred())
+		Expect(func() {
+			r.NewGauge("test-counter")
+		}).To(Panic())
 	})
 })
 

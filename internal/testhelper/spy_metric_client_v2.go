@@ -19,24 +19,24 @@ func NewMetricClientV2() *SpyMetricClientV2 {
 	}
 }
 
-func (s *SpyMetricClientV2) NewCounter(name string, opts ...metrics.MetricOption) (metrics.Counter, error) {
+func (s *SpyMetricClientV2) NewCounter(name string, opts ...metrics.MetricOption) metrics.Counter {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
 	m := newSpyMetric(name, opts)
 	s.addMetric(m)
 
-	return m, nil
+	return m
 }
 
-func (s *SpyMetricClientV2) NewGauge(name string, opts ...metrics.MetricOption) (metrics.Gauge, error) {
+func (s *SpyMetricClientV2) NewGauge(name string, opts ...metrics.MetricOption) metrics.Gauge {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
 	m := newSpyMetric(name, opts)
 	s.addMetric(m)
 
-	return m, nil
+	return m
 }
 
 func (s *SpyMetricClientV2) addMetric(sm *SpyMetricV2) {
@@ -88,43 +88,30 @@ func newSpyMetric(name string, opts []metrics.MetricOption) *SpyMetricV2 {
 }
 
 type SpyMetricV2 struct {
-	mu         sync.Mutex
-	delta      uint64
-	gaugeValue float64
-	name       string
+	mu    sync.Mutex
+	value float64
+	name  string
 
 	keys []string
 	Opts *prometheus.Opts
 }
 
-func (s *SpyMetricV2) Increment(c uint64) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	s.delta += c
-}
-
 func (s *SpyMetricV2) Set(c float64) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	s.gaugeValue = c
+	s.value = c
 }
 
 func (s *SpyMetricV2) Add(c float64) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	s.gaugeValue += c
+	s.value += c
 }
 
-func (s *SpyMetricV2) Delta() uint64 {
+func (s *SpyMetricV2) Value() float64 {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	return s.delta
-}
-
-func (s *SpyMetricV2) GaugeValue() float64 {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	return s.gaugeValue
+	return s.value
 }
 
 func getMetricName(name string, tags map[string]string) string {

@@ -1,6 +1,7 @@
 package cups
 
 import (
+	"code.cloudfoundry.org/loggregator-agent/pkg/metrics"
 	"math"
 	"net/url"
 	"sort"
@@ -11,10 +12,10 @@ import (
 	"code.cloudfoundry.org/loggregator-agent/pkg/egress/syslog"
 )
 
-// Metrics is the client used to expose gauge and counter metrics.
+// Metrics is the client used to expose gauge and counter metricsClient.
 type Metrics interface {
-	NewGauge(string) func(float64)
-	NewCounter(name string) func(uint64)
+	NewGauge(name string, opts ...metrics.MetricOption) metrics.Gauge
+	NewCounter(name string, opts ...metrics.MetricOption) metrics.Counter
 }
 
 // Getter is configured to fetch HTTP responses
@@ -24,19 +25,21 @@ type Getter interface {
 
 // BindingFetcher uses a Getter to fetch and decode Bindings
 type BindingFetcher struct {
-	refreshCount  func(uint64)
-	maxLatency    func(float64)
-	limit         int
-	getter        Getter
+	refreshCount metrics.Counter
+	maxLatency   metrics.Gauge
+	limit        int
+	getter       Getter
 }
 
 // NewBindingFetcher returns a new BindingFetcher
 func NewBindingFetcher(limit int, g Getter, m Metrics) *BindingFetcher {
+	refreshCount := m.NewCounter("binding_refresh_count")
+	maxLatency := m.NewGauge("latency_for_last_binding_refresh", metrics.WithMetricTags(map[string]string{"unit": "ms"}))
 	return &BindingFetcher{
-		limit:         limit,
-		getter:        g,
-		refreshCount:  m.NewCounter("BindingRefreshCount"),
-		maxLatency:    m.NewGauge("LatencyForLastBindingRefreshMS"),
+		limit:        limit,
+		getter:       g,
+		refreshCount: refreshCount,
+		maxLatency:   maxLatency,
 	}
 }
 
@@ -45,8 +48,8 @@ func NewBindingFetcher(limit int, g Getter, m Metrics) *BindingFetcher {
 func (f *BindingFetcher) FetchBindings() ([]syslog.Binding, error) {
 	var latency int64
 	defer func() {
-		f.refreshCount(1)
-		f.maxLatency(toMilliseconds(latency))
+		f.refreshCount.Add(1)
+		f.maxLatency.Set(toMilliseconds(latency))
 	}()
 
 	start := time.Now()

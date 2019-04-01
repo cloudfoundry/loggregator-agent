@@ -1,6 +1,7 @@
 package syslog
 
 import (
+	"code.cloudfoundry.org/loggregator-agent/pkg/metrics"
 	"errors"
 	"fmt"
 	"net/url"
@@ -18,14 +19,14 @@ type HTTPSWriter struct {
 	appID        string
 	url          *url.URL
 	client       *fasthttp.Client
-	egressMetric func(delta uint64)
+	egressMetric metrics.Counter
 }
 
 func NewHTTPSWriter(
 	binding *URLBinding,
 	netConf NetworkTimeoutConfig,
 	skipCertVerify bool,
-	egressMetric func(delta uint64),
+	egressMetric metrics.Counter,
 ) egress.WriteCloser {
 
 	client := httpClient(netConf, skipCertVerify)
@@ -62,7 +63,7 @@ func (w *HTTPSWriter) Write(env *loggregator_v2.Envelope) error {
 			return fmt.Errorf("Syslog Writer: Post responded with %d status code", resp.StatusCode())
 		}
 
-		w.egressMetric(1)
+		w.egressMetric.Add(1)
 	}
 
 	return nil

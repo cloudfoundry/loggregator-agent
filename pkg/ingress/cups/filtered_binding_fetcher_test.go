@@ -1,9 +1,9 @@
 package cups_test
 
 import (
+	"code.cloudfoundry.org/loggregator-agent/internal/testhelper"
 	"code.cloudfoundry.org/loggregator-agent/pkg/egress/syslog"
 	"code.cloudfoundry.org/loggregator-agent/pkg/ingress/cups"
-	"code.cloudfoundry.org/loggregator-agent/internal/testhelper"
 	"errors"
 	"log"
 	"net"
@@ -15,13 +15,13 @@ import (
 
 var _ = Describe("FilteredBindingFetcher", func() {
 	var (
-		log    = log.New(GinkgoWriter, "", log.LstdFlags)
-		filter *cups.FilteredBindingFetcher
-		metrics *testhelper.SpyMetricClient
+		log     = log.New(GinkgoWriter, "", log.LstdFlags)
+		filter  *cups.FilteredBindingFetcher
+		metrics *testhelper.SpyMetricClientV2
 	)
 
 	BeforeEach(func() {
-		metrics = testhelper.NewMetricClient()
+		metrics = testhelper.NewMetricClientV2()
 	})
 
 	It("returns valid bindings", func() {
@@ -68,7 +68,7 @@ var _ = Describe("FilteredBindingFetcher", func() {
 
 			Expect(err).ToNot(HaveOccurred())
 			Expect(actual).To(Equal([]syslog.Binding{}))
-			Expect(metrics.GetMetric("InvalidDrains").GaugeValue()).To(Equal(1.0))
+			Expect(metrics.GetMetric("invalid_drains", map[string]string{"unit": "total"}).Value()).To(Equal(1.0))
 		})
 	})
 
@@ -86,7 +86,7 @@ var _ = Describe("FilteredBindingFetcher", func() {
 				{AppId: "app-id", Hostname: "we.dont.care", Drain: "blah://10.10.10.10"},
 			}
 
-			metrics = testhelper.NewMetricClient()
+			metrics = testhelper.NewMetricClientV2()
 			filter = cups.NewFilteredBindingFetcher(
 				&spyIPChecker{},
 				&SpyBindingReader{bindings: input},
@@ -100,7 +100,7 @@ var _ = Describe("FilteredBindingFetcher", func() {
 
 			Expect(err).ToNot(HaveOccurred())
 			Expect(actual).To(Equal(input[:3]))
-			Expect(metrics.GetMetric("InvalidDrains").GaugeValue()).To(Equal(2.0))
+			Expect(metrics.GetMetric("invalid_drains", map[string]string{"unit": "total"}).Value()).To(Equal(2.0))
 		})
 	})
 
@@ -126,7 +126,7 @@ var _ = Describe("FilteredBindingFetcher", func() {
 
 			Expect(err).ToNot(HaveOccurred())
 			Expect(actual).To(Equal([]syslog.Binding{}))
-			Expect(metrics.GetMetric("InvalidDrains").GaugeValue()).To(Equal(1.0))
+			Expect(metrics.GetMetric("invalid_drains", map[string]string{"unit": "total"}).Value()).To(Equal(1.0))
 		})
 	})
 
@@ -153,8 +153,8 @@ var _ = Describe("FilteredBindingFetcher", func() {
 
 			Expect(err).ToNot(HaveOccurred())
 			Expect(actual).To(Equal([]syslog.Binding{}))
-			Expect(metrics.GetMetric("InvalidDrains").GaugeValue()).To(Equal(1.0))
-			Expect(metrics.GetMetric("BlacklistedDrains").GaugeValue()).To(Equal(1.0))
+			Expect(metrics.GetMetric("invalid_drains", map[string]string{"unit": "total"}).Value()).To(Equal(1.0))
+			Expect(metrics.GetMetric("blacklisted_drains", map[string]string{"unit": "total"}).Value()).To(Equal(1.0))
 		})
 	})
 })

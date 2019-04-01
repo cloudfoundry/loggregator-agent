@@ -16,13 +16,13 @@ var _ = Describe("BindingFetcher", func() {
 	var (
 		getter    *SpyGetter
 		fetcher   *cups.BindingFetcher
-		metrics   *testhelper.SpyMetricClient
+		metrics   *testhelper.SpyMetricClientV2
 		maxDrains = 3
 	)
 
 	BeforeEach(func() {
 		getter = &SpyGetter{}
-		metrics = testhelper.NewMetricClient()
+		metrics = testhelper.NewMetricClientV2()
 		fetcher = cups.NewBindingFetcher(maxDrains, getter, metrics)
 	})
 
@@ -103,8 +103,8 @@ var _ = Describe("BindingFetcher", func() {
 		Expect(err).ToNot(HaveOccurred())
 
 		Expect(
-			metrics.GetMetric("BindingRefreshCount").Delta(),
-		).To(Equal(uint64(1)))
+			metrics.GetMetric("binding_refresh_count", nil).Value(),
+		).To(BeNumerically("==", 1))
 	})
 
 	It("tracks the max latency of the requests", func() {
@@ -112,7 +112,7 @@ var _ = Describe("BindingFetcher", func() {
 		Expect(err).ToNot(HaveOccurred())
 
 		Expect(
-			metrics.GetMetric("LatencyForLastBindingRefreshMS").GaugeValue(),
+			metrics.GetMetric("latency_for_last_binding_refresh", map[string]string{"unit": "ms"}).Value(),
 		).To(BeNumerically(">", 0))
 	})
 

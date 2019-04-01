@@ -1,6 +1,7 @@
 package binding
 
 import (
+	"code.cloudfoundry.org/loggregator-agent/pkg/metrics"
 	"context"
 	"log"
 	"math/rand"
@@ -17,8 +18,8 @@ type Fetcher interface {
 }
 
 type Metrics interface {
-	NewGauge(string) func(float64)
-	NewCounter(name string) func(uint64)
+	NewGauge(name string, o ...metrics.MetricOption) metrics.Gauge
+	NewCounter(name string, o ...metrics.MetricOption) metrics.Counter
 }
 
 type Connector interface {
@@ -35,8 +36,8 @@ type Manager struct {
 	pollingInterval time.Duration
 	idleTimeout     time.Duration
 
-	drainCountMetric       func(float64)
-	activeDrainCountMetric func(float64)
+	drainCountMetric       metrics.Gauge
+	activeDrainCountMetric metrics.Gauge
 	activeDrainCount       int64
 
 	sourceDrainMap    map[string]map[syslog.Binding]drainHolder
@@ -51,14 +52,18 @@ func NewManager(
 	idleTimeout time.Duration,
 	log *log.Logger,
 ) *Manager {
+	tagOpt := metrics.WithMetricTags(map[string]string{"unit": "count"})
+	drainCount := m.NewGauge("drains", tagOpt)
+	activeDrains := m.NewGauge("active_drains", tagOpt)
+
 	manager := &Manager{
 		bf:                     bf,
 		bfLimit:                bf.DrainLimit(),
 		pollingInterval:        pollingInterval,
 		idleTimeout:            idleTimeout,
 		connector:              c,
-		drainCountMetric:       m.NewGauge("DrainCount"),
-		activeDrainCountMetric: m.NewGauge("ActiveDrainCount"),
+		drainCountMetric:       drainCount,
+		activeDrainCountMetric: activeDrains,
 		sourceDrainMap:         make(map[string]map[syslog.Binding]drainHolder),
 		sourceAccessTimes:      make(map[string]time.Time),
 		log:                    log,
@@ -71,7 +76,7 @@ func NewManager(
 
 func (m *Manager) Run() {
 	bindings, _ := m.bf.FetchBindings()
-	m.drainCountMetric(float64(len(bindings)))
+	m.drainCountMetric.Set(float64(len(bindings)))
 	m.updateDrains(bindings)
 
 	offset := rand.Int63n(m.pollingInterval.Nanoseconds())
@@ -83,7 +88,7 @@ func (m *Manager) Run() {
 			continue
 		}
 
-		m.drainCountMetric(float64(len(bindings)))
+		m.drainCountMetric.Set(float64(len(bindings)))
 		m.updateDrains(bindings)
 	}
 }
@@ -107,7 +112,7 @@ func (m *Manager) GetDrains(sourceID string) []egress.Writer {
 			m.sourceDrainMap[sourceID][binding] = dh
 
 			m.activeDrainCount++
-			m.activeDrainCountMetric(float64(m.activeDrainCount))
+			m.activeDrainCountMetric.Set(float64(m.activeDrainCount))
 		}
 
 		drains = append(drains, dh.drainWriter)
@@ -169,7 +174,7 @@ func (m *Manager) removeDrain(
 
 	if active {
 		m.activeDrainCount--
-		m.activeDrainCountMetric(float64(m.activeDrainCount))
+		m.activeDrainCountMetric.Set(float64(m.activeDrainCount))
 	}
 }
 
@@ -193,7 +198,7 @@ func (m *Manager) idleCleanup() {
 				m.sourceDrainMap[sID][b] = newDrainHolder()
 
 				m.activeDrainCount--
-				m.activeDrainCountMetric(float64(m.activeDrainCount))
+				m.activeDrainCountMetric.Set(float64(m.activeDrainCount))
 			}
 
 			delete(m.sourceAccessTimes, sID)

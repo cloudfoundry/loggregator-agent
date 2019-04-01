@@ -2,6 +2,7 @@ package syslog_test
 
 import (
 	"bufio"
+	"code.cloudfoundry.org/loggregator-agent/internal/testhelper"
 	"fmt"
 	"io"
 	"net"
@@ -44,16 +45,12 @@ var _ = Describe("TCPWriter", func() {
 	Describe("Write()", func() {
 		var (
 			writer        egress.WriteCloser
-			egressTotal   uint64
-			egressCounter func(uint64)
+			egressCounter *testhelper.SpyMetricV2
 		)
 
 		BeforeEach(func() {
 			var err error
-			egressTotal = 0
-			egressCounter = func(delta uint64) {
-				egressTotal += delta
-			}
+			egressCounter = &testhelper.SpyMetricV2{}
 
 			writer = syslog.NewTCPWriter(
 				binding,
@@ -179,7 +176,7 @@ var _ = Describe("TCPWriter", func() {
 			env := buildLogEnvelope("OTHER", "1", "no null `\x00` please", loggregator_v2.Log_OUT)
 			writer.Write(env)
 
-			Expect(egressTotal).To(Equal(uint64(1)))
+			Expect(egressCounter.Value()).To(BeNumerically("==", 1))
 		})
 
 		It("replaces spaces with dashes in the process ID", func() {
@@ -208,7 +205,7 @@ var _ = Describe("TCPWriter", func() {
 				binding,
 				netConf,
 				false,
-				func(uint64) {},
+				&testhelper.SpyMetricV2{},
 			)
 
 			errs := make(chan error, 1)
@@ -232,7 +229,7 @@ var _ = Describe("TCPWriter", func() {
 					binding,
 					netConf,
 					false,
-					func(uint64) {},
+					&testhelper.SpyMetricV2{},
 				)
 				Expect(err).ToNot(HaveOccurred())
 

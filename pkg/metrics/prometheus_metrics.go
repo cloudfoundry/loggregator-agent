@@ -15,6 +15,7 @@ type PromRegistry struct {
 	port        string
 	registry    *prometheus.Registry
 	defaultTags map[string]string
+	loggr       *log.Logger
 }
 
 type Counter interface {
@@ -34,6 +35,7 @@ func NewPromRegistry(defaultSourceID string, port int, logger *log.Logger, opts 
 		registry:    registry,
 		defaultTags: map[string]string{"source_id": defaultSourceID, "origin": defaultSourceID},
 		port:        p,
+		loggr:       logger,
 	}
 
 	for _, o := range opts {
@@ -75,26 +77,28 @@ func serveRegistry(registry *prometheus.Registry, port int, logger *log.Logger) 
 	return parts[len(parts)-1]
 }
 
-func (p *PromRegistry) NewCounter(name string, opts ...MetricOption) (Counter, error) {
+func (p *PromRegistry) NewCounter(name string, opts ...MetricOption) Counter {
 	opt := p.newMetricOpt(name, "counter metric", opts...)
 	counter := prometheus.NewCounter(prometheus.CounterOpts(opt))
 
 	err := p.registry.Register(counter)
 	if err != nil {
-		return nil, err
+		p.loggr.Panicf("unable to create counter: %s", err)
 	}
-	return counter, nil
+
+	return counter
 }
 
-func (p *PromRegistry) NewGauge(name string, opts ...MetricOption) (Gauge, error) {
+func (p *PromRegistry) NewGauge(name string, opts ...MetricOption) Gauge {
 	opt := p.newMetricOpt(name, "gauge metric", opts...)
 	gauge := prometheus.NewGauge(prometheus.GaugeOpts(opt))
 
 	err := p.registry.Register(gauge)
 	if err != nil {
-		return nil, err
+		p.loggr.Panicf("unable to create gauge: %s", err)
 	}
-	return gauge, nil
+
+	return gauge
 }
 
 func (p *PromRegistry) Port() string {
