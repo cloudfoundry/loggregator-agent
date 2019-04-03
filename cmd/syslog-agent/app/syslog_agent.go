@@ -24,7 +24,8 @@ import (
 
 // SyslogAgent manages starting the syslog agent service.
 type SyslogAgent struct {
-	debugPort           uint16
+	pprofPort           uint16
+	metricsPort         uint16
 	metrics             Metrics
 	bindingManager      BindingManager
 	grpc                GRPC
@@ -85,7 +86,8 @@ func NewSyslogAgent(
 	)
 
 	return &SyslogAgent{
-		debugPort:           cfg.DebugPort,
+		pprofPort:           cfg.PProfPort,
+		metricsPort:         cfg.MetricsPort,
 		grpc:                cfg.GRPC,
 		metrics:             m,
 		log:                 l,
@@ -96,7 +98,7 @@ func NewSyslogAgent(
 }
 
 func (s *SyslogAgent) Run() {
-	go http.ListenAndServe(fmt.Sprintf("127.0.0.1:%d", s.debugPort), nil)
+	go http.ListenAndServe(fmt.Sprintf("127.0.0.1:%d", s.pprofPort), nil)
 
 	ingressDropped := s.metrics.NewCounter("dropped", metrics.WithMetricTags(map[string]string{"direction": "ingress"}))
 	diode := diodes.NewManyToOneEnvelopeV2(10000, gendiodes.AlertFunc(func(missed int) {

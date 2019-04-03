@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"time"
 
-	envstruct "code.cloudfoundry.org/go-envstruct"
+	"code.cloudfoundry.org/go-envstruct"
 )
 
 // GRPC stores the configuration for the router as a server using a PORT
@@ -34,7 +34,8 @@ type Config struct {
 	DrainSkipCertVerify bool          `env:"DRAIN_SKIP_CERT_VERIFY,   report"`
 	IdleDrainTimeout    time.Duration `env:"IDLE_DRAIN_TIMEOUT, report"`
 
-	DebugPort uint16 `env:"DEBUG_PORT, report"`
+	PProfPort   uint16 `env:"PPROF_PORT, report"`
+	MetricsPort uint16 `env:"METRICS_PORT, report"`
 
 	GRPC  GRPC
 	Cache Cache

@@ -89,7 +89,8 @@ var _ = Describe("Main", func() {
 				KeyFile:  testhelper.Cert("metron.key"),
 			},
 			DownstreamIngressPortCfg: fmt.Sprintf("%s/*/ingress_port.yml", fConfigDir),
-			DebugPort:                7392,
+			PProfPort:                7392,
+			MetricsPort:              7393,
 			Tags: map[string]string{
 				"some-tag": "some-value",
 			},
@@ -108,7 +109,7 @@ var _ = Describe("Main", func() {
 		forwarderAgent = app.NewForwarderAgent(cfg, mc, testLogger)
 		go forwarderAgent.Run()
 
-		et := map[string]string {
+		et := map[string]string{
 			"direction": "ingress",
 		}
 

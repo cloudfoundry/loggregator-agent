@@ -3,7 +3,7 @@ package app
 import (
 	"fmt"
 
-	envstruct "code.cloudfoundry.org/go-envstruct"
+	"code.cloudfoundry.org/go-envstruct"
 )
 
 // GRPC stores the configuration for the router as a server using a PORT
@@ -22,7 +22,8 @@ type Config struct {
 	// receive each envelope. It is assumed to adhere to the Loggregator Ingress
 	// Service and use the provided TLS configuration.
 	DownstreamIngressPortCfg string `env:"DOWNSTREAM_INGRESS_PORT_GLOB, report"`
-	DebugPort                uint16 `env:"DEBUG_PORT, report"`
+	PProfPort                uint16 `env:"PPROF_PORT, report"`
+	MetricsPort              uint16 `env:"METRICS_PORT, report"`
 	GRPC                     GRPC
 	Tags                     map[string]string `env:"AGENT_TAGS"`
 }

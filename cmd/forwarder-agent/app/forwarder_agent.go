@@ -30,7 +30,8 @@ import (
 
 // ForwarderAgent manages starting the forwarder agent service.
 type ForwarderAgent struct {
-	debugPort          uint16
+	pprofPort          uint16
+	metricsPort        uint16
 	m                  Metrics
 	grpc               GRPC
 	downstreamPortsCfg string
@@ -58,7 +59,8 @@ func NewForwarderAgent(
 	log *log.Logger,
 ) *ForwarderAgent {
 	return &ForwarderAgent{
-		debugPort:          cfg.DebugPort,
+		pprofPort:          cfg.PProfPort,
+		metricsPort:        cfg.MetricsPort,
 		grpc:               cfg.GRPC,
 		m:                  m,
 		downstreamPortsCfg: cfg.DownstreamIngressPortCfg,
@@ -68,7 +70,7 @@ func NewForwarderAgent(
 }
 
 func (s ForwarderAgent) Run() {
-	go http.ListenAndServe(fmt.Sprintf("127.0.0.1:%d", s.debugPort), nil)
+	go http.ListenAndServe(fmt.Sprintf("127.0.0.1:%d", s.pprofPort), nil)
 
 	ingressDropped := s.m.NewCounter("dropped", metrics.WithMetricTags(map[string]string{"direction": "ingress"}))
 	diode := diodes.NewManyToOneEnvelopeV2(10000, gendiodes.AlertFunc(func(missed int) {
