@@ -27,20 +27,25 @@ type Gauge interface {
 	Set(float64)
 }
 
-func NewPromRegistry(defaultSourceID string, port int, logger *log.Logger, opts ...RegistryOption) *PromRegistry {
+//By default, the prom registry will register the metrics route with the default
+//http mux but will not start a http server. This is intentional so that we can
+//combine metrics with other things like pprof into one server. To start a server
+//just for metrics, the WithServer RegistryOption
+func NewPromRegistry(defaultSourceID string, logger *log.Logger, opts ...RegistryOption) *PromRegistry {
 	registry := prometheus.NewRegistry()
-	p := serveRegistry(registry, port, logger)
 
 	pr := &PromRegistry{
 		registry:    registry,
 		defaultTags: map[string]string{"source_id": defaultSourceID, "origin": defaultSourceID},
-		port:        p,
 		loggr:       logger,
 	}
 
 	for _, o := range opts {
 		o(pr)
 	}
+
+	httpHandler := promhttp.HandlerFor(registry, promhttp.HandlerOpts{})
+	http.Handle("/metrics", httpHandler)
 
 	return pr
 }
@@ -55,26 +60,30 @@ func WithDefaultTags(tags map[string]string) RegistryOption {
 	}
 }
 
-func serveRegistry(registry *prometheus.Registry, port int, logger *log.Logger) string {
-	router := http.NewServeMux()
-	router.Handle("/metrics", promhttp.HandlerFor(registry, promhttp.HandlerOpts{}))
+func WithServer(port int) RegistryOption {
+	return func(r *PromRegistry) {
+		r.start(port)
+	}
+}
+
+func (p *PromRegistry) start(port int) {
 	addr := fmt.Sprintf("127.0.0.1:%d", port)
 	s := http.Server{
 		Addr:         addr,
 		ReadTimeout:  5 * time.Second,
 		WriteTimeout: 5 * time.Second,
-		Handler:      router,
 	}
+
 	lis, err := net.Listen("tcp", addr)
 	if err != nil {
-		logger.Fatalf("Unable to setup metrics endpoint (%s): %s", addr, err)
+		p.loggr.Fatalf("Unable to setup metrics endpoint (%s): %s", addr, err)
 	}
-	logger.Printf("Metrics endpoint is listening on %s", lis.Addr().String())
-
-	go s.Serve(lis)
+	p.loggr.Printf("Metrics endpoint is listening on %s", lis.Addr().String())
 
 	parts := strings.Split(lis.Addr().String(), ":")
-	return parts[len(parts)-1]
+	p.port = parts[len(parts)-1]
+
+	go s.Serve(lis)
 }
 
 func (p *PromRegistry) NewCounter(name string, opts ...MetricOption) Counter {

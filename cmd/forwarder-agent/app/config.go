@@ -23,7 +23,6 @@ type Config struct {
 	// Service and use the provided TLS configuration.
 	DownstreamIngressPortCfg string `env:"DOWNSTREAM_INGRESS_PORT_GLOB, report"`
 	PProfPort                uint16 `env:"PPROF_PORT, report"`
-	MetricsPort              uint16 `env:"METRICS_PORT, report"`
 	GRPC                     GRPC
 	Tags                     map[string]string `env:"AGENT_TAGS"`
 }

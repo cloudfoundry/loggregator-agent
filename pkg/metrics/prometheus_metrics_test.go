@@ -18,11 +18,15 @@ var _ = Describe("PrometheusMetrics", func() {
 
 	BeforeEach(func() {
 		l = log.New(GinkgoWriter, "", log.LstdFlags)
+
+		// This is needed because the prom registry will register
+		// the /metrics route with the default http mux which is
+		// global
+		http.DefaultServeMux = new(http.ServeMux)
 	})
 
 	It("serves metrics on a prometheus endpoint", func() {
-		r := metrics.NewPromRegistry("test-source", 0, l)
-		port := r.Port()
+		r := metrics.NewPromRegistry("test-source", l, metrics.WithServer(0))
 
 		c := r.NewCounter(
 			"test_counter",
@@ -40,11 +44,10 @@ var _ = Describe("PrometheusMetrics", func() {
 		g.Set(10)
 		g.Add(1)
 
-		resp := getMetrics(port)
-		Expect(resp).To(ContainSubstring(`test_counter{foo="bar",origin="test-source",source_id="test-source"} 10`))
-		Expect(resp).To(ContainSubstring("a counter help text for test_counter"))
-		Expect(resp).To(ContainSubstring(`test_gauge{bar="baz",origin="test-source",source_id="test-source"} 11`))
-		Expect(resp).To(ContainSubstring("a gauge help text for test_gauge"))
+		Eventually(func() string { return getMetrics(r.Port()) }).Should(ContainSubstring(`test_counter{foo="bar",origin="test-source",source_id="test-source"} 10`))
+		Eventually(func() string { return getMetrics(r.Port()) }).Should(ContainSubstring("a counter help text for test_counter"))
+		Eventually(func() string { return getMetrics(r.Port()) }).Should(ContainSubstring(`test_gauge{bar="baz",origin="test-source",source_id="test-source"} 11`))
+		Eventually(func() string { return getMetrics(r.Port()) }).Should(ContainSubstring("a gauge help text for test_gauge"))
 	})
 
 	It("accepts custom default tags", func() {
@@ -52,7 +55,7 @@ var _ = Describe("PrometheusMetrics", func() {
 			"tag": "custom",
 		}
 
-		r := metrics.NewPromRegistry("test-source", 0, l, metrics.WithDefaultTags(ct))
+		r := metrics.NewPromRegistry("test-source", l, metrics.WithDefaultTags(ct), metrics.WithServer(0))
 
 		r.NewCounter(
 			"test_counter",
@@ -64,13 +67,12 @@ var _ = Describe("PrometheusMetrics", func() {
 			metrics.WithHelpText("a gauge help text for test_gauge"),
 		)
 
-		resp := getMetrics(r.Port())
-		Expect(resp).To(ContainSubstring(`test_counter{origin="test-source",source_id="test-source",tag="custom"} 0`))
-		Expect(resp).To(ContainSubstring(`test_gauge{origin="test-source",source_id="test-source",tag="custom"} 0`))
+		Eventually(func() string { return getMetrics(r.Port()) }).Should(ContainSubstring(`test_counter{origin="test-source",source_id="test-source",tag="custom"} 0`))
+		Eventually(func() string { return getMetrics(r.Port()) }).Should(ContainSubstring(`test_gauge{origin="test-source",source_id="test-source",tag="custom"} 0`))
 	})
 
 	It("panics if the metric is invalid", func() {
-		r := metrics.NewPromRegistry("test-source", 0, l)
+		r := metrics.NewPromRegistry("test-source", l)
 
 		Expect(func() {
 			r.NewCounter("test-counter")
@@ -85,7 +87,10 @@ var _ = Describe("PrometheusMetrics", func() {
 func getMetrics(port string) string {
 	addr := fmt.Sprintf("http://127.0.0.1:%s/metrics", port)
 	resp, err := http.Get(addr)
-	Expect(err).ToNot(HaveOccurred())
+	if err != nil {
+		return ""
+	}
+
 	respBytes, err := ioutil.ReadAll(resp.Body)
 	Expect(err).ToNot(HaveOccurred())
 

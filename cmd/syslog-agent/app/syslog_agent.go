@@ -25,7 +25,6 @@ import (
 // SyslogAgent manages starting the syslog agent service.
 type SyslogAgent struct {
 	pprofPort           uint16
-	metricsPort         uint16
 	metrics             Metrics
 	bindingManager      BindingManager
 	grpc                GRPC
@@ -87,7 +86,6 @@ func NewSyslogAgent(
 
 	return &SyslogAgent{
 		pprofPort:           cfg.PProfPort,
-		metricsPort:         cfg.MetricsPort,
 		grpc:                cfg.GRPC,
 		metrics:             m,
 		log:                 l,

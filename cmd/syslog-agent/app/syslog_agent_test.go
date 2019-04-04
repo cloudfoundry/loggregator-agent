@@ -11,7 +11,6 @@ import (
 	"net"
 	"net/http"
 	"net/http/httptest"
-	"os/exec"
 	"strings"
 	"sync"
 	"time"
@@ -81,7 +80,6 @@ var _ = Describe("SyslogAgent", func() {
 		cfg := app.Config{
 			BindingsPerAppLimit: 5,
 			PProfPort:           7392,
-			MetricsPort:         7393,
 			IdleDrainTimeout:    10 * time.Minute,
 			Cache: app.Cache{
 				URL:             cupsProvider.URL,
@@ -117,7 +115,6 @@ var _ = Describe("SyslogAgent", func() {
 		cfg := app.Config{
 			BindingsPerAppLimit: 5,
 			PProfPort:           7392,
-			MetricsPort:         7393,
 			IdleDrainTimeout:    10 * time.Minute,
 			DrainSkipCertVerify: true,
 			Cache: app.Cache{
@@ -208,22 +205,6 @@ func hasMetric(mc *testhelper.SpyMetricClientV2, metricName string, tags map[str
 	return func() bool {
 		return mc.HasMetric(metricName, tags)
 	}
-}
-
-func startSyslogAgent(envs ...string) *gexec.Session {
-	path, err := gexec.Build("code.cloudfoundry.org/loggregator-agent/cmd/syslog-agent")
-	if err != nil {
-		panic(err)
-	}
-
-	cmd := exec.Command(path)
-	cmd.Env = envs
-	session, err := gexec.Start(cmd, GinkgoWriter, GinkgoWriter)
-	if err != nil {
-		panic(err)
-	}
-
-	return session
 }
 
 type fakeBindingCache struct {

@@ -90,7 +90,6 @@ var _ = Describe("Main", func() {
 			},
 			DownstreamIngressPortCfg: fmt.Sprintf("%s/*/ingress_port.yml", fConfigDir),
 			PProfPort:                7392,
-			MetricsPort:              7393,
 			Tags: map[string]string{
 				"some-tag": "some-value",
 			},

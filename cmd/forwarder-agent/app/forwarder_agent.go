@@ -31,7 +31,6 @@ import (
 // ForwarderAgent manages starting the forwarder agent service.
 type ForwarderAgent struct {
 	pprofPort          uint16
-	metricsPort        uint16
 	m                  Metrics
 	grpc               GRPC
 	downstreamPortsCfg string
@@ -60,7 +59,6 @@ func NewForwarderAgent(
 ) *ForwarderAgent {
 	return &ForwarderAgent{
 		pprofPort:          cfg.PProfPort,
-		metricsPort:        cfg.MetricsPort,
 		grpc:               cfg.GRPC,
 		m:                  m,
 		downstreamPortsCfg: cfg.DownstreamIngressPortCfg,

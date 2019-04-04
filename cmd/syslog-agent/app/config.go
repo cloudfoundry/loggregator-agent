@@ -35,7 +35,6 @@ type Config struct {
 	IdleDrainTimeout    time.Duration `env:"IDLE_DRAIN_TIMEOUT, report"`
 
 	PProfPort   uint16 `env:"PPROF_PORT, report"`
-	MetricsPort uint16 `env:"METRICS_PORT, report"`
 
 	GRPC  GRPC
 	Cache Cache

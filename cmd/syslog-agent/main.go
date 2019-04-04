@@ -16,7 +16,6 @@ func main() {
 	cfg := app.LoadConfig()
 	m := metrics.NewPromRegistry(
 		"syslog_agent",
-		int(cfg.MetricsPort),
 		log,
 		metrics.WithDefaultTags(map[string]string{"metrics_version": "2.0"}),
 	)
