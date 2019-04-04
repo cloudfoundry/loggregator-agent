@@ -30,6 +30,7 @@ type Config struct {
 	IncomingUDPPort                 int               `env:"AGENT_INCOMING_UDP_PORT"`
 	MetricBatchIntervalMilliseconds uint              `env:"AGENT_METRIC_BATCH_INTERVAL_MILLISECONDS"`
 	MetricSourceID                  string            `env:"AGENT_METRIC_SOURCE_ID"`
+	MetricPort                      uint32            `env:"AGENT_METRIC_PORT"`
 	PProfPort                       uint32            `env:"AGENT_PPROF_PORT"`
 	RouterAddr                      string            `env:"ROUTER_ADDR"`
 	RouterAddrWithAZ                string            `env:"ROUTER_ADDR_WITH_AZ"`
@@ -43,6 +44,7 @@ func LoadConfig() (*Config, error) {
 		MetricSourceID:                  "metron",
 		IncomingUDPPort:                 3457,
 		PProfPort:                       14824,
+		MetricPort:                      14825,
 		GRPC: GRPC{
 			Port: 3458,
 		},

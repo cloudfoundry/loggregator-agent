@@ -18,7 +18,7 @@ type MetricClient interface {
 }
 
 type MetricClientV2 interface {
-	NewCounter(name string, opts ...metrics.MetricOption) (metrics.Counter, error)
+	NewCounter(name string, opts ...metrics.MetricOption) metrics.Counter
 }
 
 type Receiver struct {

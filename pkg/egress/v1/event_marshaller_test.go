@@ -15,16 +15,16 @@ var _ = Describe("EventMarshaller", func() {
 	var (
 		marshaller      *egress.EventMarshaller
 		mockChainWriter *mockBatchChainByteWriter
-		metricClient    *testhelper.SpyMetricClient
+		metricClient    *testhelper.SpyMetricClientV2
 	)
 
 	BeforeEach(func() {
 		mockChainWriter = newMockBatchChainByteWriter()
-		metricClient = testhelper.NewMetricClient()
+		metricClient = testhelper.NewMetricClientV2()
 	})
 
 	JustBeforeEach(func() {
-		marshaller = egress.NewMarshaller(metricClient)
+		marshaller = egress.NewMarshallerV2(metricClient)
 		marshaller.SetWriter(mockChainWriter)
 	})
 
@@ -77,8 +77,8 @@ var _ = Describe("EventMarshaller", func() {
 				Expect(err).ToNot(HaveOccurred())
 				Expect(mockChainWriter.WriteInput.Message).To(Receive(Equal(expected)))
 
-				metric := metricClient.GetMetric("Egress")
-				Expect(metric.Delta()).To(Equal(uint64(1)))
+				metric := metricClient.GetMetric("egress", map[string]string{"metric_version":"1.0"})
+				Expect(metric.Value()).To(Equal(float64(1)))
 			})
 		})
 	})

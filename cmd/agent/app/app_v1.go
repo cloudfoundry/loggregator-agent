@@ -1,6 +1,7 @@
 package app
 
 import (
+	"code.cloudfoundry.org/loggregator-agent/pkg/metrics"
 	"fmt"
 	"log"
 	"math/rand"
@@ -21,6 +22,7 @@ type AppV1 struct {
 	config       *Config
 	creds        credentials.TransportCredentials
 	metricClient MetricClient
+	dopplerConnectionsMetric metrics.Gauge
 	lookup       func(string) ([]net.IP, error)
 }
 
@@ -38,12 +40,14 @@ func NewV1App(
 	c *Config,
 	creds credentials.TransportCredentials,
 	m MetricClient,
+	dopplerConnectionsMetric metrics.Gauge,
 	opts ...AppV1Option,
 ) *AppV1 {
 	a := &AppV1{
 		config:       c,
 		creds:        creds,
 		metricClient: m,
+		dopplerConnectionsMetric: dopplerConnectionsMetric,
 		lookup:       net.LookupIP,
 	}
 
@@ -76,7 +80,7 @@ func (a *AppV1) Start() {
 
 	dropsondeUnmarshaller := ingress.NewUnMarshaller(aggregator)
 	agentAddress := fmt.Sprintf("127.0.0.1:%d", a.config.IncomingUDPPort)
-	networkReader, err := ingress.NewNetworkReader(
+	networkReader, err := ingress.NewNetworkReaderV2(
 		agentAddress,
 		dropsondeUnmarshaller,
 		a.metricClient,
@@ -93,7 +97,7 @@ func (a *AppV1) Start() {
 func (a *AppV1) initializeV1DopplerPool() *egress.EventMarshaller {
 	pool := a.setupGRPC()
 
-	marshaller := egress.NewMarshaller(a.metricClient)
+	marshaller := egress.NewMarshallerV2(a.metricClient)
 	marshaller.SetWriter(pool)
 
 	return marshaller
@@ -117,9 +121,10 @@ func (a *AppV1) setupGRPC() *clientpoolv1.ClientPool {
 		clientpoolv1.WithLookup(a.lookup),
 	))
 
-	avgEnvelopeSize := a.metricClient.NewGauge("AverageEnvelope")
+	avgEnvelopeSize := a.metricClient.NewGauge("average_envelopes", metrics.WithMetricTags(map[string]string{"unit": "bytes/minute", "metric_version":"1.0"}))
+
 	tracker := plumbing.NewEnvelopeAverager()
-	tracker.Start(60*time.Second, avgEnvelopeSize)
+	tracker.Start(60*time.Second, func(i float64) { avgEnvelopeSize.Set(i) })
 	statsHandler := clientpool.NewStatsHandler(tracker)
 
 	kp := keepalive.ClientParameters{
@@ -127,8 +132,9 @@ func (a *AppV1) setupGRPC() *clientpoolv1.ClientPool {
 		Timeout:             15 * time.Second,
 		PermitWithoutStream: true,
 	}
-	fetcher := clientpoolv1.NewPusherFetcher(
+	fetcher := clientpoolv1.NewPusherFetcherV2(
 		a.metricClient,
+		a.dopplerConnectionsMetric,
 		grpc.WithTransportCredentials(a.creds),
 		grpc.WithStatsHandler(statsHandler),
 		grpc.WithKeepaliveParams(kp),

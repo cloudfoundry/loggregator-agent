@@ -34,14 +34,54 @@ var _ = Describe("v1 App", func() {
 		app := app.NewV1App(
 			&config,
 			clientCreds,
-			testhelper.NewMetricClient(),
+			testhelper.NewMetricClientV2(),
+			&testhelper.SpyMetricV2{},
 			app.WithV1Lookup(spyLookup.lookup),
 		)
 		go app.Start()
 
 		Eventually(spyLookup.calledWith(expectedHost)).Should(BeTrue())
 	})
+
+	It("emits the expected V1 metrics", func() {
+		spyLookup := newSpyLookup()
+
+		clientCreds, err := plumbing.NewClientCredentials(
+			testhelper.Cert("metron.crt"),
+			testhelper.Cert("metron.key"),
+			testhelper.Cert("loggregator-ca.crt"),
+			"doppler",
+		)
+		Expect(err).ToNot(HaveOccurred())
+
+		config := buildAgentConfig("127.0.0.1", 1234)
+		config.Zone = "something-bad"
+		Expect(err).ToNot(HaveOccurred())
+
+		mc := testhelper.NewMetricClientV2()
+		dopplerConnMetric := mc.NewGauge("doppler_connections")
+
+		app := app.NewV1App(
+			&config,
+			clientCreds,
+			mc,
+			dopplerConnMetric,
+			app.WithV1Lookup(spyLookup.lookup),
+		)
+		go app.Start()
+
+		Eventually(hasMetric(mc, "ingress",  map[string]string{"metric_version":"1.0"})).Should(BeTrue())
+		Eventually(hasMetric(mc,"egress",  map[string]string{"metric_version":"1.0"} )).Should(BeTrue())
+		Eventually(hasMetric(mc,"dropped", map[string]string{"direction":"all","metric_version":"1.0"})).Should(BeTrue())
+		Eventually(hasMetric(mc,"average_envelopes", map[string]string{"unit": "bytes/minute", "metric_version":"1.0"} )).Should(BeTrue())
+	})
 })
+
+func hasMetric(mc *testhelper.SpyMetricClientV2, metricName string, tags map[string]string) func() bool {
+	return func() bool {
+		return mc.HasMetric(metricName, tags)
+	}
+}
 
 type spyLookup struct {
 	mu          sync.Mutex

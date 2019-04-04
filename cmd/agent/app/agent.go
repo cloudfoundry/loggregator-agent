@@ -1,9 +1,9 @@
 package app
 
 import (
-	"expvar"
 	"log"
 	"net"
+	"os"
 
 	"code.cloudfoundry.org/loggregator-agent/pkg/metrics"
 	"code.cloudfoundry.org/loggregator-agent/pkg/plumbing"
@@ -66,11 +66,16 @@ func (a *Agent) Start() {
 		log.Fatalf("Could not use GRPC creds for server: %s", err)
 	}
 
-	metricClient := metrics.New(expvar.NewMap("Agent"))
+	logger := log.New(os.Stderr, "", log.LstdFlags)
+	logger.Println("starting loggregator-agent")
+	defer logger.Println("stopping loggregator-agent")
 
-	appV1 := NewV1App(a.config, clientCreds, metricClient)
+	metricClient := metrics.NewPromRegistry("loggregator.metron", logger)
+	dopplerConnectionsMetric := metricClient.NewGauge("doppler_connections")
+
+	appV1 := NewV1App(a.config, clientCreds, metricClient, dopplerConnectionsMetric)
 	go appV1.Start()
 
-	appV2 := NewV2App(a.config, clientCreds, serverCreds, metricClient)
+	appV2 := NewV2App(a.config, clientCreds, serverCreds, metricClient, dopplerConnectionsMetric)
 	go appV2.Start()
 }

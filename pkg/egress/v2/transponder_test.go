@@ -21,7 +21,9 @@ var _ = Describe("Transponder", func() {
 		writer := newMockWriter()
 		close(writer.WriteOutput.Ret0)
 
-		tx := egress.NewTransponder(nexter, writer, 1, time.Nanosecond, testhelper.NewMetricClient())
+		spy := testhelper.NewMetricClientV2()
+
+		tx := egress.NewTransponder(nexter, writer, 1, time.Nanosecond, spy)
 		go tx.Start()
 
 		Eventually(nexter.TryNextCalled).Should(Receive())
@@ -40,7 +42,9 @@ var _ = Describe("Transponder", func() {
 				nexter.TryNextOutput.Ret1 <- true
 			}
 
-			tx := egress.NewTransponder(nexter, writer, 5, time.Minute, testhelper.NewMetricClient())
+			spy := testhelper.NewMetricClientV2()
+
+			tx := egress.NewTransponder(nexter, writer, 5, time.Minute, spy)
 			go tx.Start()
 
 			var batch []*loggregator_v2.Envelope
@@ -59,7 +63,9 @@ var _ = Describe("Transponder", func() {
 			close(nexter.TryNextOutput.Ret0)
 			close(nexter.TryNextOutput.Ret1)
 
-			tx := egress.NewTransponder(nexter, writer, 5, time.Millisecond, testhelper.NewMetricClient())
+			spy := testhelper.NewMetricClientV2()
+
+			tx := egress.NewTransponder(nexter, writer, 5, time.Millisecond, spy)
 			go tx.Start()
 
 			var batch []*loggregator_v2.Envelope
@@ -83,14 +89,16 @@ var _ = Describe("Transponder", func() {
 				nexter.TryNextOutput.Ret1 <- true
 			}
 
-			tx := egress.NewTransponder(nexter, writer, 5, time.Minute, testhelper.NewMetricClient())
+			spy := testhelper.NewMetricClientV2()
+
+			tx := egress.NewTransponder(nexter, writer, 5, time.Minute, spy)
 			go tx.Start()
 
 			Eventually(writer.WriteCalled).Should(HaveLen(1))
 			Consistently(writer.WriteCalled).Should(HaveLen(1))
 		})
 
-		It("emits egress metric", func() {
+		It("emits egress and dropped metric", func() {
 			envelope := &loggregator_v2.Envelope{SourceId: "uuid"}
 			nexter := newMockNexter()
 			writer := newMockWriter()
@@ -101,15 +109,20 @@ var _ = Describe("Transponder", func() {
 				nexter.TryNextOutput.Ret1 <- true
 			}
 
-			spy := testhelper.NewMetricClient()
+			spy := testhelper.NewMetricClientV2()
 			tx := egress.NewTransponder(nexter, writer, 5, time.Minute, spy)
 			go tx.Start()
 
-			f := func() uint64 {
-				return spy.GetMetric("EgressV2").Delta()
-			}
+			Eventually(hasMetric(spy, "egress", map[string]string{"metric_version":"2.0"}))
+			Eventually(hasMetric(spy, "dropped", map[string]string{"direction":"egress","metric_version":"2.0"}))
 
-			Eventually(f).Should(Equal(uint64(5)))
 		})
 	})
 })
+
+func hasMetric(mc *testhelper.SpyMetricClientV2, metricName string, tags map[string]string) func() bool {
+	return func() bool {
+		return mc.HasMetric(metricName, tags)
+	}
+}
+

@@ -1,6 +1,7 @@
 package v1
 
 import (
+	"code.cloudfoundry.org/loggregator-agent/pkg/metrics"
 	"context"
 	"fmt"
 	"io"
@@ -15,6 +16,11 @@ type MetricClient interface {
 	NewSumGauge(name string) func(float64)
 }
 
+
+type MetricClientV2 interface {
+	NewGauge(name string, opts ...metrics.MetricOption) metrics.Gauge
+}
+
 type PusherFetcher struct {
 	opts               []grpc.DialOption
 	dopplerConnections func(float64)
@@ -26,6 +32,15 @@ func NewPusherFetcher(mc MetricClient, opts ...grpc.DialOption) *PusherFetcher {
 		opts:               opts,
 		dopplerConnections: mc.NewSumGauge("DopplerConnections"),
 		dopplerV1Streams:   mc.NewSumGauge("DopplerV1Streams"),
+	}
+}
+
+func NewPusherFetcherV2(mc MetricClientV2, dopplerConnections metrics.Gauge, opts ...grpc.DialOption) *PusherFetcher {
+	dopplerV1Streams := mc.NewGauge("doppler_v1_streams")
+	return &PusherFetcher{
+		opts:               opts,
+		dopplerConnections: func(i float64){ dopplerConnections.Add(i) },
+		dopplerV1Streams:   func(i float64){ dopplerV1Streams.Add(i) },
 	}
 }
 

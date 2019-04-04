@@ -1,6 +1,7 @@
 package app
 
 import (
+	"code.cloudfoundry.org/loggregator-agent/pkg/metrics"
 	"fmt"
 	"log"
 	"math/rand"
@@ -21,9 +22,8 @@ import (
 
 // MetricClient is used to serve metrics.
 type MetricClient interface {
-	NewCounter(name string) func(uint64)
-	NewGauge(name string) func(float64)
-	NewSumGauge(name string) func(float64)
+	NewCounter(name string, opts ...metrics.MetricOption) metrics.Counter
+	NewGauge(name string, opts ...metrics.MetricOption) metrics.Gauge
 }
 
 // AppV2Option configures AppV2 options.
@@ -37,11 +37,12 @@ func WithV2Lookup(l func(string) ([]net.IP, error)) func(*AppV2) {
 }
 
 type AppV2 struct {
-	config       *Config
-	clientCreds  credentials.TransportCredentials
-	serverCreds  credentials.TransportCredentials
-	metricClient MetricClient
-	lookup       func(string) ([]net.IP, error)
+	config                   *Config
+	clientCreds              credentials.TransportCredentials
+	serverCreds              credentials.TransportCredentials
+	metricClient             MetricClient
+	dopplerConnectionsMetric metrics.Gauge
+	lookup                   func(string) ([]net.IP, error)
 }
 
 func NewV2App(
@@ -49,14 +50,16 @@ func NewV2App(
 	clientCreds credentials.TransportCredentials,
 	serverCreds credentials.TransportCredentials,
 	metricClient MetricClient,
+	dopplerConnectionsMetric metrics.Gauge,
 	opts ...AppV2Option,
 ) *AppV2 {
 	a := &AppV2{
-		config:       c,
-		clientCreds:  clientCreds,
-		serverCreds:  serverCreds,
-		metricClient: metricClient,
-		lookup:       net.LookupIP,
+		config:                   c,
+		clientCreds:              clientCreds,
+		serverCreds:              serverCreds,
+		metricClient:             metricClient,
+		dopplerConnectionsMetric: dopplerConnectionsMetric,
+		lookup:                   net.LookupIP,
 	}
 
 	for _, o := range opts {
@@ -71,11 +74,11 @@ func (a *AppV2) Start() {
 		log.Panic("Failed to load TLS server config")
 	}
 
-	droppedMetric := a.metricClient.NewCounter("DroppedIngressV2")
+	droppedMetric := a.metricClient.NewCounter("dropped", metrics.WithMetricTags(map[string]string{"direction": "ingress", "metric_version": "2.0"}))
 	envelopeBuffer := diodes.NewManyToOneEnvelopeV2(10000, gendiodes.AlertFunc(func(missed int) {
 		// metric-documentation-v2: (loggregator.metron.dropped) Number of v2 envelopes
 		// dropped from the agent ingress diode
-		droppedMetric(uint64(missed))
+		droppedMetric.Add(float64(missed))
 
 		log.Printf("Dropped %d v2 envelopes", missed)
 	}))
@@ -86,6 +89,9 @@ func (a *AppV2) Start() {
 		egress.NewCounterAggregator(),
 		egress.NewTagger(a.config.Tags),
 	)
+
+	ingressMetric := a.metricClient.NewCounter("ingress", metrics.WithMetricTags(map[string]string{"metric_version": "2.0"}))
+	originMappings := a.metricClient.NewCounter("origin_mappings", metrics.WithMetricTags(map[string]string{"unit": "bytes/minute", "metric_version": "2.0"}))
 
 	tx := egress.NewTransponder(
 		envelopeBuffer,
@@ -98,7 +104,7 @@ func (a *AppV2) Start() {
 	agentAddress := fmt.Sprintf("127.0.0.1:%d", a.config.GRPC.Port)
 	log.Printf("agent v2 API started on addr %s", agentAddress)
 
-	rx := ingress.NewReceiver(envelopeBuffer, a.metricClient)
+	rx := ingress.NewReceiverV2(envelopeBuffer, ingressMetric, originMappings)
 	kp := keepalive.EnforcementPolicy{
 		MinTime:             10 * time.Second,
 		PermitWithoutStream: true,
@@ -129,9 +135,10 @@ func (a *AppV2) initializePool() *clientpoolv2.ClientPool {
 		clientpoolv2.WithLookup(a.lookup)),
 	)
 
-	avgEnvelopeSize := a.metricClient.NewGauge("AverageEnvelopeV2")
+	avgEnvelopeSize := a.metricClient.NewGauge("average_envelopes", metrics.WithMetricTags(map[string]string{"unit":"bytes/minute","metric_version":"2.0"}))
+
 	tracker := plumbing.NewEnvelopeAverager()
-	tracker.Start(60*time.Second, avgEnvelopeSize)
+	tracker.Start(60*time.Second, func(i float64) { avgEnvelopeSize.Set(i) })
 	statsHandler := clientpool.NewStatsHandler(tracker)
 
 	kp := keepalive.ClientParameters{
@@ -139,8 +146,9 @@ func (a *AppV2) initializePool() *clientpoolv2.ClientPool {
 		Timeout:             15 * time.Second,
 		PermitWithoutStream: true,
 	}
-	fetcher := clientpoolv2.NewSenderFetcher(
+	fetcher := clientpoolv2.NewSenderFetcherV2(
 		a.metricClient,
+		a.dopplerConnectionsMetric,
 		grpc.WithTransportCredentials(a.clientCreds),
 		grpc.WithStatsHandler(statsHandler),
 		grpc.WithKeepaliveParams(kp),

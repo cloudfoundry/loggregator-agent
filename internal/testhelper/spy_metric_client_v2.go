@@ -10,12 +10,12 @@ import (
 
 type SpyMetricClientV2 struct {
 	mu      sync.Mutex
-	metrics map[string]*SpyMetricV2
+	Metrics map[string]*SpyMetricV2
 }
 
 func NewMetricClientV2() *SpyMetricClientV2 {
 	return &SpyMetricClientV2{
-		metrics: make(map[string]*SpyMetricV2),
+		Metrics: make(map[string]*SpyMetricV2),
 	}
 }
 
@@ -42,7 +42,7 @@ func (s *SpyMetricClientV2) NewGauge(name string, opts ...metrics.MetricOption) 
 func (s *SpyMetricClientV2) addMetric(sm *SpyMetricV2) {
 	n := getMetricName(sm.name, sm.Opts.ConstLabels)
 
-	s.metrics[n] = sm
+	s.Metrics[n] = sm
 }
 
 func (s *SpyMetricClientV2) GetMetric(name string, tags map[string]string) *SpyMetricV2 {
@@ -51,7 +51,7 @@ func (s *SpyMetricClientV2) GetMetric(name string, tags map[string]string) *SpyM
 
 	n := getMetricName(name, tags)
 
-	if m, ok := s.metrics[n]; ok {
+	if m, ok := s.Metrics[n]; ok {
 		return m
 	}
 
@@ -63,7 +63,7 @@ func (s *SpyMetricClientV2) HasMetric(name string, tags map[string]string) bool 
 	defer s.mu.Unlock()
 
 	n := getMetricName(name, tags)
-	_, ok := s.metrics[n]
+	_, ok := s.Metrics[n]
 	return ok
 }
 

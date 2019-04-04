@@ -8,6 +8,7 @@ import (
 	"net"
 	"net/http"
 	_ "net/http/pprof"
+	"os"
 	"time"
 
 	"code.cloudfoundry.org/loggregator-agent/cmd/agent/app"
@@ -32,15 +33,17 @@ func main() {
 }
 
 func runPProf(port uint32) {
+	logger := log.New(os.Stderr, "", log.LstdFlags)
+
 	addr := fmt.Sprintf("127.0.0.1:%d", port)
 	lis, err := net.Listen("tcp", addr)
 	if err != nil {
-		log.Panicf("Error creating pprof listener: %s", err)
+		logger.Panicf("Error creating pprof listener: %s", err)
 	}
 
-	log.Printf("pprof bound to: %s", lis.Addr())
+	logger.Printf("pprof bound to: %s", lis.Addr())
 	err = http.Serve(lis, nil)
 	if err != nil {
-		log.Panicf("Error starting pprof server: %s", err)
+		logger.Panicf("Error starting pprof server: %s", err)
 	}
 }

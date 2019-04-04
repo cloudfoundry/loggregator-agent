@@ -1,6 +1,7 @@
 package v2
 
 import (
+	"code.cloudfoundry.org/loggregator-agent/pkg/metrics"
 	"context"
 	"fmt"
 	"io"
@@ -12,6 +13,10 @@ import (
 
 type MetricClient interface {
 	NewSumGauge(string) func(float64)
+}
+
+type MetricClientV2 interface {
+	NewGauge(name string, opts ...metrics.MetricOption) metrics.Gauge
 }
 
 type SenderFetcher struct {
@@ -26,6 +31,19 @@ func NewSenderFetcher(mc MetricClient, opts ...grpc.DialOption) *SenderFetcher {
 		dopplerConnections: mc.NewSumGauge("DopplerConnections"),
 		dopplerV2Streams:   mc.NewSumGauge("DopplerV2Streams"),
 	}
+}
+
+func NewSenderFetcherV2(mc MetricClientV2, dopplerConnections metrics.Gauge, opts ...grpc.DialOption) *SenderFetcher {
+	dopplerV2Streams := mc.NewGauge(
+		"doppler_v2_streams",
+		metrics.WithMetricTags(map[string]string{"metric_version": "2.0"}),
+	)
+	fetcher := SenderFetcher{
+		opts:               opts,
+		dopplerConnections: func(i float64) { dopplerConnections.Add(i) },
+		dopplerV2Streams:  func(i float64)  { dopplerV2Streams.Add(i) },
+	}
+	return &fetcher
 }
 
 func (p *SenderFetcher) Fetch(addr string) (io.Closer, loggregator_v2.Ingress_BatchSenderClient, error) {
