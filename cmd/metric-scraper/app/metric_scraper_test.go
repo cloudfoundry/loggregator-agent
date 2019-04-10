@@ -26,39 +26,26 @@ import (
 
 var _ = Describe("App", func() {
 	var (
-		promServer  *httptest.Server
 		spyAgent    *spyAgent
 		dnsFilePath string
 		scraper     *app.MetricScraper
 		cfg         app.Config
 
-		testLogger = log.New(GinkgoWriter, "", log.LstdFlags)
-		leadership *spyLeadership
+		testLogger       = log.New(GinkgoWriter, "", log.LstdFlags)
+		leadership       *spyLeadership
+		promServer       *promServer
+		spyMetricsClient *testhelper.SpyMetricClientV2
 	)
 
 	Describe("when configured with a single metrics_url", func() {
 		BeforeEach(func() {
 			spyAgent = newSpyAgent()
-			promServer = httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
-				Expect(req.URL.Path).To(Equal("/metrics"))
-
-				w.Write([]byte(promOutput))
-			}))
-
 			leadership = newSpyLeadership()
 
-			tlsConfig, err := plumbing.NewServerMutualTLSConfig(
-				testhelper.Cert("system-metrics-agent-ca.crt"),
-				testhelper.Cert("system-metrics-agent-ca.key"),
-				testhelper.Cert("system-metrics-agent-ca.crt"),
-			)
-			Expect(err).ToNot(HaveOccurred())
+			promServer = newPromServer()
+			promServer.start()
 
-			promServer.TLS = tlsConfig
-
-			promServer.StartTLS()
-
-			u, err := url.Parse(promServer.URL)
+			u, err := url.Parse(promServer.url())
 			Expect(err).ToNot(HaveOccurred())
 
 			scrapePort, err := strconv.Atoi(u.Port())
@@ -81,6 +68,8 @@ var _ = Describe("App", func() {
 				DNSFile:                dnsFilePath,
 				LeadershipServerAddr:   leadership.server.URL,
 			}
+
+			spyMetricsClient = testhelper.NewMetricClientV2()
 		})
 
 		AfterEach(func() {
@@ -89,7 +78,7 @@ var _ = Describe("App", func() {
 		})
 
 		It("scrapes a prometheus endpoint and sends those metrics to a loggregator agent", func() {
-			scraper = app.NewMetricScraper(cfg, testLogger)
+			scraper = app.NewMetricScraper(cfg, testLogger, spyMetricsClient)
 			go scraper.Run()
 
 			Eventually(spyAgent.Envelopes).Should(And(
@@ -104,7 +93,7 @@ var _ = Describe("App", func() {
 		It("does not scrape when leadership server returns 423", func() {
 			leadership.setReturnCode(http.StatusLocked)
 
-			scraper = app.NewMetricScraper(cfg, testLogger)
+			scraper = app.NewMetricScraper(cfg, testLogger, spyMetricsClient)
 			go scraper.Run()
 
 			Consistently(spyAgent.Envelopes, 2).Should(HaveLen(0))
@@ -113,7 +102,7 @@ var _ = Describe("App", func() {
 		It("should scrape if leadership server returns non 423", func() {
 			leadership.setReturnCode(http.StatusInternalServerError)
 
-			scraper = app.NewMetricScraper(cfg, testLogger)
+			scraper = app.NewMetricScraper(cfg, testLogger, spyMetricsClient)
 			go scraper.Run()
 
 			Eventually(func() int {
@@ -123,12 +112,57 @@ var _ = Describe("App", func() {
 
 		It("should scrape if no leadership server endpoint is found", func() {
 			cfg.LeadershipServerAddr = ""
-			scraper = app.NewMetricScraper(cfg, testLogger)
+			scraper = app.NewMetricScraper(cfg, testLogger, spyMetricsClient)
 			go scraper.Run()
 
 			Eventually(func() int {
 				return len(spyAgent.Envelopes())
 			}).Should(BeNumerically(">", 0))
+		})
+
+		It("doesn't not return results if the prom endpoint is slow to respond", func() {
+			promServer.setDelay(500 * time.Millisecond)
+			cfg.ScrapeTimeout = 250 * time.Millisecond
+
+			scraper = app.NewMetricScraper(cfg, testLogger, spyMetricsClient)
+			go scraper.Run()
+
+			Consistently(func() int {
+				return len(spyAgent.Envelopes())
+			}, 1).Should(BeNumerically("==", 0))
+		})
+
+		It("creates a metric from the number of scrapes", func() {
+			promServer.setDelay(500 * time.Millisecond)
+			cfg.ScrapeTimeout = 250 * time.Millisecond
+
+			scraper = app.NewMetricScraper(cfg, testLogger, spyMetricsClient)
+			go scraper.Run()
+
+			Eventually(func() bool {
+				return spyMetricsClient.HasMetric("num_scrapes", nil)
+			}).Should(BeTrue())
+
+			metric := spyMetricsClient.GetMetric("num_scrapes", nil)
+			Eventually(metric.Value).Should(BeNumerically(">", 1))
+		})
+
+		It("continues attempting scrapes when prom endpoint doesn't exist", func() {
+			promServer.stop()
+
+			cfg.ScrapeInterval = 10 * time.Millisecond
+			cfg.ScrapeTimeout = 50 * time.Millisecond
+
+			scraper = app.NewMetricScraper(cfg, testLogger, spyMetricsClient)
+			go scraper.Run()
+
+			Eventually(func() bool {
+				return spyMetricsClient.HasMetric("num_scrapes", nil)
+			}).Should(BeTrue())
+
+			metric := spyMetricsClient.GetMetric("num_scrapes", nil)
+			Eventually(metric.Value, 200*time.Millisecond).Should(BeNumerically(">", 1))
+			fmt.Println(metric.Value())
 		})
 	})
 })
@@ -189,6 +223,59 @@ node_timex_pps_jitter_total 5
 	]
 }`
 )
+
+type promServer struct {
+	sync.Mutex
+	delay  time.Duration
+	server *httptest.Server
+}
+
+func newPromServer() *promServer {
+	return &promServer{}
+}
+
+func (s *promServer) setDelay(d time.Duration) {
+	s.Lock()
+	defer s.Unlock()
+
+	s.delay = d
+}
+
+func (s *promServer) handleRequest(w http.ResponseWriter, r *http.Request) {
+	Expect(r.URL.Path).To(Equal("/metrics"))
+	fmt.Println("Called")
+	if s.delay > 0 {
+		s.Lock()
+		toSleep := s.delay
+		s.Unlock()
+		time.Sleep(toSleep)
+	}
+
+	w.Write([]byte(promOutput))
+}
+
+func (s *promServer) start() {
+	s.server = httptest.NewUnstartedServer(http.HandlerFunc(s.handleRequest))
+
+	tlsConfig, err := plumbing.NewServerMutualTLSConfig(
+		testhelper.Cert("system-metrics-agent-ca.crt"),
+		testhelper.Cert("system-metrics-agent-ca.key"),
+		testhelper.Cert("system-metrics-agent-ca.crt"),
+	)
+	Expect(err).ToNot(HaveOccurred())
+
+	s.server.TLS = tlsConfig
+
+	s.server.StartTLS()
+}
+
+func (s *promServer) stop() {
+	s.server.Close()
+}
+
+func (s *promServer) url() string {
+	return s.server.URL
+}
 
 type spyAgent struct {
 	loggregator_v2.IngressServer

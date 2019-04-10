@@ -23,6 +23,7 @@ type Config struct {
 	DefaultSourceID        string `env:"DEFAULT_SOURCE_ID, report, required"`
 
 	ScrapeInterval time.Duration `env:"SCRAPE_INTERVAL, report"`
+	ScrapeTimeout  time.Duration `env:"SCRAPE_TIMEOUT, report"`
 	ScrapePort     int           `env:"SCRAPE_PORT, report, required"`
 
 	DNSFile              string `env:"DNS_FILE, report, required"`
@@ -32,6 +33,7 @@ type Config struct {
 func LoadConfig(log *log.Logger) Config {
 	cfg := Config{
 		ScrapeInterval: time.Minute,
+		ScrapeTimeout: time.Second,
 	}
 
 	if err := envstruct.Load(&cfg); err != nil {

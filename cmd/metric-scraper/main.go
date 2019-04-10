@@ -1,6 +1,7 @@
 package main
 
 import (
+	"code.cloudfoundry.org/loggregator-agent/pkg/metrics"
 	"log"
 	"os"
 
@@ -13,5 +14,16 @@ func main() {
 	defer log.Printf("closing Metrics Scraper...")
 
 	cfg := app.LoadConfig(log)
-	app.NewMetricScraper(cfg, log).Run()
+
+	dt := map[string]string{
+		"metrics_version": "2.0",
+	}
+	metricClient := metrics.NewPromRegistry(
+		"metric_scraper",
+		log,
+		metrics.WithDefaultTags(dt),
+		metrics.WithServer(0),
+	)
+
+	app.NewMetricScraper(cfg, log, metricClient).Run()
 }

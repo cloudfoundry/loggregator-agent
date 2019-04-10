@@ -1,11 +1,13 @@
 package app
 
 import (
+	"code.cloudfoundry.org/loggregator-agent/pkg/metrics"
 	"log"
+	"net"
 	"net/http"
 	"time"
 
-	loggregator "code.cloudfoundry.org/go-loggregator"
+	"code.cloudfoundry.org/go-loggregator"
 	"code.cloudfoundry.org/loggregator-agent/pkg/plumbing"
 	"code.cloudfoundry.org/loggregator-agent/pkg/scraper"
 )
@@ -15,14 +17,20 @@ type MetricScraper struct {
 	log         *log.Logger
 	urlProvider func() []string
 	doneChan    chan struct{}
+	metrics     metricsClient
 }
 
-func NewMetricScraper(cfg Config, l *log.Logger) *MetricScraper {
+type metricsClient interface {
+	NewCounter(name string, opts ...metrics.MetricOption) metrics.Counter
+}
+
+func NewMetricScraper(cfg Config, l *log.Logger, m metricsClient) *MetricScraper {
 	return &MetricScraper{
 		cfg:         cfg,
 		log:         l,
 		urlProvider: scraper.NewDNSMetricUrlProvider(cfg.DNSFile, cfg.ScrapePort),
 		doneChan:    make(chan struct{}),
+		metrics:     m,
 	}
 }
 
@@ -49,24 +57,18 @@ func (m *MetricScraper) scrape() {
 		m.log.Fatal(err)
 	}
 
-	systemMetricsClient := plumbing.NewTLSHTTPClient(
-		m.cfg.MetricsCertPath,
-		m.cfg.MetricsKeyPath,
-		m.cfg.MetricsCACertPath,
-		m.cfg.MetricsCN,
-	)
-
 	s := scraper.New(
 		m.cfg.DefaultSourceID,
 		m.urlProvider,
 		client,
-		systemMetricsClient,
+		newTLSClient(m.cfg),
 	)
 
 	leadershipClient := &http.Client{
 		Timeout: 5 * time.Second,
 	}
 
+	numScrapes := m.metrics.NewCounter("num_scrapes")
 	t := time.NewTicker(m.cfg.ScrapeInterval)
 	for {
 		select {
@@ -79,6 +81,7 @@ func (m *MetricScraper) scrape() {
 			if err := s.Scrape(); err != nil {
 				m.log.Printf("failed to scrape: %s", err)
 			}
+			numScrapes.Add(1.0)
 		case <-m.doneChan:
 			return
 		}
@@ -87,4 +90,35 @@ func (m *MetricScraper) scrape() {
 
 func (m *MetricScraper) Stop() {
 	close(m.doneChan)
+}
+
+func newTLSClient(cfg Config) *http.Client {
+	tlsConfig, err := plumbing.NewClientMutualTLSConfig(
+		cfg.MetricsCertPath,
+		cfg.MetricsKeyPath,
+		cfg.MetricsCACertPath,
+		cfg.MetricsCN,
+	)
+	if err != nil {
+		log.Panicf("failed to load API client certificates: %s", err)
+	}
+
+	transport := &http.Transport{
+		Proxy: http.ProxyFromEnvironment,
+		DialContext: (&net.Dialer{
+			Timeout:   cfg.ScrapeTimeout,
+			KeepAlive: 30 * time.Second,
+			DualStack: true,
+		}).DialContext,
+		MaxIdleConns:          100,
+		IdleConnTimeout:       90 * time.Second,
+		TLSHandshakeTimeout:   10 * time.Second,
+		ExpectContinueTimeout: 1 * time.Second,
+		TLSClientConfig:       tlsConfig,
+	}
+
+	return &http.Client{
+		Transport: transport,
+		Timeout:   cfg.ScrapeTimeout,
+	}
 }
