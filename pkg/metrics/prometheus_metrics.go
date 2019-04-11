@@ -90,24 +90,30 @@ func (p *PromRegistry) NewCounter(name string, opts ...MetricOption) Counter {
 	opt := p.newMetricOpt(name, "counter metric", opts...)
 	counter := prometheus.NewCounter(prometheus.CounterOpts(opt))
 
-	err := p.registry.Register(counter)
-	if err != nil {
-		p.loggr.Panicf("unable to create counter: %s", err)
-	}
-
-	return counter
+	collector := p.registerCollector(name, counter)
+	return collector.(Counter)
 }
 
 func (p *PromRegistry) NewGauge(name string, opts ...MetricOption) Gauge {
 	opt := p.newMetricOpt(name, "gauge metric", opts...)
 	gauge := prometheus.NewGauge(prometheus.GaugeOpts(opt))
 
-	err := p.registry.Register(gauge)
+	collector := p.registerCollector(name, gauge)
+	return collector.(Gauge)
+}
+
+func (p *PromRegistry) registerCollector(name string, c prometheus.Collector) prometheus.Collector {
+	err := p.registry.Register(c)
 	if err != nil {
-		p.loggr.Panicf("unable to create gauge: %s", err)
+		typ, ok := err.(prometheus.AlreadyRegisteredError)
+		if !ok {
+			p.loggr.Panicf("unable to create %s: %s", name, err)
+		}
+
+		return typ.ExistingCollector
 	}
 
-	return gauge
+	return c
 }
 
 func (p *PromRegistry) Port() string {

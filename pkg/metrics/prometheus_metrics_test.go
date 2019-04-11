@@ -71,6 +71,30 @@ var _ = Describe("PrometheusMetrics", func() {
 		Eventually(func() string { return getMetrics(r.Port()) }).Should(ContainSubstring(`test_gauge{origin="test-source",source_id="test-source",tag="custom"} 0`))
 	})
 
+	It("returns the metric when duplicate is created", func() {
+		r := metrics.NewPromRegistry("test-source", l, metrics.WithServer(0))
+
+		c := r.NewCounter("test_counter")
+		c2 := r.NewCounter("test_counter")
+
+		c.Add(1)
+		c2.Add(2)
+
+		Eventually(func() string {
+			return getMetrics(r.Port())
+		}).Should(ContainSubstring(`test_counter{origin="test-source",source_id="test-source"} 3`))
+
+		g := r.NewGauge("test_gauge")
+		g2 := r.NewGauge("test_gauge")
+
+		g.Add(1)
+		g2.Add(2)
+
+		Eventually(func() string {
+			return getMetrics(r.Port())
+		}).Should(ContainSubstring(`test_gauge{origin="test-source",source_id="test-source"} 3`))
+	})
+
 	It("panics if the metric is invalid", func() {
 		r := metrics.NewPromRegistry("test-source", l)
 
