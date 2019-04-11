@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"log"
 	"net"
-	"os/exec"
 	"time"
 
 	"github.com/cloudfoundry/dropsonde/emitter"
@@ -40,8 +39,8 @@ var _ = Describe("UDPForwarder", func() {
 		udpPort++
 	})
 
-	It("has a health endpoint", func() {
-		mc := testhelper.NewMetricClient()
+	It("forwards envelopes from Loggregator V1 to V2", func() {
+		mc := testhelper.NewMetricClientV2()
 		cfg := app.Config{
 			UDPPort: udpPort,
 			LoggregatorAgentGRPC: app.GRPC{
@@ -88,22 +87,6 @@ var _ = Describe("UDPForwarder", func() {
 		Expect(string(v2e.GetLog().GetPayload())).To(Equal("some-log-message"))
 	})
 })
-
-func startUDPAgent(envs ...string) *gexec.Session {
-	path, err := gexec.Build("code.cloudfoundry.org/loggregator-agent/cmd/udp-forwarder")
-	if err != nil {
-		panic(err)
-	}
-
-	cmd := exec.Command(path)
-	cmd.Env = envs
-	session, err := gexec.Start(cmd, GinkgoWriter, GinkgoWriter)
-	if err != nil {
-		panic(err)
-	}
-
-	return session
-}
 
 type spyLoggregatorV2Ingress struct {
 	addr      string

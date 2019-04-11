@@ -1,7 +1,6 @@
 package main
 
 import (
-	"expvar"
 	"log"
 	"os"
 
@@ -12,13 +11,13 @@ import (
 )
 
 func main() {
-	log := log.New(os.Stderr, "", log.LstdFlags)
-	log.Println("starting UDP Forwarder...")
-	defer log.Println("closing UDP Forwarder...")
+	logger := log.New(os.Stderr, "", log.LstdFlags)
+	logger.Println("starting UDP Forwarder...")
+	defer logger.Println("closing UDP Forwarder...")
 
-	cfg := app.LoadConfig(log)
-	m := metrics.New(expvar.NewMap("UDPForwarder"))
+	cfg := app.LoadConfig(logger)
+	m := metrics.NewPromRegistry("udp_forwarder", logger)
 
-	forwarder := app.NewUDPForwarder(cfg, log, m)
+	forwarder := app.NewUDPForwarder(cfg, logger, m)
 	forwarder.Run()
 }

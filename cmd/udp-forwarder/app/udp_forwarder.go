@@ -1,6 +1,7 @@
 package app
 
 import (
+	"code.cloudfoundry.org/loggregator-agent/pkg/metrics"
 	"fmt"
 	"log"
 	"net/http"
@@ -12,8 +13,8 @@ import (
 )
 
 type Metrics interface {
-	NewGauge(string) func(float64)
-	NewCounter(name string) func(uint64)
+	NewGauge(name string, opts ...metrics.MetricOption) metrics.Gauge
+	NewCounter(name string, opts ...metrics.MetricOption) metrics.Counter
 }
 
 type UDPForwarder struct {
@@ -54,7 +55,7 @@ func (u *UDPForwarder) Run() {
 	}
 
 	dropsondeUnmarshaller := ingress.NewUnMarshaller(v2Writer{v2Ingress})
-	networkReader, err := ingress.NewNetworkReader(
+	networkReader, err := ingress.NewNetworkReaderV2(
 		fmt.Sprintf("127.0.0.1:%d", u.udpPort),
 		dropsondeUnmarshaller,
 		u.metrics,
