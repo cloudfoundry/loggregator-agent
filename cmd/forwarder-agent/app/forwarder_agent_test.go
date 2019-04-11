@@ -7,7 +7,6 @@ import (
 	"log"
 	"net"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -251,22 +250,6 @@ func newIngressClient(port int) *loggregator.IngressClient {
 	)
 	Expect(err).ToNot(HaveOccurred())
 	return ingressClient
-}
-
-func startForwarderAgent(envs ...string) *gexec.Session {
-	path, err := gexec.Build("code.cloudfoundry.org/loggregator-agent/cmd/forwarder-agent")
-	if err != nil {
-		panic(err)
-	}
-
-	cmd := exec.Command(path)
-	cmd.Env = envs
-	session, err := gexec.Start(cmd, GinkgoWriter, GinkgoWriter)
-	if err != nil {
-		panic(err)
-	}
-
-	return session
 }
 
 func startSpyLoggregatorV2Ingress() *spyLoggregatorV2Ingress {

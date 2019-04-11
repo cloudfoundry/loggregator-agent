@@ -6,7 +6,6 @@ import (
 	"time"
 
 	"code.cloudfoundry.org/go-loggregator/rpc/loggregator_v2"
-	"code.cloudfoundry.org/rfc5424"
 )
 
 const RFC5424TimeOffsetNum = "2006-01-02T15:04:05.999999-07:00"
@@ -108,17 +107,6 @@ func toRFC5424LogMessage(env *loggregator_v2.Envelope, hostname, appID string) [
 	tmp = append(tmp, msg...)
 
 	return tmp
-}
-
-func generatePriority(logType loggregator_v2.Log_Type) rfc5424.Priority {
-	switch logType {
-	case loggregator_v2.Log_OUT:
-		return rfc5424.Info + rfc5424.User
-	case loggregator_v2.Log_ERR:
-		return rfc5424.Error + rfc5424.User
-	default:
-		return rfc5424.Priority(-1)
-	}
 }
 
 func genPriority(logType loggregator_v2.Log_Type) string {

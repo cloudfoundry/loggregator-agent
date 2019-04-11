@@ -61,6 +61,3 @@ func (rw *spyResponseWriter) Write(msg []byte) (int, error) {
 	return 0, nil
 }
 
-func newSpyResponseWriter() *spyResponseWriter {
-	return &spyResponseWriter{}
-}

@@ -21,13 +21,6 @@ type mockConn struct {
 	}
 }
 
-func newMockConn() *mockConn {
-	m := &mockConn{}
-	m.WriteCalled = make(chan bool, 100)
-	m.WriteInput.Data = make(chan []byte, 100)
-	m.WriteOutput.Ret0 = make(chan error, 100)
-	return m
-}
 func (m *mockConn) Write(data []byte) error {
 	m.WriteCalled <- true
 	m.WriteInput.Data <- data
@@ -85,12 +78,6 @@ type mockDroppedMessageCounter struct {
 	}
 }
 
-func newMockDroppedMessageCounter() *mockDroppedMessageCounter {
-	m := &mockDroppedMessageCounter{}
-	m.DropCalled = make(chan bool, 100)
-	m.DropInput.Count = make(chan uint32, 100)
-	return m
-}
 func (m *mockDroppedMessageCounter) Drop(count uint32) {
 	m.DropCalled <- true
 	m.DropInput.Count <- count

@@ -283,17 +283,6 @@ type syslogTCPServer struct {
 	receivedMessages chan *rfc5424.Message
 }
 
-func newSyslogTCPServer() *syslogTCPServer {
-	lis, err := net.Listen("tcp", ":0")
-	Expect(err).ToNot(HaveOccurred())
-	m := &syslogTCPServer{
-		receivedMessages: make(chan *rfc5424.Message, 100),
-		lis:              lis,
-	}
-	go m.accept()
-	return m
-}
-
 func newSyslogTLSServer() *syslogTCPServer {
 	lis, err := net.Listen("tcp", ":0")
 	Expect(err).ToNot(HaveOccurred())
