@@ -162,7 +162,6 @@ var _ = Describe("App", func() {
 
 			metric := spyMetricsClient.GetMetric("num_scrapes", nil)
 			Eventually(metric.Value, 200*time.Millisecond).Should(BeNumerically(">", 1))
-			fmt.Println(metric.Value())
 		})
 	})
 })
@@ -243,7 +242,6 @@ func (s *promServer) setDelay(d time.Duration) {
 
 func (s *promServer) handleRequest(w http.ResponseWriter, r *http.Request) {
 	Expect(r.URL.Path).To(Equal("/metrics"))
-	fmt.Println("Called")
 	if s.delay > 0 {
 		s.Lock()
 		toSleep := s.delay
