@@ -39,10 +39,11 @@ func New(sourceID string, addrProvider func() []string, c MetricsEgressClient, s
 }
 
 func (s *Scraper) Scrape() error {
-	errs := make(chan string, len(s.addrProvider()))
+	addrList := s.addrProvider()
+	errs := make(chan string, len(addrList))
 	var wg sync.WaitGroup
 
-	for _, a := range s.addrProvider() {
+	for _, a := range addrList {
 		wg.Add(1)
 
 		go func(addr string) {
