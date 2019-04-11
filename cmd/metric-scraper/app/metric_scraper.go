@@ -17,6 +17,7 @@ type MetricScraper struct {
 	log         *log.Logger
 	urlProvider func() []string
 	doneChan    chan struct{}
+	stoppedChan chan struct{}
 	metrics     metricsClient
 }
 
@@ -31,6 +32,7 @@ func NewMetricScraper(cfg Config, l *log.Logger, m metricsClient) *MetricScraper
 		urlProvider: scraper.NewDNSMetricUrlProvider(cfg.DNSFile, cfg.ScrapePort),
 		doneChan:    make(chan struct{}),
 		metrics:     m,
+		stoppedChan: make(chan struct{}),
 	}
 }
 
@@ -83,6 +85,7 @@ func (m *MetricScraper) scrape() {
 			}
 			numScrapes.Add(1.0)
 		case <-m.doneChan:
+			close(m.stoppedChan)
 			return
 		}
 	}
@@ -90,6 +93,7 @@ func (m *MetricScraper) scrape() {
 
 func (m *MetricScraper) Stop() {
 	close(m.doneChan)
+	<-m.stoppedChan
 }
 
 func newTLSClient(cfg Config) *http.Client {
