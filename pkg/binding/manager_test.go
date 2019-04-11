@@ -21,13 +21,13 @@ import (
 var _ = Describe("Manager", func() {
 	var (
 		bf *stubBindingFetcher
-		sm *testhelper.SpyMetricClientV2
+		sm *testhelper.SpyMetricClient
 		c  *spyConnector
 	)
 
 	BeforeEach(func() {
 		bf = newStubBindingFetcher()
-		sm = testhelper.NewMetricClientV2()
+		sm = testhelper.NewMetricClient()
 		c = newSpyConnector()
 	})
 

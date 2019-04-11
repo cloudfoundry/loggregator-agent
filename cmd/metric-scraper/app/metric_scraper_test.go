@@ -34,7 +34,7 @@ var _ = Describe("App", func() {
 		testLogger       = log.New(GinkgoWriter, "", log.LstdFlags)
 		leadership       *spyLeadership
 		promServer       *promServer
-		spyMetricsClient *testhelper.SpyMetricClientV2
+		spyMetricsClient *testhelper.SpyMetricClient
 	)
 
 	Describe("when configured with a single metrics_url", func() {
@@ -69,7 +69,7 @@ var _ = Describe("App", func() {
 				LeadershipServerAddr:   leadership.server.URL,
 			}
 
-			spyMetricsClient = testhelper.NewMetricClientV2()
+			spyMetricsClient = testhelper.NewMetricClient()
 		})
 
 		AfterEach(func() {

@@ -103,7 +103,7 @@ func (s ForwarderAgent) Run() {
 
 	im := s.m.NewCounter("ingress")
 	omm := s.m.NewCounter("origin_mappings")
-	rx := v2.NewReceiverV2(diode, im, omm)
+	rx := v2.NewReceiver(diode, im, omm)
 
 	srv := v2.NewServer(
 		fmt.Sprintf("127.0.0.1:%d", s.grpc.Port),

@@ -45,12 +45,12 @@ var _ = Describe("TCPWriter", func() {
 	Describe("Write()", func() {
 		var (
 			writer        egress.WriteCloser
-			egressCounter *testhelper.SpyMetricV2
+			egressCounter *testhelper.SpyMetric
 		)
 
 		BeforeEach(func() {
 			var err error
-			egressCounter = &testhelper.SpyMetricV2{}
+			egressCounter = &testhelper.SpyMetric{}
 
 			writer = syslog.NewTCPWriter(
 				binding,
@@ -205,7 +205,7 @@ var _ = Describe("TCPWriter", func() {
 				binding,
 				netConf,
 				false,
-				&testhelper.SpyMetricV2{},
+				&testhelper.SpyMetric{},
 			)
 
 			errs := make(chan error, 1)
@@ -229,7 +229,7 @@ var _ = Describe("TCPWriter", func() {
 					binding,
 					netConf,
 					false,
-					&testhelper.SpyMetricV2{},
+					&testhelper.SpyMetric{},
 				)
 				Expect(err).ToNot(HaveOccurred())
 

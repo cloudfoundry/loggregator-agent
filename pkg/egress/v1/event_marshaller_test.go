@@ -15,16 +15,16 @@ var _ = Describe("EventMarshaller", func() {
 	var (
 		marshaller      *egress.EventMarshaller
 		mockChainWriter *mockBatchChainByteWriter
-		metricClient    *testhelper.SpyMetricClientV2
+		metricClient    *testhelper.SpyMetricClient
 	)
 
 	BeforeEach(func() {
 		mockChainWriter = newMockBatchChainByteWriter()
-		metricClient = testhelper.NewMetricClientV2()
+		metricClient = testhelper.NewMetricClient()
 	})
 
 	JustBeforeEach(func() {
-		marshaller = egress.NewMarshallerV2(metricClient)
+		marshaller = egress.NewMarshaller(metricClient)
 		marshaller.SetWriter(mockChainWriter)
 	})
 

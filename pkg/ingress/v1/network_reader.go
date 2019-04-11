@@ -13,12 +13,7 @@ type ByteArrayWriter interface {
 	Write(message []byte)
 }
 
-// MetricClient creates new CounterMetrics to be emitted periodically.
 type MetricClient interface {
-	NewCounter(name string) func(uint64)
-}
-
-type MetricClientV2 interface {
 	NewCounter(name string, opts ...metrics.MetricOption) metrics.Counter
 }
 
@@ -34,29 +29,6 @@ func NewNetworkReader(
 	address string,
 	writer ByteArrayWriter,
 	m MetricClient,
-) (*NetworkReader, error) {
-	connection, err := net.ListenPacket("udp4", address)
-	if err != nil {
-		return nil, err
-	}
-	log.Printf("udp bound to: %s", connection.LocalAddr())
-	rxErrCount := m.NewCounter("Dropped")
-
-	return &NetworkReader{
-		connection: connection,
-		rxMsgCount: m.NewCounter("Ingress"),
-		writer:     writer,
-		buffer: diodes.NewOneToOne(10000, gendiodes.AlertFunc(func(missed int) {
-			log.Printf("network reader dropped messages %d", missed)
-			rxErrCount(uint64(missed))
-		})),
-	}, nil
-}
-
-func NewNetworkReaderV2(
-	address string,
-	writer ByteArrayWriter,
-	m MetricClientV2,
 ) (*NetworkReader, error) {
 	connection, err := net.ListenPacket("udp4", address)
 	if err != nil {

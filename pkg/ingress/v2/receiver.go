@@ -14,10 +14,6 @@ type DataSetter interface {
 
 // MetricClient creates new CounterMetrics to be emitted periodically.
 type MetricClient interface {
-	NewCounter(name string) func(uint64)
-}
-
-type MetricClientV2 interface {
 	NewCounter(name string, opts ...metrics.MetricOption) metrics.Counter
 }
 
@@ -27,19 +23,11 @@ type Receiver struct {
 	originMappingsMetric func(uint64)
 }
 
-func NewReceiverV2(setter DataSetter, ingress metrics.Counter, egress metrics.Counter) *Receiver {
+func NewReceiver(setter DataSetter, ingress metrics.Counter, egress metrics.Counter) *Receiver {
 	return &Receiver{
 		dataSetter:           setter,
 		ingressMetric:        func(i uint64) { ingress.Add(float64(i)) },
 		originMappingsMetric: func(i uint64) { egress.Add(float64(i)) },
-	}
-}
-
-func NewReceiver(dataSetter DataSetter, metricClient MetricClient) *Receiver {
-	return &Receiver{
-		dataSetter:           dataSetter,
-		ingressMetric:        metricClient.NewCounter("IngressV2"),
-		originMappingsMetric: metricClient.NewCounter("OriginMappingsV2"),
 	}
 }
 

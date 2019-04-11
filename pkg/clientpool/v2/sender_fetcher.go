@@ -12,10 +12,6 @@ import (
 )
 
 type MetricClient interface {
-	NewSumGauge(string) func(float64)
-}
-
-type MetricClientV2 interface {
 	NewGauge(name string, opts ...metrics.MetricOption) metrics.Gauge
 }
 
@@ -26,18 +22,16 @@ type SenderFetcher struct {
 }
 
 func NewSenderFetcher(mc MetricClient, opts ...grpc.DialOption) *SenderFetcher {
-	return &SenderFetcher{
-		opts:               opts,
-		dopplerConnections: mc.NewSumGauge("DopplerConnections"),
-		dopplerV2Streams:   mc.NewSumGauge("DopplerV2Streams"),
-	}
-}
-
-func NewSenderFetcherV2(mc MetricClientV2, dopplerConnections metrics.Gauge, opts ...grpc.DialOption) *SenderFetcher {
 	dopplerV2Streams := mc.NewGauge(
 		"doppler_v2_streams",
 		metrics.WithMetricTags(map[string]string{"metric_version": "2.0"}),
 	)
+
+	dopplerConnections := mc.NewGauge(
+		"doppler_connections",
+		metrics.WithMetricTags(map[string]string{"metric_version": "2.0"}),
+	)
+
 	fetcher := SenderFetcher{
 		opts:               opts,
 		dopplerConnections: func(i float64) { dopplerConnections.Add(i) },

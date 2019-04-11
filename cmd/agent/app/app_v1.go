@@ -22,7 +22,6 @@ type AppV1 struct {
 	config       *Config
 	creds        credentials.TransportCredentials
 	metricClient MetricClient
-	dopplerConnectionsMetric metrics.Gauge
 	lookup       func(string) ([]net.IP, error)
 }
 
@@ -40,14 +39,12 @@ func NewV1App(
 	c *Config,
 	creds credentials.TransportCredentials,
 	m MetricClient,
-	dopplerConnectionsMetric metrics.Gauge,
 	opts ...AppV1Option,
 ) *AppV1 {
 	a := &AppV1{
 		config:       c,
 		creds:        creds,
 		metricClient: m,
-		dopplerConnectionsMetric: dopplerConnectionsMetric,
 		lookup:       net.LookupIP,
 	}
 
@@ -80,7 +77,7 @@ func (a *AppV1) Start() {
 
 	dropsondeUnmarshaller := ingress.NewUnMarshaller(aggregator)
 	agentAddress := fmt.Sprintf("127.0.0.1:%d", a.config.IncomingUDPPort)
-	networkReader, err := ingress.NewNetworkReaderV2(
+	networkReader, err := ingress.NewNetworkReader(
 		agentAddress,
 		dropsondeUnmarshaller,
 		a.metricClient,
@@ -97,7 +94,7 @@ func (a *AppV1) Start() {
 func (a *AppV1) initializeV1DopplerPool() *egress.EventMarshaller {
 	pool := a.setupGRPC()
 
-	marshaller := egress.NewMarshallerV2(a.metricClient)
+	marshaller := egress.NewMarshaller(a.metricClient)
 	marshaller.SetWriter(pool)
 
 	return marshaller
@@ -132,9 +129,8 @@ func (a *AppV1) setupGRPC() *clientpoolv1.ClientPool {
 		Timeout:             15 * time.Second,
 		PermitWithoutStream: true,
 	}
-	fetcher := clientpoolv1.NewPusherFetcherV2(
+	fetcher := clientpoolv1.NewPusherFetcher(
 		a.metricClient,
-		a.dopplerConnectionsMetric,
 		grpc.WithTransportCredentials(a.creds),
 		grpc.WithStatsHandler(statsHandler),
 		grpc.WithKeepaliveParams(kp),

@@ -39,8 +39,7 @@ var _ = Describe("v2 App", func() {
 			&config,
 			clientCreds,
 			serverCreds,
-			testhelper.NewMetricClientV2(),
-			&testhelper.SpyMetricV2{},
+			testhelper.NewMetricClient(),
 			app.WithV2Lookup(spyLookup.lookup),
 		)
 		go app.Start()
@@ -70,15 +69,13 @@ var _ = Describe("v2 App", func() {
 		config.Zone = "something-bad"
 		Expect(err).ToNot(HaveOccurred())
 
-		mc := testhelper.NewMetricClientV2()
-		dopplerConnMetric := mc.NewGauge("doppler_connections")
+		mc := testhelper.NewMetricClient()
 
 		app := app.NewV2App(
 			&config,
 			clientCreds,
 			serverCreds,
 			mc,
-			dopplerConnMetric,
 			app.WithV2Lookup(spyLookup.lookup),
 		)
 		go app.Start()

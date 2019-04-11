@@ -26,7 +26,7 @@ var _ = Describe("HTTPWriter", func() {
 			b,
 			netConf,
 			false,
-			&testhelper.SpyMetricV2{},
+			&testhelper.SpyMetric{},
 		)
 
 		env := buildLogEnvelope("APP", "1", "just a test", loggregator_v2.Log_OUT)
@@ -45,7 +45,7 @@ var _ = Describe("HTTPWriter", func() {
 			b,
 			netConf,
 			true,
-			&testhelper.SpyMetricV2{},
+			&testhelper.SpyMetric{},
 		)
 
 		env := buildLogEnvelope("APP", "1", "just a test", loggregator_v2.Log_OUT)
@@ -65,7 +65,7 @@ var _ = Describe("HTTPWriter", func() {
 			b,
 			netConf,
 			true,
-			&testhelper.SpyMetricV2{},
+			&testhelper.SpyMetric{},
 		)
 
 		env := buildLogEnvelope("APP", "1", "just a test", loggregator_v2.Log_OUT)
@@ -83,7 +83,7 @@ var _ = Describe("HTTPWriter", func() {
 			b,
 			netConf,
 			true,
-			&testhelper.SpyMetricV2{},
+			&testhelper.SpyMetric{},
 		)
 
 		env := buildLogEnvelope("APP", "1", "just a test", loggregator_v2.Log_OUT)
@@ -107,7 +107,7 @@ var _ = Describe("HTTPWriter", func() {
 			b,
 			netConf,
 			true,
-			&testhelper.SpyMetricV2{},
+			&testhelper.SpyMetric{},
 		)
 
 		env1 := buildLogEnvelope("APP", "1", "just a test", loggregator_v2.Log_OUT)
@@ -160,7 +160,7 @@ var _ = Describe("HTTPWriter", func() {
 			b,
 			netConf,
 			true,
-			&testhelper.SpyMetricV2{},
+			&testhelper.SpyMetric{},
 		)
 
 		env1 := buildGaugeEnvelope("1")
@@ -208,7 +208,7 @@ var _ = Describe("HTTPWriter", func() {
 			b,
 			netConf,
 			true,
-			&testhelper.SpyMetricV2{},
+			&testhelper.SpyMetric{},
 		)
 
 		env1 := buildCounterEnvelope("1")
@@ -238,7 +238,7 @@ var _ = Describe("HTTPWriter", func() {
 			"test-hostname",
 		)
 
-		sm := &testhelper.SpyMetricV2{}
+		sm := &testhelper.SpyMetric{}
 		writer := syslog.NewHTTPSWriter(
 			b,
 			netConf,
@@ -265,7 +265,7 @@ var _ = Describe("HTTPWriter", func() {
 			b,
 			netConf,
 			true,
-			&testhelper.SpyMetricV2{},
+			&testhelper.SpyMetric{},
 		)
 
 		counterEnv := buildTimerEnvelope()

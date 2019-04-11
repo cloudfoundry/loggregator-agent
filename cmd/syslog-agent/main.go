@@ -17,7 +17,10 @@ func main() {
 	m := metrics.NewPromRegistry(
 		"syslog_agent",
 		log,
-		metrics.WithDefaultTags(map[string]string{"metrics_version": "2.0"}),
+		metrics.WithDefaultTags(map[string]string{
+			"metrics_version": "2.0",
+			"origin": "loggregator.syslog_agent",
+		}),
 	)
 
 	app.NewSyslogAgent(cfg, m, log).Run()

@@ -70,12 +70,15 @@ func (a *Agent) Start() {
 	logger.Println("starting loggregator-agent")
 	defer logger.Println("stopping loggregator-agent")
 
-	metricClient := metrics.NewPromRegistry("loggregator.metron", logger)
-	dopplerConnectionsMetric := metricClient.NewGauge("doppler_connections")
+	metricClient := metrics.NewPromRegistry(
+		"metron",
+		logger,
+		metrics.WithDefaultTags(map[string]string{"origin": "loggregator.metron"}),
+	)
 
-	appV1 := NewV1App(a.config, clientCreds, metricClient, dopplerConnectionsMetric)
+	appV1 := NewV1App(a.config, clientCreds, metricClient)
 	go appV1.Start()
 
-	appV2 := NewV2App(a.config, clientCreds, serverCreds, metricClient, dopplerConnectionsMetric)
+	appV2 := NewV2App(a.config, clientCreds, serverCreds, metricClient)
 	go appV2.Start()
 }

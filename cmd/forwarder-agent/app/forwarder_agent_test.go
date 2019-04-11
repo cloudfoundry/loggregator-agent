@@ -40,7 +40,7 @@ var _ = Describe("Main", func() {
 		testLogger = log.New(GinkgoWriter, "", log.LstdFlags)
 
 		forwarderAgent *app.ForwarderAgent
-		mc             *testhelper.SpyMetricClientV2
+		mc             *testhelper.SpyMetricClient
 		cfg            app.Config
 		ingressClient  *loggregator.IngressClient
 
@@ -80,7 +80,7 @@ var _ = Describe("Main", func() {
 	BeforeEach(func() {
 		fConfigDir = forwarderPortConfigDir()
 
-		mc = testhelper.NewMetricClientV2()
+		mc = testhelper.NewMetricClient()
 		cfg = app.Config{
 			GRPC: app.GRPC{
 				Port:     uint16(grpcPort),

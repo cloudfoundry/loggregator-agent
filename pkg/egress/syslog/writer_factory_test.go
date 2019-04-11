@@ -13,12 +13,12 @@ import (
 var _ = Describe("EgressFactory", func() {
 	var (
 		f       syslog.WriterFactory
-		sm      *testhelper.SpyMetricClientV2
+		sm      *testhelper.SpyMetricClient
 		skipSSL = false
 	)
 
 	BeforeEach(func() {
-		sm = testhelper.NewMetricClientV2()
+		sm = testhelper.NewMetricClient()
 		f = syslog.NewWriterFactory(sm)
 	})
 

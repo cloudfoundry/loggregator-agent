@@ -17,11 +17,11 @@ var _ = Describe("FilteredBindingFetcher", func() {
 	var (
 		log     = log.New(GinkgoWriter, "", log.LstdFlags)
 		filter  *cups.FilteredBindingFetcher
-		metrics *testhelper.SpyMetricClientV2
+		metrics *testhelper.SpyMetricClient
 	)
 
 	BeforeEach(func() {
-		metrics = testhelper.NewMetricClientV2()
+		metrics = testhelper.NewMetricClient()
 	})
 
 	It("returns valid bindings", func() {
@@ -86,7 +86,7 @@ var _ = Describe("FilteredBindingFetcher", func() {
 				{AppId: "app-id", Hostname: "we.dont.care", Drain: "blah://10.10.10.10"},
 			}
 
-			metrics = testhelper.NewMetricClientV2()
+			metrics = testhelper.NewMetricClient()
 			filter = cups.NewFilteredBindingFetcher(
 				&spyIPChecker{},
 				&SpyBindingReader{bindings: input},

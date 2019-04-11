@@ -8,8 +8,6 @@ import (
 	"code.cloudfoundry.org/loggregator-agent/cmd/agent/app"
 	"code.cloudfoundry.org/loggregator-agent/internal/testhelper"
 	"code.cloudfoundry.org/loggregator-agent/pkg/plumbing"
-	"github.com/prometheus/client_golang/prometheus"
-
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 )
@@ -34,8 +32,7 @@ var _ = Describe("v1 App", func() {
 		app := app.NewV1App(
 			&config,
 			clientCreds,
-			testhelper.NewMetricClientV2(),
-			&testhelper.SpyMetricV2{},
+			testhelper.NewMetricClient(),
 			app.WithV1Lookup(spyLookup.lookup),
 		)
 		go app.Start()
@@ -58,14 +55,12 @@ var _ = Describe("v1 App", func() {
 		config.Zone = "something-bad"
 		Expect(err).ToNot(HaveOccurred())
 
-		mc := testhelper.NewMetricClientV2()
-		dopplerConnMetric := mc.NewGauge("doppler_connections")
+		mc := testhelper.NewMetricClient()
 
 		app := app.NewV1App(
 			&config,
 			clientCreds,
 			mc,
-			dopplerConnMetric,
 			app.WithV1Lookup(spyLookup.lookup),
 		)
 		go app.Start()
@@ -77,7 +72,7 @@ var _ = Describe("v1 App", func() {
 	})
 })
 
-func hasMetric(mc *testhelper.SpyMetricClientV2, metricName string, tags map[string]string) func() bool {
+func hasMetric(mc *testhelper.SpyMetricClient, metricName string, tags map[string]string) func() bool {
 	return func() bool {
 		return mc.HasMetric(metricName, tags)
 	}
@@ -111,49 +106,6 @@ func (s *spyLookup) lookup(host string) ([]net.IP, error) {
 	return []net.IP{
 		net.IPv4(byte(127), byte(0), byte(0), byte(1)),
 	}, nil
-}
-
-func stubGaugeMap() map[string]prometheus.Gauge {
-	return map[string]prometheus.Gauge{
-		// metric-documentation-health: (dopplerConnections)
-		// Number of connections open to dopplers.
-		"dopplerConnections": prometheus.NewGauge(
-			prometheus.GaugeOpts{
-				Namespace: "loggregator",
-				Subsystem: "agent",
-				Name:      "dopplerConnections",
-				Help:      "Number of connections open to dopplers",
-			},
-		),
-		// metric-documentation-health: (dopplerV1Streams)
-		// Number of V1 gRPC streams to dopplers.
-		"dopplerV1Streams": prometheus.NewGauge(
-			prometheus.GaugeOpts{
-				Namespace: "loggregator",
-				Subsystem: "agent",
-				Name:      "dopplerV1Streams",
-				Help:      "Number of V1 gRPC streams to dopplers",
-			},
-		),
-		// metric-documentation-health: (dopplerV2Streams)
-		// Number of V2 gRPC streams to dopplers.
-		"dopplerV2Streams": prometheus.NewGauge(
-			prometheus.GaugeOpts{
-				Namespace: "loggregator",
-				Subsystem: "agent",
-				Name:      "dopplerV2Streams",
-				Help:      "Number of V2 gRPC streams to dopplers",
-			},
-		),
-		"originMappings": prometheus.NewGauge(
-			prometheus.GaugeOpts{
-				Namespace: "loggregator",
-				Subsystem: "agent",
-				Name:      "originMappings",
-				Help:      "Number of origin -> source id conversions",
-			},
-		),
-	}
 }
 
 func buildAgentConfig(dopplerURI string, dopplerGRPCPort int) app.Config {

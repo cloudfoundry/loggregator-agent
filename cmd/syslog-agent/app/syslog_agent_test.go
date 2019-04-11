@@ -76,7 +76,7 @@ var _ = Describe("SyslogAgent", func() {
 	})
 
 	It("has a health endpoint", func() {
-		mc := testhelper.NewMetricClientV2()
+		mc := testhelper.NewMetricClient()
 		cfg := app.Config{
 			BindingsPerAppLimit: 5,
 			PProfPort:           7392,
@@ -111,7 +111,7 @@ var _ = Describe("SyslogAgent", func() {
 	})
 
 	It("should not send logs to blacklisted IPs", func() {
-		mc := testhelper.NewMetricClientV2()
+		mc := testhelper.NewMetricClient()
 		cfg := app.Config{
 			BindingsPerAppLimit: 5,
 			PProfPort:           7392,
@@ -201,7 +201,7 @@ func emitLogs(ctx context.Context, grpcPort int) {
 	}()
 }
 
-func hasMetric(mc *testhelper.SpyMetricClientV2, metricName string, tags map[string]string) func() bool {
+func hasMetric(mc *testhelper.SpyMetricClient, metricName string, tags map[string]string) func() bool {
 	return func() bool {
 		return mc.HasMetric(metricName, tags)
 	}

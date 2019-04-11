@@ -76,8 +76,8 @@ var _ = Describe("NetworkReader", func() {
 			data := string(writer.Data()[0])
 			Expect(data).To(Equal(expectedData))
 
-			metric := metricClient.GetMetric("Ingress")
-			Expect(metric.Delta()).ToNot(BeZero())
+			metric := metricClient.GetMetric("ingress", map[string]string{"metric_version": "1.0"})
+			Expect(metric.Value()).ToNot(BeZero())
 		})
 	})
 })

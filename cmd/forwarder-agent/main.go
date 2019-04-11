@@ -14,11 +14,16 @@ func main() {
 	defer logger.Println("stopping forwarder-agent")
 
 	cfg := app.LoadConfig()
-	dt := map[string]string {
+	dt := map[string]string{
 		"metrics_version": "2.0",
+		"origin": "loggregator.forwarder_agent",
 	}
 
-	metrics := metrics.NewPromRegistry("forwarder_agent", logger, metrics.WithDefaultTags(dt))
+	metrics := metrics.NewPromRegistry(
+		"forwarder_agent",
+		logger,
+		metrics.WithDefaultTags(dt),
+	)
 
 	app.NewForwarderAgent(
 		cfg,

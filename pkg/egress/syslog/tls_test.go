@@ -28,11 +28,11 @@ var _ = Describe("TLSWriter", func() {
 			WriteTimeout: time.Second,
 		}
 
-		egressCounter *testhelper.SpyMetricV2
+		egressCounter *testhelper.SpyMetric
 	)
 
 	BeforeEach(func() {
-		egressCounter = &testhelper.SpyMetricV2{}
+		egressCounter = &testhelper.SpyMetric{}
 
 		tlsCert, err := tls.LoadX509KeyPair(certFile, keyFile)
 		Expect(err).ToNot(HaveOccurred())

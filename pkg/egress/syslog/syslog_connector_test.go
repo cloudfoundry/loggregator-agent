@@ -23,11 +23,11 @@ var _ = Describe("SyslogConnector", func() {
 		spyWaitGroup  *SpyWaitGroup
 		netConf       syslog.NetworkTimeoutConfig
 		writerFactory *stubWriterFactory
-		sm            *testhelper.SpyMetricClientV2
+		sm            *testhelper.SpyMetricClient
 	)
 
 	BeforeEach(func() {
-		sm = testhelper.NewMetricClientV2()
+		sm = testhelper.NewMetricClient()
 		ctx, _ = context.WithCancel(context.Background())
 		spyWaitGroup = &SpyWaitGroup{}
 		writerFactory = &stubWriterFactory{}

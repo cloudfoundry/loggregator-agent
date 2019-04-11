@@ -16,13 +16,13 @@ var _ = Describe("BindingFetcher", func() {
 	var (
 		getter    *SpyGetter
 		fetcher   *cups.BindingFetcher
-		metrics   *testhelper.SpyMetricClientV2
+		metrics   *testhelper.SpyMetricClient
 		maxDrains = 3
 	)
 
 	BeforeEach(func() {
 		getter = &SpyGetter{}
-		metrics = testhelper.NewMetricClientV2()
+		metrics = testhelper.NewMetricClient()
 		fetcher = cups.NewBindingFetcher(maxDrains, getter, metrics)
 	})
 

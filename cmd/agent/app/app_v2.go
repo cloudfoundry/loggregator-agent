@@ -41,7 +41,6 @@ type AppV2 struct {
 	clientCreds              credentials.TransportCredentials
 	serverCreds              credentials.TransportCredentials
 	metricClient             MetricClient
-	dopplerConnectionsMetric metrics.Gauge
 	lookup                   func(string) ([]net.IP, error)
 }
 
@@ -50,7 +49,6 @@ func NewV2App(
 	clientCreds credentials.TransportCredentials,
 	serverCreds credentials.TransportCredentials,
 	metricClient MetricClient,
-	dopplerConnectionsMetric metrics.Gauge,
 	opts ...AppV2Option,
 ) *AppV2 {
 	a := &AppV2{
@@ -58,7 +56,6 @@ func NewV2App(
 		clientCreds:              clientCreds,
 		serverCreds:              serverCreds,
 		metricClient:             metricClient,
-		dopplerConnectionsMetric: dopplerConnectionsMetric,
 		lookup:                   net.LookupIP,
 	}
 
@@ -104,7 +101,7 @@ func (a *AppV2) Start() {
 	agentAddress := fmt.Sprintf("127.0.0.1:%d", a.config.GRPC.Port)
 	log.Printf("agent v2 API started on addr %s", agentAddress)
 
-	rx := ingress.NewReceiverV2(envelopeBuffer, ingressMetric, originMappings)
+	rx := ingress.NewReceiver(envelopeBuffer, ingressMetric, originMappings)
 	kp := keepalive.EnforcementPolicy{
 		MinTime:             10 * time.Second,
 		PermitWithoutStream: true,
@@ -146,9 +143,8 @@ func (a *AppV2) initializePool() *clientpoolv2.ClientPool {
 		Timeout:             15 * time.Second,
 		PermitWithoutStream: true,
 	}
-	fetcher := clientpoolv2.NewSenderFetcherV2(
+	fetcher := clientpoolv2.NewSenderFetcher(
 		a.metricClient,
-		a.dopplerConnectionsMetric,
 		grpc.WithTransportCredentials(a.clientCreds),
 		grpc.WithStatsHandler(statsHandler),
 		grpc.WithKeepaliveParams(kp),

@@ -59,8 +59,9 @@ var _ = Describe("PusherFetcher", func() {
 		}
 		Eventually(f).ShouldNot(HaveOccurred())
 
-		Expect(mc.GetMetric("DopplerConnections").GaugeValue()).To(Equal(1.0))
-		Expect(mc.GetMetric("DopplerV1Streams").GaugeValue()).To(Equal(1.0))
+		tags := map[string]string{"metric_version": "2.0"}
+		Expect(mc.GetMetric("doppler_connections", tags).Value()).To(Equal(1.0))
+		Expect(mc.GetMetric("doppler_v1_streams", tags).Value()).To(Equal(1.0))
 	})
 
 	It("decrements a counter when a connection is closed", func() {
@@ -78,8 +79,9 @@ var _ = Describe("PusherFetcher", func() {
 		Eventually(f).ShouldNot(HaveOccurred())
 
 		closer.Close()
-		Expect(mc.GetMetric("DopplerConnections").GaugeValue()).To(Equal(0.0))
-		Expect(mc.GetMetric("DopplerV1Streams").GaugeValue()).To(Equal(0.0))
+		tags := map[string]string{"metric_version": "2.0"}
+		Expect(mc.GetMetric("doppler_connections", tags).Value()).To(Equal(0.0))
+		Expect(mc.GetMetric("doppler_v1_streams", tags).Value()).To(Equal(0.0))
 	})
 
 	It("returns an error when the server is unavailable", func() {

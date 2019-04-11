@@ -40,7 +40,7 @@ var _ = Describe("UDPForwarder", func() {
 	})
 
 	It("forwards envelopes from Loggregator V1 to V2", func() {
-		mc := testhelper.NewMetricClientV2()
+		mc := testhelper.NewMetricClient()
 		cfg := app.Config{
 			UDPPort: udpPort,
 			LoggregatorAgentGRPC: app.GRPC{
