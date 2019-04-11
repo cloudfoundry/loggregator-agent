@@ -8,8 +8,9 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"sync"
 
-	loggregator "code.cloudfoundry.org/go-loggregator"
+	"code.cloudfoundry.org/go-loggregator"
 	"github.com/wfernandes/app-metrics-plugin/pkg/parser"
 )
 
@@ -38,17 +39,32 @@ func New(sourceID string, addrProvider func() []string, c MetricsEgressClient, s
 }
 
 func (s *Scraper) Scrape() error {
-	var errs []string
-	for _, addr := range s.addrProvider() {
-		err := s.scrape(addr)
-		if err != nil {
-			errs = append(errs, err.Error())
-		}
+	errs := make(chan string, len(s.addrProvider()))
+	var wg sync.WaitGroup
+
+	for _, a := range s.addrProvider() {
+		wg.Add(1)
+
+		go func(addr string) {
+			err := s.scrape(addr)
+
+			if err != nil {
+				errs <- err.Error()
+			}
+			wg.Done()
+		}(a)
 	}
 
+	wg.Wait()
+	close(errs)
 	if len(errs) > 0 {
-		return errors.New(strings.Join(errs, ","))
+		var errorsSlice []string
+		for e := range errs {
+			errorsSlice = append(errorsSlice, e)
+		}
+		return errors.New(strings.Join(errorsSlice, ","))
 	}
+
 	return nil
 }
 

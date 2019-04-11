@@ -5,11 +5,13 @@ import (
 	"io/ioutil"
 	"net/http"
 	"strings"
+	"sync"
+	"time"
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 
-	loggregator "code.cloudfoundry.org/go-loggregator"
+	"code.cloudfoundry.org/go-loggregator"
 	"code.cloudfoundry.org/go-loggregator/rpc/loggregator_v2"
 	"code.cloudfoundry.org/loggregator-agent/pkg/scraper"
 )
@@ -39,6 +41,7 @@ var _ = Describe("Scraper", func() {
 			StatusCode: 200,
 			Body:       ioutil.NopCloser(strings.NewReader(promOutput)),
 		}
+
 		Expect(s.Scrape()).To(Succeed())
 
 		Expect(spyMetricClient.envelopes).To(And(
@@ -103,6 +106,56 @@ var _ = Describe("Scraper", func() {
 		))
 	})
 
+	It("scrapes endpoints asynchronously", func() {
+		s = scraper.New(
+			"some-id",
+			func() []string {
+				return []string{
+					"http://some.url/metrics",
+					"http://some.other.url/metrics",
+					"http://some.other.other.url/metrics",
+				}
+			},
+			spyMetricClient,
+			spyMetricsGetter,
+		)
+
+		for i := 0; i < 3; i++ {
+			spyMetricsGetter.delay <- 1 * time.Second
+			spyMetricsGetter.resp <- &http.Response{
+				StatusCode: 200,
+				Body:       ioutil.NopCloser(strings.NewReader(smallPromOutput)),
+			}
+		}
+
+		go s.Scrape()
+
+		Eventually(func() int { return len(spyMetricsGetter.a) }, 1).Should(Equal(3))
+	})
+
+	It("returns a compilation of errors from scrapes", func() {
+		s = scraper.New(
+			"some-id",
+			func() []string {
+				return []string{
+					"http://some.url/metrics",
+					"http://some.other.url/metrics",
+					"http://some.other.other.url/metrics",
+				}
+			},
+			spyMetricClient,
+			spyMetricsGetter,
+		)
+
+		spyMetricsGetter.err <- errors.New("something")
+		spyMetricsGetter.err <- errors.New("something")
+		spyMetricsGetter.err <- errors.New("something")
+
+		err := s.Scrape()
+		Expect(err).To(HaveOccurred())
+		Expect(err.Error()).To(Equal("something,something,something"))
+	})
+
 	It("returns an error if the parser fails", func() {
 		spyMetricsGetter.resp <- &http.Response{
 			StatusCode: 200,
@@ -112,7 +165,7 @@ var _ = Describe("Scraper", func() {
 	})
 
 	It("returns an error if MetricsGetter returns an error", func() {
-		spyMetricsGetter.err = errors.New("some-error")
+		spyMetricsGetter.err <- errors.New("some-error")
 		Expect(s.Scrape()).To(MatchError("some-error"))
 	})
 
@@ -132,7 +185,6 @@ var _ = Describe("Scraper", func() {
 		Expect(s.Scrape()).To(Succeed())
 		Expect(spyMetricClient.envelopes).To(BeEmpty())
 	})
-
 })
 
 const (
@@ -206,6 +258,7 @@ func buildEnvelope(sourceID, name string, value float64, tags map[string]string)
 
 type spyMetricClient struct {
 	envelopes []*loggregator_v2.Envelope
+	mu        sync.Mutex
 }
 
 func newSpyMetricClient() *spyMetricClient {
@@ -226,30 +279,44 @@ func (s *spyMetricClient) EmitGauge(opts ...loggregator.EmitGaugeOption) {
 		o(e)
 	}
 
+	s.mu.Lock()
 	s.envelopes = append(s.envelopes, e)
+	s.mu.Unlock()
 }
 
 type spyMetricsGetter struct {
-	a    chan string
-	resp chan *http.Response
-	err  error
+	a     chan string
+	resp  chan *http.Response
+	delay chan time.Duration
+	err   chan error
 }
 
 func newSpyMetricsGetter() *spyMetricsGetter {
 	return &spyMetricsGetter{
-		a:    make(chan string, 100),
-		resp: make(chan *http.Response, 100),
+		a:     make(chan string, 100),
+		resp:  make(chan *http.Response, 100),
+		delay: make(chan time.Duration, 100),
+		err:   make(chan error, 100),
 	}
 }
 
 func (s *spyMetricsGetter) Get(addr string) (*http.Response, error) {
 	s.a <- addr
 
+	if len(s.delay) > 0 {
+		time.Sleep(<-s.delay)
+	}
+
+	var err error
+	if len(s.err) > 0 {
+		err = <-s.err
+	}
+
 	var resp *http.Response
 	select {
 	case resp = <-s.resp:
-		return resp, s.err
+		return resp, err
 	default:
-		return nil, s.err
+		return nil, err
 	}
 }
