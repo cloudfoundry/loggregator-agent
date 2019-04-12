@@ -132,7 +132,7 @@ func (a *AppV2) initializePool() *clientpoolv2.ClientPool {
 		clientpoolv2.WithLookup(a.lookup)),
 	)
 
-	avgEnvelopeSize := a.metricClient.NewGauge("average_envelopes", metrics.WithMetricTags(map[string]string{"unit":"bytes/minute","metric_version":"2.0"}))
+	avgEnvelopeSize := a.metricClient.NewGauge("average_envelopes", metrics.WithMetricTags(map[string]string{"unit":"bytes/minute","metric_version":"2.0","loggregator":"v2"}))
 
 	tracker := plumbing.NewEnvelopeAverager()
 	tracker.Start(60*time.Second, func(i float64) { avgEnvelopeSize.Set(i) })

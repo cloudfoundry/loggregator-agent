@@ -68,7 +68,7 @@ var _ = Describe("v1 App", func() {
 		Eventually(hasMetric(mc, "ingress",  map[string]string{"metric_version":"1.0"})).Should(BeTrue())
 		Eventually(hasMetric(mc,"egress",  map[string]string{"metric_version":"1.0"} )).Should(BeTrue())
 		Eventually(hasMetric(mc,"dropped", map[string]string{"direction":"all","metric_version":"1.0"})).Should(BeTrue())
-		Eventually(hasMetric(mc,"average_envelopes", map[string]string{"unit": "bytes/minute", "metric_version":"1.0"} )).Should(BeTrue())
+		Eventually(hasMetric(mc,"average_envelopes", map[string]string{"unit": "bytes/minute", "metric_version":"1.0", "loggregator":"v1"} )).Should(BeTrue())
 	})
 })
 

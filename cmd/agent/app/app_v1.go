@@ -118,7 +118,7 @@ func (a *AppV1) setupGRPC() *clientpoolv1.ClientPool {
 		clientpoolv1.WithLookup(a.lookup),
 	))
 
-	avgEnvelopeSize := a.metricClient.NewGauge("average_envelopes", metrics.WithMetricTags(map[string]string{"unit": "bytes/minute", "metric_version":"1.0"}))
+	avgEnvelopeSize := a.metricClient.NewGauge("average_envelopes", metrics.WithMetricTags(map[string]string{"unit": "bytes/minute", "metric_version":"1.0", "loggregator":"v1"}))
 
 	tracker := plumbing.NewEnvelopeAverager()
 	tracker.Start(60*time.Second, func(i float64) { avgEnvelopeSize.Set(i) })
