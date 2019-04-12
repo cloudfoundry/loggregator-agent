@@ -1,20 +1,19 @@
 package app
 
 import (
+	"code.cloudfoundry.org/loggregator-agent/pkg/collector"
+	"code.cloudfoundry.org/loggregator-agent/pkg/egress/stats"
+	"code.cloudfoundry.org/loggregator-agent/pkg/plumbing"
 	"context"
 	"fmt"
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"log"
 	"net"
 	"net/http"
 	_ "net/http/pprof"
 	"sync"
 	"time"
-
-	"code.cloudfoundry.org/loggregator-agent/pkg/collector"
-	"code.cloudfoundry.org/loggregator-agent/pkg/egress/stats"
-	"code.cloudfoundry.org/loggregator-agent/pkg/plumbing"
-	"github.com/prometheus/client_golang/prometheus"
-	"github.com/prometheus/client_golang/prometheus/promhttp"
 )
 
 const statOrigin = "system_metrics_agent"
@@ -106,6 +105,22 @@ func (a *SystemMetricsAgent) startMetricsServer(addr string) {
 	router := http.NewServeMux()
 	router.Handle("/metrics", promhttp.HandlerFor(promRegisterer, promhttp.HandlerOpts{}))
 
+	a.setup(addr, router)
+
+	go collector.NewProcessor(
+		a.inputFunc,
+		[]collector.StatsSender{promSender},
+		a.cfg.SampleInterval,
+		a.log,
+	).Run()
+
+	log.Printf("Metrics server closing: %s", a.metricsServer.ServeTLS(a.metricsLis, "", ""))
+}
+
+func (a *SystemMetricsAgent) setup(addr string, router *http.ServeMux) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+
 	tlsConfig, err := plumbing.NewServerMutualTLSConfig(
 		a.cfg.CertPath,
 		a.cfg.KeyPath,
@@ -123,20 +138,9 @@ func (a *SystemMetricsAgent) startMetricsServer(addr string) {
 		TLSConfig:    tlsConfig,
 	}
 
-	a.mu.Lock()
 	a.metricsLis, err = net.Listen("tcp", addr)
 	if err != nil {
 		log.Fatalf("Unable to setup metrics endpoint (%s): %s", addr, err)
 	}
 	log.Printf("Metrics endpoint is listening on %s", a.metricsLis.Addr().String())
-	a.mu.Unlock()
-
-	go collector.NewProcessor(
-		a.inputFunc,
-		[]collector.StatsSender{promSender},
-		a.cfg.SampleInterval,
-		a.log,
-	).Run()
-
-	log.Printf("Metrics server closing: %s", a.metricsServer.ServeTLS(a.metricsLis, "", ""))
 }
