@@ -1,12 +1,13 @@
 package app
 
 import (
+	"code.cloudfoundry.org/loggregator-agent/pkg/egress/v1"
 	"code.cloudfoundry.org/loggregator-agent/pkg/metrics"
 	"fmt"
 	"log"
 	"net/http"
 
-	loggregator "code.cloudfoundry.org/go-loggregator"
+	"code.cloudfoundry.org/go-loggregator"
 	ingress "code.cloudfoundry.org/loggregator-agent/pkg/ingress/v1"
 	"code.cloudfoundry.org/loggregator/plumbing/conversion"
 	"github.com/cloudfoundry/sonde-go/events"
@@ -18,20 +19,28 @@ type Metrics interface {
 }
 
 type UDPForwarder struct {
-	grpc      GRPC
-	udpPort   int
-	debugPort int
-	log       *log.Logger
-	metrics   Metrics
+	grpc       GRPC
+	udpPort    int
+	debugPort  int
+	log        *log.Logger
+	metrics    Metrics
+	deployment string
+	job        string
+	index      string
+	ip         string
 }
 
 func NewUDPForwarder(cfg Config, l *log.Logger, m Metrics) *UDPForwarder {
 	return &UDPForwarder{
-		grpc:      cfg.LoggregatorAgentGRPC,
-		udpPort:   cfg.UDPPort,
-		debugPort: cfg.DebugPort,
-		log:       l,
-		metrics:   m,
+		grpc:       cfg.LoggregatorAgentGRPC,
+		udpPort:    cfg.UDPPort,
+		debugPort:  cfg.DebugPort,
+		log:        l,
+		metrics:    m,
+		deployment: cfg.Deployment,
+		job:        cfg.Job,
+		index:      cfg.Index,
+		ip:         cfg.IP,
 	}
 }
 
@@ -54,7 +63,15 @@ func (u *UDPForwarder) Run() {
 		u.log.Fatalf("Failed to create loggregator agent client: %s", err)
 	}
 
-	dropsondeUnmarshaller := ingress.NewUnMarshaller(v2Writer{v2Ingress})
+	w := v1.NewTagger(
+		u.deployment,
+		u.job,
+		u.index,
+		u.ip,
+		v2Writer{v2Ingress},
+	)
+
+	dropsondeUnmarshaller := ingress.NewUnMarshaller(w)
 	networkReader, err := ingress.NewNetworkReader(
 		fmt.Sprintf("127.0.0.1:%d", u.udpPort),
 		dropsondeUnmarshaller,

@@ -17,9 +17,13 @@ type GRPC struct {
 
 // Config holds the configuration for the UDP agent
 type Config struct {
-	UDPPort              int `env:"UDP_PORT, report"`
+	UDPPort              int    `env:"UDP_PORT, report"`
 	LoggregatorAgentGRPC GRPC
-	DebugPort            int `env:"DEBUG_PORT, report"`
+	DebugPort            int    `env:"DEBUG_PORT, report"`
+	Deployment           string `env:"DEPLOYMENT, report"`
+	Job                  string `env:"JOB, report"`
+	Index                string `env:"INDEX, report"`
+	IP                   string `env:"IP, report"`
 }
 
 // LoadConfig reads from the environment to create a Config.

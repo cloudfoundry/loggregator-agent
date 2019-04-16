@@ -49,6 +49,10 @@ var _ = Describe("UDPForwarder", func() {
 				CertFile: testhelper.Cert("metron.crt"),
 				KeyFile:  testhelper.Cert("metron.key"),
 			},
+			Deployment: "test-deployment",
+			Job: "test-job",
+			Index: "4",
+			IP: "127.0.0.1",
 		}
 		go app.NewUDPForwarder(cfg, testLogger, mc).Run()
 
@@ -85,6 +89,11 @@ var _ = Describe("UDPForwarder", func() {
 		var v2e *loggregator_v2.Envelope
 		Eventually(spyLoggregatorV2Ingress.envelopes, 5).Should(Receive(&v2e))
 		Expect(string(v2e.GetLog().GetPayload())).To(Equal("some-log-message"))
+
+		Expect(v2e.GetTags()["deployment"]).To(Equal("test-deployment"))
+		Expect(v2e.GetTags()["job"]).To(Equal("test-job"))
+		Expect(v2e.GetTags()["index"]).To(Equal("4"))
+		Expect(v2e.GetTags()["ip"]).To(Equal("127.0.0.1"))
 	})
 })
 
