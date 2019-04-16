@@ -85,7 +85,7 @@ func NewSyslogAgent(
 	)
 
 	return &SyslogAgent{
-		pprofPort:           cfg.PProfPort,
+		pprofPort:           cfg.DebugPort,
 		grpc:                cfg.GRPC,
 		metrics:             m,
 		log:                 l,

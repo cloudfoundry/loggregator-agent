@@ -79,7 +79,7 @@ var _ = Describe("SyslogAgent", func() {
 		mc := testhelper.NewMetricClient()
 		cfg := app.Config{
 			BindingsPerAppLimit: 5,
-			PProfPort:           7392,
+			DebugPort:           7392,
 			IdleDrainTimeout:    10 * time.Minute,
 			Cache: app.Cache{
 				URL:             cupsProvider.URL,
@@ -114,7 +114,7 @@ var _ = Describe("SyslogAgent", func() {
 		mc := testhelper.NewMetricClient()
 		cfg := app.Config{
 			BindingsPerAppLimit: 5,
-			PProfPort:           7392,
+			DebugPort:           7392,
 			IdleDrainTimeout:    10 * time.Minute,
 			DrainSkipCertVerify: true,
 			Cache: app.Cache{

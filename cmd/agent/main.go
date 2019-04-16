@@ -29,7 +29,7 @@ func main() {
 	a := app.NewAgent(config)
 	go a.Start()
 
-	runPProf(config.PProfPort)
+	runPProf(config.DebugPort)
 }
 
 func runPProf(port uint32) {

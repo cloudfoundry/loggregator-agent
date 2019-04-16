@@ -34,7 +34,7 @@ type Config struct {
 	DrainSkipCertVerify bool          `env:"DRAIN_SKIP_CERT_VERIFY,   report"`
 	IdleDrainTimeout    time.Duration `env:"IDLE_DRAIN_TIMEOUT, report"`
 
-	PProfPort   uint16 `env:"PPROF_PORT, report"`
+	DebugPort   uint16 `env:"DEBUG_PORT, report"`
 
 	GRPC  GRPC
 	Cache Cache

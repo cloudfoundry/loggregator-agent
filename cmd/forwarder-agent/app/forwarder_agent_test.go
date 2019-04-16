@@ -88,7 +88,7 @@ var _ = Describe("Main", func() {
 				KeyFile:  testhelper.Cert("metron.key"),
 			},
 			DownstreamIngressPortCfg: fmt.Sprintf("%s/*/ingress_port.yml", fConfigDir),
-			PProfPort:                7392,
+			DebugPort:                7392,
 			Tags: map[string]string{
 				"some-tag": "some-value",
 			},
