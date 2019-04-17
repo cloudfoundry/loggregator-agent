@@ -2,11 +2,16 @@ package app_test
 
 import (
 	"code.cloudfoundry.org/loggregator-agent/cmd/prom-scraper/app"
+	"fmt"
+	"github.com/onsi/gomega/gexec"
+	"io/ioutil"
 	"log"
 	"net"
 	"net/http"
 	"net/http/httptest"
-	"net/url"
+	"os"
+	"path/filepath"
+	"strings"
 	"sync"
 	"time"
 
@@ -20,30 +25,32 @@ import (
 
 var _ = Describe("PromScraper", func() {
 	var (
-		promServer *httptest.Server
 		spyAgent   *spyAgent
 		cfg        app.Config
 		testLogger = log.New(GinkgoWriter, "", log.LstdFlags)
 	)
 
-	Describe("when configured with a single metrics_url", func() {
+	Describe("when there is a debug_port config file", func() {
+		var debugConfigDir = debugPortConfigDir()
+
 		BeforeEach(func() {
 			spyAgent = newSpyAgent()
-			promServer = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
-				w.Write([]byte(promOutput))
-			}))
-
-			parsedUrl, _ := url.Parse(promServer.URL)
+			startPromServer(debugConfigDir, promOutput)
 
 			cfg = app.Config{
-				ClientKeyPath:  testhelper.Cert("metron.key"),
-				ClientCertPath: testhelper.Cert("metron.crt"),
-				CACertPath:     testhelper.Cert("loggregator-ca.crt"),
+				ClientKeyPath:          testhelper.Cert("metron.key"),
+				ClientCertPath:         testhelper.Cert("metron.crt"),
+				CACertPath:             testhelper.Cert("loggregator-ca.crt"),
 				LoggregatorIngressAddr: spyAgent.addr,
 				DefaultSourceID:        "some-id",
-				MetricsUrls:            []*url.URL{parsedUrl},
+				DebugPortCfg:           fmt.Sprintf("%s/*/debug_port.yml", debugConfigDir),
 				ScrapeInterval:         100 * time.Millisecond,
 			}
+		})
+
+		AfterEach(func() {
+			os.RemoveAll(debugConfigDir)
+			gexec.CleanupBuildArtifacts()
 		})
 
 		It("scrapes a prometheus endpoint and sends those metrics to a loggregator agent", func() {
@@ -60,38 +67,29 @@ var _ = Describe("PromScraper", func() {
 		})
 	})
 
-	Describe("when configured with multiple metrics_urls", func() {
-		var (
-			promServer2 *httptest.Server
-		)
+	Describe("when there are multiple debug_port config files", func() {
+		var debugConfigDir = debugPortConfigDir()
 
 		BeforeEach(func() {
 			spyAgent = newSpyAgent()
-			promServer = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
-				w.Write([]byte(promOutput))
-			}))
-			promServer2 = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
-				w.Write([]byte(promOutput2))
-			}))
 
-			psUrl, err := url.Parse(promServer.URL)
-			Expect(err).ToNot(HaveOccurred())
-
-			ps2Url, err := url.Parse(promServer2.URL)
-			Expect(err).ToNot(HaveOccurred())
+			startPromServer(debugConfigDir, promOutput)
+			startPromServer(debugConfigDir, promOutput2)
 
 			cfg = app.Config{
-				ClientKeyPath:  testhelper.Cert("prom-scraper.key"),
-				ClientCertPath: testhelper.Cert("prom-scraper.crt"),
-				CACertPath:     testhelper.Cert("loggregator-ca.crt"),
+				ClientKeyPath:          testhelper.Cert("prom-scraper.key"),
+				ClientCertPath:         testhelper.Cert("prom-scraper.crt"),
+				CACertPath:             testhelper.Cert("loggregator-ca.crt"),
 				LoggregatorIngressAddr: spyAgent.addr,
 				DefaultSourceID:        "some-id",
-				MetricsUrls: []*url.URL{
-					psUrl,
-					ps2Url,
-				},
-				ScrapeInterval: 100 * time.Millisecond,
+				DebugPortCfg:           fmt.Sprintf("%s/*/debug_port.yml", debugConfigDir),
+				ScrapeInterval:         100 * time.Millisecond,
 			}
+		})
+
+		AfterEach(func() {
+			os.RemoveAll(debugConfigDir)
+			gexec.CleanupBuildArtifacts()
 		})
 
 		It("scrapes multiple prometheus endpoints and sends those metrics to a loggregator agent", func() {
@@ -109,6 +107,18 @@ var _ = Describe("PromScraper", func() {
 		})
 	})
 })
+
+func startPromServer(debugConfigDir string, promOutput string) {
+	promServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+		w.Write([]byte(promOutput))
+	}))
+
+	addr := promServer.Listener.Addr().String()
+	tokens := strings.Split(addr, ":")
+	port := tokens[len(tokens)-1]
+
+	createDebugPortConfigFile(debugConfigDir, port)
+}
 
 func buildEnvelope(name string, value float64) *loggregator_v2.Envelope {
 	return &loggregator_v2.Envelope{
@@ -150,6 +160,34 @@ const (
 node2_counter 6
 `
 )
+const debugConfigTemplate = `---
+debug: %s
+`
+
+func debugPortConfigDir() string {
+	dir, err := ioutil.TempDir(".", "")
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	return dir
+}
+
+func createDebugPortConfigFile(configDir, port string) {
+	fDir, err := ioutil.TempDir(configDir, "")
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	tmpfn := filepath.Join(fDir, "debug_port.yml")
+	tmpfn, err = filepath.Abs(tmpfn)
+	Expect(err).ToNot(HaveOccurred())
+
+	contents := fmt.Sprintf(debugConfigTemplate, port)
+	if err := ioutil.WriteFile(tmpfn, []byte(contents), 0666); err != nil {
+		log.Fatal(err)
+	}
+}
 
 type spyAgent struct {
 	loggregator_v2.IngressServer

@@ -2,7 +2,6 @@ package app
 
 import (
 	"log"
-	"net/url"
 	"time"
 
 	"code.cloudfoundry.org/go-envstruct"
@@ -16,7 +15,7 @@ type Config struct {
 
 	LoggregatorIngressAddr string        `env:"LOGGREGATOR_AGENT_ADDR, report, required"`
 	DefaultSourceID        string        `env:"DEFAULT_SOURCE_ID, report, required"`
-	MetricsUrls            []*url.URL    `env:"METRICS_URLS, report, required"`
+	DebugPortCfg           string        `env:"DEBUG_PORT_GLOB, report"`
 	ScrapeInterval         time.Duration `env:"SCRAPE_INTERVAL, report"`
 }
 

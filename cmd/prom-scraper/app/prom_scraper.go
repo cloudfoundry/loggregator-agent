@@ -1,12 +1,16 @@
 package app
 
 import (
+	"fmt"
+	"io/ioutil"
 	"log"
 	"net/http"
+	"path/filepath"
 	"time"
 
 	"code.cloudfoundry.org/go-loggregator"
 	"code.cloudfoundry.org/loggregator-agent/pkg/scraper"
+	"gopkg.in/yaml.v2"
 )
 
 type PromScraper struct {
@@ -40,14 +44,13 @@ func (p *PromScraper) Run() {
 		p.log.Fatal(err)
 	}
 
-	var URLs []string
-	for _, u := range p.cfg.MetricsUrls {
-		URLs = append(URLs, u.String())
+	downstreamAddrProvider := func() []string {
+		return getDownstreamAddresses(p.cfg.DebugPortCfg, p.log)
 	}
 
 	s := scraper.New(
 		p.cfg.DefaultSourceID,
-		func() []string { return URLs },
+		downstreamAddrProvider,
 		client,
 		http.DefaultClient,
 	)
@@ -57,4 +60,33 @@ func (p *PromScraper) Run() {
 			p.log.Printf("failed to scrape: %s", err)
 		}
 	}
+}
+
+type portConfig struct {
+	Debug string `yaml:"debug"`
+}
+
+func getDownstreamAddresses(glob string, l *log.Logger) []string {
+	files, err := filepath.Glob(glob)
+	if err != nil {
+		l.Fatal("Unable to read downstream port location")
+	}
+
+	var addrs []string
+	for _, f := range files {
+		yamlFile, err := ioutil.ReadFile(f)
+		if err != nil {
+			l.Fatalf("cannot read file: %s", err)
+		}
+
+		var c portConfig
+		err = yaml.Unmarshal(yamlFile, &c)
+		if err != nil {
+			l.Fatalf("Unmarshal: %v", err)
+		}
+
+		addrs = append(addrs, fmt.Sprintf("http://127.0.0.1:%s", c.Debug))
+	}
+
+	return addrs
 }
