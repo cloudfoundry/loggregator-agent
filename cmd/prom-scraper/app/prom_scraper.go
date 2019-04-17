@@ -85,7 +85,7 @@ func getDownstreamAddresses(glob string, l *log.Logger) []string {
 			l.Fatalf("Unmarshal: %v", err)
 		}
 
-		addrs = append(addrs, fmt.Sprintf("http://127.0.0.1:%s", c.Debug))
+		addrs = append(addrs, fmt.Sprintf("http://127.0.0.1:%s/metrics", c.Debug))
 	}
 
 	return addrs
