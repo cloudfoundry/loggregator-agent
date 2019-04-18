@@ -163,6 +163,46 @@ var _ = Describe("App", func() {
 			metric := spyMetricsClient.GetMetric("num_scrapes", nil)
 			Eventually(metric.Value, 200*time.Millisecond).Should(BeNumerically(">", 1))
 		})
+
+		It("creates a metric for the last total number of attempted scrapes", func() {
+			scraper = app.NewMetricScraper(cfg, testLogger, spyMetricsClient)
+			go scraper.Run()
+
+			Eventually(func() bool {
+				return spyMetricsClient.HasMetric("last_total_attempted_scrapes", nil)
+			}).Should(BeTrue())
+
+			metric := spyMetricsClient.GetMetric("last_total_attempted_scrapes", nil)
+			Eventually(metric.Value).Should(BeNumerically(">", 0))
+		})
+
+		It("creates a metric for the last total number of failed scrapes", func() {
+			brokenCfg := cfg
+			brokenCfg.ScrapePort = 123456
+
+			scraper = app.NewMetricScraper(brokenCfg, testLogger, spyMetricsClient)
+			go scraper.Run()
+
+			// TODO: make a scrape fail
+			Eventually(func() bool {
+				return spyMetricsClient.HasMetric("last_total_failed_scrapes", nil)
+			}).Should(BeTrue())
+
+			metric := spyMetricsClient.GetMetric("last_total_failed_scrapes", nil)
+			Eventually(metric.Value).Should(BeNumerically(">", 0))
+		})
+
+		It("creates a metric for the last total scrape duration", func() {
+			scraper = app.NewMetricScraper(cfg, testLogger, spyMetricsClient)
+			go scraper.Run()
+
+			Eventually(func() bool {
+				return spyMetricsClient.HasMetric("last_total_scrape_duration", nil)
+			}).Should(BeTrue())
+
+			metric := spyMetricsClient.GetMetric("last_total_scrape_duration", nil)
+			Eventually(metric.Value).Should(BeNumerically(">", 0))
+		})
 	})
 })
 

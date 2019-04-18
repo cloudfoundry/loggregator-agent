@@ -1,6 +1,7 @@
 package scraper
 
 import (
+	"code.cloudfoundry.org/loggregator-agent/pkg/metrics"
 	"errors"
 	"fmt"
 	"io"
@@ -19,10 +20,15 @@ type Scraper struct {
 	addrProvider        func() []string
 	metricsEgressClient MetricsEgressClient
 	systemMetricsClient MetricsGetter
+	metricsClient       metricsClient
 }
 
 type MetricsEgressClient interface {
 	EmitGauge(opts ...loggregator.EmitGaugeOption)
+}
+
+type metricsClient interface {
+	NewCounter(name string, opts ...metrics.MetricOption) metrics.Counter
 }
 
 type MetricsGetter interface {
