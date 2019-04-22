@@ -169,27 +169,27 @@ var _ = Describe("App", func() {
 			go scraper.Run()
 
 			Eventually(func() bool {
-				return spyMetricsClient.HasMetric("last_total_attempted_scrapes", nil)
+				return spyMetricsClient.HasMetric("last_total_attempted_scrapes", map[string]string{"unit": "total"})
 			}).Should(BeTrue())
 
-			metric := spyMetricsClient.GetMetric("last_total_attempted_scrapes", nil)
-			Eventually(metric.Value).Should(BeNumerically(">", 0))
+			metric := spyMetricsClient.GetMetric("last_total_attempted_scrapes", map[string]string{"unit": "total"})
+			Eventually(metric.Value).Should(BeNumerically("==", 1))
+			Consistently(metric.Value, 1).Should(BeNumerically("==", 1))
 		})
 
 		It("creates a metric for the last total number of failed scrapes", func() {
-			brokenCfg := cfg
-			brokenCfg.ScrapePort = 123456
+			cfg.ScrapePort = 123456 //Bad port -- scrap fails
 
-			scraper = app.NewMetricScraper(brokenCfg, testLogger, spyMetricsClient)
+			scraper = app.NewMetricScraper(cfg, testLogger, spyMetricsClient)
 			go scraper.Run()
 
-			// TODO: make a scrape fail
 			Eventually(func() bool {
-				return spyMetricsClient.HasMetric("last_total_failed_scrapes", nil)
+				return spyMetricsClient.HasMetric("last_total_failed_scrapes", map[string]string{"unit": "total"})
 			}).Should(BeTrue())
 
-			metric := spyMetricsClient.GetMetric("last_total_failed_scrapes", nil)
+			metric := spyMetricsClient.GetMetric("last_total_failed_scrapes", map[string]string{"unit": "total"})
 			Eventually(metric.Value).Should(BeNumerically(">", 0))
+			Consistently(metric.Value, 1).Should(BeNumerically("==", 1))
 		})
 
 		It("creates a metric for the last total scrape duration", func() {
@@ -197,10 +197,10 @@ var _ = Describe("App", func() {
 			go scraper.Run()
 
 			Eventually(func() bool {
-				return spyMetricsClient.HasMetric("last_total_scrape_duration", nil)
+				return spyMetricsClient.HasMetric("last_total_scrape_duration", map[string]string{"unit": "ms"})
 			}).Should(BeTrue())
 
-			metric := spyMetricsClient.GetMetric("last_total_scrape_duration", nil)
+			metric := spyMetricsClient.GetMetric("last_total_scrape_duration", map[string]string{"unit": "ms"})
 			Eventually(metric.Value).Should(BeNumerically(">", 0))
 		})
 	})

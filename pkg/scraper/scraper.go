@@ -10,6 +10,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"time"
 
 	"code.cloudfoundry.org/go-loggregator"
 	"github.com/wfernandes/app-metrics-plugin/pkg/parser"
@@ -18,37 +19,82 @@ import (
 type Scraper struct {
 	sourceID            string
 	addrProvider        func() []string
-	metricsEgressClient MetricsEgressClient
+	metricsEmitter      MetricsEmitter
 	systemMetricsClient MetricsGetter
-	metricsClient       metricsClient
+	urlsScraped         metrics.Gauge
+	failedScrapes       metrics.Gauge
+	scrapeDuration      metrics.Gauge
 }
 
-type MetricsEgressClient interface {
+type ScrapeOption func(s *Scraper)
+
+type MetricsEmitter interface {
 	EmitGauge(opts ...loggregator.EmitGaugeOption)
 }
 
 type metricsClient interface {
-	NewCounter(name string, opts ...metrics.MetricOption) metrics.Counter
+	NewGauge(name string, opts ...metrics.MetricOption) metrics.Gauge
 }
 
 type MetricsGetter interface {
 	Get(addr string) (*http.Response, error)
 }
 
-func New(sourceID string, addrProvider func() []string, c MetricsEgressClient, sc MetricsGetter) *Scraper {
-	return &Scraper{
+func New(
+	sourceID string,
+	addrProvider func() []string,
+	e MetricsEmitter,
+	sc MetricsGetter,
+	opts ...ScrapeOption,
+) *Scraper {
+	scraper := &Scraper{
 		sourceID:            sourceID,
 		addrProvider:        addrProvider,
-		metricsEgressClient: c,
+		metricsEmitter:      e,
 		systemMetricsClient: sc,
+		urlsScraped:         &defaultGauge{},
+		scrapeDuration:      &defaultGauge{},
+		failedScrapes:       &defaultGauge{},
+	}
+
+	for _, o := range opts {
+		o(scraper)
+	}
+
+	return scraper
+}
+
+func WithMetricsClient(m metricsClient) ScrapeOption {
+	return func(s *Scraper) {
+		s.urlsScraped = m.NewGauge(
+			"last_total_attempted_scrapes",
+			metrics.WithMetricTags(map[string]string{"unit": "total"}),
+		)
+
+		s.failedScrapes = m.NewGauge(
+			"last_total_failed_scrapes",
+			metrics.WithMetricTags(map[string]string{"unit": "total"}),
+		)
+
+		s.scrapeDuration = m.NewGauge(
+			"last_total_scrape_duration",
+			metrics.WithMetricTags(map[string]string{"unit": "ms"}),
+		)
 	}
 }
 
 func (s *Scraper) Scrape() error {
+	start := time.Now()
+	defer func() {
+		duration := time.Since(start)
+		s.scrapeDuration.Set(float64(duration / time.Millisecond))
+	}()
+
 	addrList := s.addrProvider()
 	errs := make(chan string, len(addrList))
 	var wg sync.WaitGroup
 
+	s.urlsScraped.Set(float64(len(addrList)))
 	for _, a := range addrList {
 		wg.Add(1)
 
@@ -64,6 +110,8 @@ func (s *Scraper) Scrape() error {
 
 	wg.Wait()
 	close(errs)
+
+	s.failedScrapes.Set(float64(len(errs)))
 	if len(errs) > 0 {
 		var errorsSlice []string
 		for e := range errs {
@@ -124,7 +172,7 @@ func (s *Scraper) scrape(addr string) error {
 			}
 			delete(mm.Labels, "source_id")
 
-			s.metricsEgressClient.EmitGauge(
+			s.metricsEmitter.EmitGauge(
 				loggregator.WithGaugeSourceInfo(sourceID, ""),
 				loggregator.WithGaugeValue(f.Name, v, ""),
 				loggregator.WithEnvelopeTags(mm.Labels),
@@ -134,3 +182,8 @@ func (s *Scraper) scrape(addr string) error {
 
 	return err
 }
+
+type defaultGauge struct{}
+
+func (g *defaultGauge) Set(float642 float64) {}
+func (g *defaultGauge) Add(float642 float64) {}

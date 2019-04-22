@@ -65,18 +65,14 @@ func (m *MetricScraper) scrape() {
 		m.urlProvider,
 		client,
 		newTLSClient(m.cfg),
+		scraper.WithMetricsClient(m.metrics),
 	)
-
-	attemptedScrapes := m.metrics.NewCounter("last_total_attempted_scrapes")
-	failedScrapes := m.metrics.NewCounter("last_total_failed_scrapes")
 
 	leadershipClient := &http.Client{
 		Timeout: 5 * time.Second,
 	}
 
-	// TODO: maybe change this to be scrape_cycles?
 	numScrapes := m.metrics.NewCounter("num_scrapes")
-	scrapeDuration := m.metrics.NewGauge("last_total_scrape_duration")
 	t := time.NewTicker(m.cfg.ScrapeInterval)
 	for {
 		select {
@@ -86,15 +82,10 @@ func (m *MetricScraper) scrape() {
 				continue
 			}
 
-			// Count the number of URLs, which represents the number of VMs
-			attemptedScrapes.Add(float64(len(m.urlProvider())))
-			start := time.Now()
 			if err := s.Scrape(); err != nil {
-				failedScrapes.Add(1.0)
 				m.log.Printf("failed to scrape: %s", err)
 			}
-			end := time.Since(start)
-			scrapeDuration.Set(float64(end.Nanoseconds()))
+
 			numScrapes.Add(1.0)
 		case <-m.doneChan:
 			close(m.stoppedChan)

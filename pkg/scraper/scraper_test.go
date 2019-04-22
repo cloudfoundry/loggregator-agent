@@ -1,6 +1,7 @@
 package scraper_test
 
 import (
+	"code.cloudfoundry.org/loggregator-agent/internal/testhelper"
 	"errors"
 	"io/ioutil"
 	"net/http"
@@ -19,19 +20,19 @@ import (
 var _ = Describe("Scraper", func() {
 	var (
 		spyMetricsGetter *spyMetricsGetter
-		spyMetricClient  *spyMetricClient
+		spyMetricEmitter *spyMetricEmitter
 		s                *scraper.Scraper
 	)
 
 	BeforeEach(func() {
 		spyMetricsGetter = newSpyMetricsGetter()
-		spyMetricClient = newSpyMetricClient()
+		spyMetricEmitter = newSpyMetricEmitter()
 		s = scraper.New(
 			"some-id",
 			func() []string {
 				return []string{"http://some.url/metrics"}
 			},
-			spyMetricClient,
+			spyMetricEmitter,
 			spyMetricsGetter,
 		)
 	})
@@ -44,7 +45,7 @@ var _ = Describe("Scraper", func() {
 
 		Expect(s.Scrape()).To(Succeed())
 
-		Expect(spyMetricClient.envelopes).To(And(
+		Expect(spyMetricEmitter.envelopes).To(And(
 			ContainElement(buildEnvelope("some-id", "node_timex_pps_calibration_total", 1, nil)),
 			ContainElement(buildEnvelope("some-id", "node_timex_pps_error_total", 2, nil)),
 			ContainElement(buildEnvelope("some-id", "node_timex_pps_frequency_hertz", 3, nil)),
@@ -67,7 +68,7 @@ var _ = Describe("Scraper", func() {
 		}
 		Expect(s.Scrape()).To(Succeed())
 
-		Expect(spyMetricClient.envelopes).To(And(
+		Expect(spyMetricEmitter.envelopes).To(And(
 			ContainElement(buildEnvelope("source-1", "node_timex_pps_calibration_total", 1, nil)),
 			ContainElement(buildEnvelope("source-2", "node_timex_pps_error_total", 2, nil)),
 		))
@@ -86,7 +87,7 @@ var _ = Describe("Scraper", func() {
 					"http://some.other.url/metrics",
 				}
 			},
-			spyMetricClient,
+			spyMetricEmitter,
 			spyMetricsGetter,
 		)
 
@@ -100,7 +101,7 @@ var _ = Describe("Scraper", func() {
 		}
 		Expect(s.Scrape()).To(HaveOccurred())
 
-		Expect(spyMetricClient.envelopes).To(And(
+		Expect(spyMetricEmitter.envelopes).To(And(
 			ContainElement(buildEnvelope("source-1", "node_timex_pps_calibration_total", 1, nil)),
 			ContainElement(buildEnvelope("source-2", "node_timex_pps_error_total", 2, nil)),
 		))
@@ -116,7 +117,7 @@ var _ = Describe("Scraper", func() {
 					"http://some.other.other.url/metrics",
 				}
 			},
-			spyMetricClient,
+			spyMetricEmitter,
 			spyMetricsGetter,
 		)
 
@@ -143,7 +144,7 @@ var _ = Describe("Scraper", func() {
 					"http://some.other.other.url/metrics",
 				}
 			},
-			spyMetricClient,
+			spyMetricEmitter,
 			spyMetricsGetter,
 		)
 
@@ -183,7 +184,111 @@ var _ = Describe("Scraper", func() {
 			Body:       ioutil.NopCloser(strings.NewReader(promSummary)),
 		}
 		Expect(s.Scrape()).To(Succeed())
-		Expect(spyMetricClient.envelopes).To(BeEmpty())
+		Expect(spyMetricEmitter.envelopes).To(BeEmpty())
+	})
+
+	It("can emit metrics for attempted scrapes", func() {
+		spyMetricClient := testhelper.NewMetricClient()
+		s = scraper.New(
+			"some-id",
+			func() []string {
+				return []string{
+					"http://some.url/metrics",
+					"http://some.other.url/metrics",
+					"http://some.other.other.url/metrics",
+				}
+			},
+			spyMetricEmitter,
+			spyMetricsGetter,
+			scraper.WithMetricsClient(spyMetricClient),
+		)
+
+		spyMetricsGetter.resp <- &http.Response{
+			StatusCode: 200,
+			Body:       ioutil.NopCloser(strings.NewReader(promSummary)),
+		}
+
+		spyMetricsGetter.resp <- &http.Response{
+			StatusCode: 200,
+			Body:       ioutil.NopCloser(strings.NewReader(promSummary)),
+		}
+
+		spyMetricsGetter.resp <- &http.Response{
+			StatusCode: 200,
+			Body:       ioutil.NopCloser(strings.NewReader(promSummary)),
+		}
+
+		err := s.Scrape()
+		Expect(err).ToNot(HaveOccurred())
+
+		metric := spyMetricClient.GetMetric("last_total_attempted_scrapes", map[string]string{"unit": "total"})
+		Eventually(metric.Value).Should(BeNumerically("==", 3))
+	})
+
+	It("can emit metrics for failed scrapes", func() {
+		spyMetricClient := testhelper.NewMetricClient()
+		s = scraper.New(
+			"some-id",
+			func() []string {
+				return []string{
+					"http://some.url/metrics",
+					"http://some.other.url/metrics",
+					"http://some.other.other.url/metrics",
+				}
+			},
+			spyMetricEmitter,
+			spyMetricsGetter,
+			scraper.WithMetricsClient(spyMetricClient),
+		)
+
+		spyMetricsGetter.resp <- &http.Response{
+			StatusCode: 200,
+			Body:       ioutil.NopCloser(strings.NewReader(promSummary)),
+		}
+
+		spyMetricsGetter.resp <- &http.Response{
+			StatusCode: 500,
+			Body:       ioutil.NopCloser(strings.NewReader("")),
+		}
+
+		spyMetricsGetter.resp <- &http.Response{
+			StatusCode: 200,
+			Body:       ioutil.NopCloser(strings.NewReader(promSummary)),
+		}
+
+		err := s.Scrape()
+		Expect(err).To(HaveOccurred())
+
+		metric := spyMetricClient.GetMetric("last_total_failed_scrapes", map[string]string{"unit": "total"})
+		Eventually(metric.Value).Should(BeNumerically("==", 1))
+	})
+
+	It("can emit metrics for scrape duration", func() {
+		spyMetricClient := testhelper.NewMetricClient()
+		s = scraper.New(
+			"some-id",
+			func() []string {
+				return []string{
+					"http://some.url/metrics",
+				}
+			},
+			spyMetricEmitter,
+			spyMetricsGetter,
+			scraper.WithMetricsClient(spyMetricClient),
+		)
+
+		spyMetricsGetter.resp <- &http.Response{
+			StatusCode: 200,
+			Body:       ioutil.NopCloser(strings.NewReader(promSummary)),
+		}
+
+		spyMetricsGetter.delay <- 10 * time.Millisecond
+
+		err := s.Scrape()
+		Expect(err).ToNot(HaveOccurred())
+
+		metric := spyMetricClient.GetMetric("last_total_scrape_duration", map[string]string{"unit": "ms"})
+		Eventually(metric.Value).Should(BeNumerically(">=", 10))
 	})
 })
 
@@ -256,16 +361,16 @@ func buildEnvelope(sourceID, name string, value float64, tags map[string]string)
 	}
 }
 
-type spyMetricClient struct {
+type spyMetricEmitter struct {
 	envelopes []*loggregator_v2.Envelope
 	mu        sync.Mutex
 }
 
-func newSpyMetricClient() *spyMetricClient {
-	return &spyMetricClient{}
+func newSpyMetricEmitter() *spyMetricEmitter {
+	return &spyMetricEmitter{}
 }
 
-func (s *spyMetricClient) EmitGauge(opts ...loggregator.EmitGaugeOption) {
+func (s *spyMetricEmitter) EmitGauge(opts ...loggregator.EmitGaugeOption) {
 	e := &loggregator_v2.Envelope{
 		Message: &loggregator_v2.Envelope_Gauge{
 			Gauge: &loggregator_v2.Gauge{

@@ -22,7 +22,7 @@ func main() {
 		"metric_scraper",
 		log,
 		metrics.WithDefaultTags(dt),
-		metrics.WithServer(0),
+		metrics.WithServer(cfg.DebugPort),
 	)
 
 	app.NewMetricScraper(cfg, log, metricClient).Run()

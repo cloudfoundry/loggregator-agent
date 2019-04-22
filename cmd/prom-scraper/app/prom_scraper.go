@@ -44,13 +44,13 @@ func (p *PromScraper) Run() {
 		p.log.Fatal(err)
 	}
 
-	downstreamAddrProvider := func() []string {
-		return getDownstreamAddresses(p.cfg.DebugPortCfg, p.log)
+	metricsUrlProvider := func() []string {
+		return metricUrlsFromFiles(p.cfg.DebugPortCfg, p.log)
 	}
 
 	s := scraper.New(
 		p.cfg.DefaultSourceID,
-		downstreamAddrProvider,
+		metricsUrlProvider,
 		client,
 		http.DefaultClient,
 	)
@@ -66,7 +66,7 @@ type portConfig struct {
 	Debug string `yaml:"debug"`
 }
 
-func getDownstreamAddresses(glob string, l *log.Logger) []string {
+func metricUrlsFromFiles(glob string, l *log.Logger) []string {
 	files, err := filepath.Glob(glob)
 	if err != nil {
 		l.Fatal("Unable to read downstream port location")
