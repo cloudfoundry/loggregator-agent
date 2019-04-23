@@ -31,11 +31,11 @@ var _ = Describe("PromScraper", func() {
 	)
 
 	Describe("when there is a debug_port config file", func() {
-		var debugConfigDir = debugPortConfigDir()
+		var metricConfigDir = metricPortConfigDir()
 
 		BeforeEach(func() {
 			spyAgent = newSpyAgent()
-			startPromServer(debugConfigDir, promOutput)
+			startPromServer(metricConfigDir, promOutput)
 
 			cfg = app.Config{
 				ClientKeyPath:          testhelper.Cert("metron.key"),
@@ -43,13 +43,13 @@ var _ = Describe("PromScraper", func() {
 				CACertPath:             testhelper.Cert("loggregator-ca.crt"),
 				LoggregatorIngressAddr: spyAgent.addr,
 				DefaultSourceID:        "some-id",
-				DebugPortCfg:           fmt.Sprintf("%s/*/debug_port.yml", debugConfigDir),
+				MetricPortCfg:          fmt.Sprintf("%s/*/metric_port.yml", metricConfigDir),
 				ScrapeInterval:         100 * time.Millisecond,
 			}
 		})
 
 		AfterEach(func() {
-			os.RemoveAll(debugConfigDir)
+			os.RemoveAll(metricConfigDir)
 			gexec.CleanupBuildArtifacts()
 		})
 
@@ -67,14 +67,14 @@ var _ = Describe("PromScraper", func() {
 		})
 	})
 
-	Describe("when there are multiple debug_port config files", func() {
-		var debugConfigDir = debugPortConfigDir()
+	Describe("when there are multiple metric_port config files", func() {
+		var metricConfigDir = metricPortConfigDir()
 
 		BeforeEach(func() {
 			spyAgent = newSpyAgent()
 
-			startPromServer(debugConfigDir, promOutput)
-			startPromServer(debugConfigDir, promOutput2)
+			startPromServer(metricConfigDir, promOutput)
+			startPromServer(metricConfigDir, promOutput2)
 
 			cfg = app.Config{
 				ClientKeyPath:          testhelper.Cert("prom-scraper.key"),
@@ -82,13 +82,13 @@ var _ = Describe("PromScraper", func() {
 				CACertPath:             testhelper.Cert("loggregator-ca.crt"),
 				LoggregatorIngressAddr: spyAgent.addr,
 				DefaultSourceID:        "some-id",
-				DebugPortCfg:           fmt.Sprintf("%s/*/debug_port.yml", debugConfigDir),
+				MetricPortCfg:          fmt.Sprintf("%s/*/metric_port.yml", metricConfigDir),
 				ScrapeInterval:         100 * time.Millisecond,
 			}
 		})
 
 		AfterEach(func() {
-			os.RemoveAll(debugConfigDir)
+			os.RemoveAll(metricConfigDir)
 			gexec.CleanupBuildArtifacts()
 		})
 
@@ -108,7 +108,7 @@ var _ = Describe("PromScraper", func() {
 	})
 })
 
-func startPromServer(debugConfigDir string, promOutput string) {
+func startPromServer(metricConfigDir string, promOutput string) {
 	promServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
 		w.Write([]byte(promOutput))
 	}))
@@ -117,7 +117,7 @@ func startPromServer(debugConfigDir string, promOutput string) {
 	tokens := strings.Split(addr, ":")
 	port := tokens[len(tokens)-1]
 
-	createDebugPortConfigFile(debugConfigDir, port)
+	createMetricPortConfigFile(metricConfigDir, port)
 }
 
 func buildEnvelope(name string, value float64) *loggregator_v2.Envelope {
@@ -160,11 +160,11 @@ const (
 node2_counter 6
 `
 )
-const debugConfigTemplate = `---
-debug: %s
+const metricConfigTemplate = `---
+port: %s
 `
 
-func debugPortConfigDir() string {
+func metricPortConfigDir() string {
 	dir, err := ioutil.TempDir(".", "")
 	if err != nil {
 		log.Fatal(err)
@@ -173,17 +173,17 @@ func debugPortConfigDir() string {
 	return dir
 }
 
-func createDebugPortConfigFile(configDir, port string) {
+func createMetricPortConfigFile(configDir, port string) {
 	fDir, err := ioutil.TempDir(configDir, "")
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	tmpfn := filepath.Join(fDir, "debug_port.yml")
+	tmpfn := filepath.Join(fDir, "metric_port.yml")
 	tmpfn, err = filepath.Abs(tmpfn)
 	Expect(err).ToNot(HaveOccurred())
 
-	contents := fmt.Sprintf(debugConfigTemplate, port)
+	contents := fmt.Sprintf(metricConfigTemplate, port)
 	if err := ioutil.WriteFile(tmpfn, []byte(contents), 0666); err != nil {
 		log.Fatal(err)
 	}

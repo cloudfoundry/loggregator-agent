@@ -45,7 +45,7 @@ func (p *PromScraper) Run() {
 	}
 
 	metricsUrlProvider := func() []string {
-		return metricUrlsFromFiles(p.cfg.DebugPortCfg, p.log)
+		return metricUrlsFromFiles(p.cfg.MetricPortCfg, p.log)
 	}
 
 	s := scraper.New(
@@ -63,13 +63,13 @@ func (p *PromScraper) Run() {
 }
 
 type portConfig struct {
-	Debug string `yaml:"debug"`
+	Debug string `yaml:"port"`
 }
 
 func metricUrlsFromFiles(glob string, l *log.Logger) []string {
 	files, err := filepath.Glob(glob)
 	if err != nil {
-		l.Fatal("Unable to read downstream port location")
+		l.Fatal("Unable to read metric port location")
 	}
 
 	var addrs []string
