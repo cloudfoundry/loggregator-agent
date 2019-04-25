@@ -5,7 +5,6 @@ import (
 	"math"
 	"net/url"
 	"sort"
-	"strings"
 	"time"
 
 	"code.cloudfoundry.org/loggregator-agent/pkg/binding"
@@ -79,24 +78,17 @@ func (f *BindingFetcher) toSyslogBindings(bs []binding.Binding, perAppLimit int)
 		}
 
 		for _, d := range drains {
-			// TODO: remove prefix when forwarder-agent is no longer
-			// feature-flagged
-
 			u, err := url.Parse(d)
 			if err != nil {
 				continue
 			}
 
-			if strings.HasSuffix(u.Scheme, "-v3") {
-				u.Scheme = strings.TrimSuffix(u.Scheme, "-v3")
-
-				binding := syslog.Binding{
-					AppId:    b.AppID,
-					Hostname: b.Hostname,
-					Drain:    u.String(),
-				}
-				bindings = append(bindings, binding)
+			binding := syslog.Binding{
+				AppId:    b.AppID,
+				Hostname: b.Hostname,
+				Drain:    u.String(),
 			}
+			bindings = append(bindings, binding)
 		}
 	}
 
