@@ -157,26 +157,77 @@ func (s *Scraper) scrape(addr string) error {
 		}
 
 		for _, m := range f.Metrics {
-			mm, ok := m.(parser.Metric)
-			if !ok {
-				continue
-			}
-			v, err := strconv.ParseFloat(mm.Value, 64)
-			if err != nil {
-				continue
-			}
+			switch m.(type) {
+			case parser.Metric:
+				mm := m.(parser.Metric)
+				v, err := strconv.ParseFloat(mm.Value, 64)
+				if err != nil {
+					continue
+				}
 
-			sourceID, ok := mm.Labels["source_id"]
-			if !ok {
-				sourceID = s.sourceID
-			}
-			delete(mm.Labels, "source_id")
+				sourceID, ok := mm.Labels["source_id"]
+				if !ok {
+					sourceID = s.sourceID
+				}
+				delete(mm.Labels, "source_id")
 
-			s.metricsEmitter.EmitGauge(
-				loggregator.WithGaugeSourceInfo(sourceID, ""),
-				loggregator.WithGaugeValue(f.Name, v, ""),
-				loggregator.WithEnvelopeTags(mm.Labels),
-			)
+				s.metricsEmitter.EmitGauge(
+					loggregator.WithGaugeSourceInfo(sourceID, ""),
+					loggregator.WithGaugeValue(f.Name, v, ""),
+					loggregator.WithEnvelopeTags(mm.Labels),
+				)
+
+			case parser.Summary:
+				mm := m.(parser.Summary)
+				sourceID, ok := mm.Labels["source_id"]
+				if !ok {
+					sourceID = s.sourceID
+				}
+				delete(mm.Labels, "source_id")
+
+				tags := make(map[string]string)
+
+				for k, v := range mm.Labels {
+					tags[k] = v
+				}
+
+				sum, err := strconv.ParseFloat(mm.Sum, 64)
+				if err != nil {
+					continue
+				}
+
+				s.metricsEmitter.EmitGauge(
+					loggregator.WithGaugeSourceInfo(sourceID, ""),
+					loggregator.WithGaugeValue(f.Name+"_sum", sum, ""),
+					loggregator.WithEnvelopeTags(tags),
+				)
+
+				count, err := strconv.ParseFloat(mm.Count, 64)
+				if err != nil {
+					continue
+				}
+
+				s.metricsEmitter.EmitGauge(
+					loggregator.WithGaugeSourceInfo(sourceID, ""),
+					loggregator.WithGaugeValue(f.Name+"_count", count, ""),
+					loggregator.WithEnvelopeTags(tags),
+				)
+
+				for key, val := range mm.Quantiles {
+					tags["quantile"] = key
+
+					v, err := strconv.ParseFloat(val, 64)
+					if err != nil {
+						continue
+					}
+
+					s.metricsEmitter.EmitGauge(
+						loggregator.WithGaugeSourceInfo(sourceID, ""),
+						loggregator.WithGaugeValue(f.Name, v, ""),
+						loggregator.WithEnvelopeTags(tags),
+					)
+				}
+			}
 		}
 	}
 

@@ -78,6 +78,27 @@ var _ = Describe("Scraper", func() {
 		Expect(addr).To(Equal("http://some.url/metrics"))
 	})
 
+	It("emits many gauge metrics for a summary", func() {
+		spyMetricsGetter.resp <- &http.Response{
+			StatusCode: 200,
+			Body:       ioutil.NopCloser(strings.NewReader(promSummary)),
+		}
+
+		Expect(s.Scrape()).To(Succeed())
+		Expect(spyMetricEmitter.envelopes).To(And(
+			ContainElement(buildEnvelope("some-id", "log_store_http_request_seconds", 1.0803e-05, map[string]string{"endpoint": "root", "quantile": "0.5"})),
+			ContainElement(buildEnvelope("some-id", "log_store_http_request_seconds", 1.0803e-05, map[string]string{"endpoint": "root", "quantile": "0.9"})),
+			ContainElement(buildEnvelope("some-id", "log_store_http_request_seconds", 1.0803e-05, map[string]string{"endpoint": "root", "quantile": "0.99"})),
+			ContainElement(buildEnvelope("some-id", "log_store_http_request_seconds_sum", 0.000283555, map[string]string{"endpoint": "root"})),
+			ContainElement(buildEnvelope("some-id", "log_store_http_request_seconds_count", 15, map[string]string{"endpoint": "root"})),
+			ContainElement(buildEnvelope("some-id", "log_store_http_request_seconds", 1.3481e-05, map[string]string{"endpoint": "sourceLogs", "quantile": "0.5"})),
+			ContainElement(buildEnvelope("some-id", "log_store_http_request_seconds", 1.3481e-05, map[string]string{"endpoint": "sourceLogs", "quantile": "0.9"})),
+			ContainElement(buildEnvelope("some-id", "log_store_http_request_seconds", 1.3481e-05, map[string]string{"endpoint": "sourceLogs", "quantile": "0.99"})),
+			ContainElement(buildEnvelope("some-id", "log_store_http_request_seconds_sum", 9.6165e-05, map[string]string{"endpoint": "sourceLogs"})),
+			ContainElement(buildEnvelope("some-id", "log_store_http_request_seconds_count", 2, map[string]string{"endpoint": "sourceLogs"})),
+		))
+	})
+
 	It("scrapes all endpoints even when one fails", func() {
 		s = scraper.New(
 			"some-id",
@@ -176,15 +197,6 @@ var _ = Describe("Scraper", func() {
 			Body:       ioutil.NopCloser(strings.NewReader("")),
 		}
 		Expect(s.Scrape()).To(HaveOccurred())
-	})
-
-	It("ignores unknown metric types", func() {
-		spyMetricsGetter.resp <- &http.Response{
-			StatusCode: 200,
-			Body:       ioutil.NopCloser(strings.NewReader(promSummary)),
-		}
-		Expect(s.Scrape()).To(Succeed())
-		Expect(spyMetricEmitter.envelopes).To(BeEmpty())
 	})
 
 	It("can emit metrics for attempted scrapes", func() {
@@ -331,15 +343,18 @@ garbage invalid
 `
 
 	promSummary = `
-# HELP go_gc_duration_seconds A summary of the GC invocation durations.
-# TYPE go_gc_duration_seconds summary
-go_gc_duration_seconds{quantile="0"} 9.5e-08
-go_gc_duration_seconds{quantile="0.25"} 0.000157366
-go_gc_duration_seconds{quantile="0.5"} 0.000300143
-go_gc_duration_seconds{quantile="0.75"} 0.001091972
-go_gc_duration_seconds{quantile="1"} 0.011609012
-go_gc_duration_seconds_sum 0.346341323
-go_gc_duration_seconds_count 331
+# HELP log_store_http_request_seconds Summary of seconds spent in HTTP requests
+# TYPE log_store_http_request_seconds summary
+log_store_http_request_seconds{endpoint="root",quantile="0.5"} 1.0803e-05
+log_store_http_request_seconds{endpoint="root",quantile="0.9"} 1.0803e-05
+log_store_http_request_seconds{endpoint="root",quantile="0.99"} 1.0803e-05
+log_store_http_request_seconds_sum{endpoint="root"} 0.000283555
+log_store_http_request_seconds_count{endpoint="root"} 15
+log_store_http_request_seconds{endpoint="sourceLogs",quantile="0.5"} 1.3481e-05
+log_store_http_request_seconds{endpoint="sourceLogs",quantile="0.9"} 1.3481e-05
+log_store_http_request_seconds{endpoint="sourceLogs",quantile="0.99"} 1.3481e-05
+log_store_http_request_seconds_sum{endpoint="sourceLogs"} 9.6165e-05
+log_store_http_request_seconds_count{endpoint="sourceLogs"} 2
 `
 )
 
