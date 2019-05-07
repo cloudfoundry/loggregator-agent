@@ -58,11 +58,11 @@ var _ = Describe("PromScraper", func() {
 			go ps.Run()
 
 			Eventually(spyAgent.Envelopes).Should(And(
-				ContainElement(buildEnvelope("node_timex_pps_calibration_total", 1)),
-				ContainElement(buildEnvelope("node_timex_pps_error_total", 2)),
-				ContainElement(buildEnvelope("node_timex_pps_frequency_hertz", 3)),
-				ContainElement(buildEnvelope("node_timex_pps_jitter_seconds", 4)),
-				ContainElement(buildEnvelope("node_timex_pps_jitter_total", 5)),
+				ContainElement(buildCounter("node_timex_pps_calibration_total", 1)),
+				ContainElement(buildCounter("node_timex_pps_error_total", 2)),
+				ContainElement(buildGauge("node_timex_pps_frequency_hertz", 3)),
+				ContainElement(buildGauge("node_timex_pps_jitter_seconds", 4)),
+				ContainElement(buildCounter("node_timex_pps_jitter_total", 5)),
 			))
 		})
 	})
@@ -97,12 +97,12 @@ var _ = Describe("PromScraper", func() {
 			go ps.Run()
 
 			Eventually(spyAgent.Envelopes).Should(And(
-				ContainElement(buildEnvelope("node_timex_pps_calibration_total", 1)),
-				ContainElement(buildEnvelope("node_timex_pps_error_total", 2)),
-				ContainElement(buildEnvelope("node_timex_pps_frequency_hertz", 3)),
-				ContainElement(buildEnvelope("node_timex_pps_jitter_seconds", 4)),
-				ContainElement(buildEnvelope("node_timex_pps_jitter_total", 5)),
-				ContainElement(buildEnvelope("node2_counter", 6)),
+				ContainElement(buildCounter("node_timex_pps_calibration_total", 1)),
+				ContainElement(buildCounter("node_timex_pps_error_total", 2)),
+				ContainElement(buildGauge("node_timex_pps_frequency_hertz", 3)),
+				ContainElement(buildGauge("node_timex_pps_jitter_seconds", 4)),
+				ContainElement(buildCounter("node_timex_pps_jitter_total", 5)),
+				ContainElement(buildCounter("node2_counter", 6)),
 			))
 		})
 	})
@@ -120,7 +120,7 @@ func startPromServer(metricConfigDir string, promOutput string) {
 	createMetricPortConfigFile(metricConfigDir, port)
 }
 
-func buildEnvelope(name string, value float64) *loggregator_v2.Envelope {
+func buildGauge(name string, value float64) *loggregator_v2.Envelope {
 	return &loggregator_v2.Envelope{
 		SourceId: "some-id",
 		Message: &loggregator_v2.Envelope_Gauge{
@@ -132,6 +132,19 @@ func buildEnvelope(name string, value float64) *loggregator_v2.Envelope {
 		},
 	}
 }
+
+func buildCounter(name string, value float64) *loggregator_v2.Envelope {
+	return &loggregator_v2.Envelope{
+		SourceId: "some-id",
+		Message: &loggregator_v2.Envelope_Counter{
+			Counter: &loggregator_v2.Counter{
+				Name:  name,
+				Total: uint64(value),
+			},
+		},
+	}
+}
+
 
 const (
 	promOutput = `

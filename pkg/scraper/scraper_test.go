@@ -37,41 +37,160 @@ var _ = Describe("Scraper", func() {
 		)
 	})
 
-	It("emits a gauge metric with a default source ID", func() {
-		spyMetricsGetter.resp <- &http.Response{
-			StatusCode: 200,
-			Body:       ioutil.NopCloser(strings.NewReader(promOutput)),
-		}
+	Context("gauges", func() {
+		It("emits a gauge metric with a default source ID", func() {
+			spyMetricsGetter.resp <- &http.Response{
+				StatusCode: 200,
+				Body:       ioutil.NopCloser(strings.NewReader(promOutput)),
+			}
 
-		Expect(s.Scrape()).To(Succeed())
+			Expect(s.Scrape()).To(Succeed())
 
-		Expect(spyMetricEmitter.envelopes).To(And(
-			ContainElement(buildEnvelope("some-id", "node_timex_pps_calibration_total", 1, nil)),
-			ContainElement(buildEnvelope("some-id", "node_timex_pps_error_total", 2, nil)),
-			ContainElement(buildEnvelope("some-id", "node_timex_pps_frequency_hertz", 3, nil)),
-			ContainElement(buildEnvelope("some-id", "node_timex_pps_jitter_seconds", 4, nil)),
-			ContainElement(buildEnvelope("some-id", "node_timex_pps_jitter_total", 5, nil)),
-			ContainElement(buildEnvelope("some-id", "promhttp_metric_handler_requests_total", 6, map[string]string{"code": "200"})),
-			ContainElement(buildEnvelope("some-id", "promhttp_metric_handler_requests_total", 7, map[string]string{"code": "500"})),
-			ContainElement(buildEnvelope("some-id", "promhttp_metric_handler_requests_total", 8, map[string]string{"code": "503"})),
-		))
+			Expect(spyMetricEmitter.envelopes).To(And(
+				ContainElement(buildGauge("some-id", "node_timex_pps_frequency_hertz", 3, nil)),
+				ContainElement(buildGauge("some-id", "node_timex_pps_jitter_seconds", 4, nil)),
+			))
+		})
 
-		var addr string
-		Eventually(spyMetricsGetter.a).Should(Receive(&addr))
-		Expect(addr).To(Equal("http://some.url/metrics"))
+		It("emits a gauge metric with tagged source ID", func() {
+			spyMetricsGetter.resp <- &http.Response{
+				StatusCode: 200,
+				Body:       ioutil.NopCloser(strings.NewReader(smallGaugeOutput)),
+			}
+
+			Expect(s.Scrape()).To(Succeed())
+
+			Expect(spyMetricEmitter.envelopes).To(And(
+				ContainElement(buildGauge("source-1", "gauge_1", 1, nil)),
+				ContainElement(buildGauge("source-2", "gauge_2", 2, nil)),
+			))
+		})
 	})
 
-	It("emits a gauge metric with the default source ID", func() {
+	Context("counters", func() {
+		It("emits a counter metric with a default source ID", func() {
+			spyMetricsGetter.resp <- &http.Response{
+				StatusCode: 200,
+				Body:       ioutil.NopCloser(strings.NewReader(promOutput)),
+			}
+
+			Expect(s.Scrape()).To(Succeed())
+
+			Expect(spyMetricEmitter.envelopes).To(And(
+				ContainElement(buildCounter("some-id", "node_timex_pps_calibration_total", 1, nil)),
+				ContainElement(buildCounter("some-id", "node_timex_pps_error_total", 2, nil)),
+				ContainElement(buildCounter("some-id", "node_timex_pps_jitter_total", 5, nil)),
+				ContainElement(buildCounter("some-id", "promhttp_metric_handler_requests_total", 6, map[string]string{"code": "200"})),
+				ContainElement(buildCounter("some-id", "promhttp_metric_handler_requests_total", 7, map[string]string{"code": "500"})),
+				ContainElement(buildCounter("some-id", "promhttp_metric_handler_requests_total", 8, map[string]string{"code": "503"})),
+			))
+
+			var addr string
+			Eventually(spyMetricsGetter.a).Should(Receive(&addr))
+			Expect(addr).To(Equal("http://some.url/metrics"))
+		})
+
+		It("emits a counter metric with tagged source ID", func() {
+			spyMetricsGetter.resp <- &http.Response{
+				StatusCode: 200,
+				Body:       ioutil.NopCloser(strings.NewReader(smallCounterOutput)),
+			}
+
+			Expect(s.Scrape()).To(Succeed())
+
+			Expect(spyMetricEmitter.envelopes).To(And(
+				ContainElement(buildCounter("source-1", "counter_1", 1, nil)),
+				ContainElement(buildCounter("source-2", "counter_2", 2, nil)),
+			))
+		})
+
+		It("ignores counter metrics with float values", func() {
+			spyMetricsGetter.resp <- &http.Response{
+				StatusCode: 200,
+				Body:       ioutil.NopCloser(strings.NewReader(floatCounterOutput)),
+			}
+
+			Expect(s.Scrape()).To(Succeed())
+
+			Expect(spyMetricEmitter.envelopes).To(ConsistOf(
+				buildCounter("source-1", "counter_int", 1, nil),
+			))
+		})
+	})
+
+	Context("histograms", func() {
+		It("emits a histogram with a default source ID", func() {
+			spyMetricsGetter.resp <- &http.Response{
+				StatusCode: 200,
+				Body:       ioutil.NopCloser(strings.NewReader(histogramOutput)),
+			}
+
+			Expect(s.Scrape()).To(Succeed())
+
+			Expect(spyMetricEmitter.envelopes).To(And(
+				ContainElement(buildGauge("some-id", "http_request_duration_seconds_bucket", 133988, map[string]string{"le": "1"})),
+				ContainElement(buildGauge("some-id", "http_request_duration_seconds_bucket", 144320, map[string]string{"le": "+Inf"})),
+				ContainElement(buildGauge("some-id", "http_request_duration_seconds_sum", 53423, nil)),
+				ContainElement(buildCounter("some-id", "http_request_duration_seconds_count", 144320, nil)),
+			))
+		})
+
+		It("emits a histogram with tagged source ID", func() {
+			spyMetricsGetter.resp <- &http.Response{
+				StatusCode: 200,
+				Body:       ioutil.NopCloser(strings.NewReader(multiHistogramOutput)),
+			}
+
+			Expect(s.Scrape()).To(Succeed())
+
+			Expect(spyMetricEmitter.envelopes).To(And(
+				ContainElement(buildGauge("source-1", "histogram_1_bucket", 133988, map[string]string{"le": "1"})),
+				ContainElement(buildGauge("source-1", "histogram_1_sum", 53423, nil)),
+				ContainElement(buildCounter("source-1", "histogram_1_count", 133988, nil)),
+				ContainElement(buildGauge("source-2", "histogram_2_bucket", 133988, map[string]string{"le": "1"})),
+				ContainElement(buildGauge("source-2", "histogram_2_sum", 53423, nil)),
+				ContainElement(buildCounter("source-2", "histogram_2_count", 133988, nil)),
+			))
+		})
+	})
+
+	Context("summaries", func() {
+		It("emits a summary with a default source ID", func() {
+			spyMetricsGetter.resp <- &http.Response{
+				StatusCode: 200,
+				Body:       ioutil.NopCloser(strings.NewReader(promSummary)),
+			}
+
+			Expect(s.Scrape()).To(Succeed())
+
+			Expect(spyMetricEmitter.envelopes).To(And(
+				ContainElement(buildGauge("some-id", "go_gc_duration_seconds", 9.5e-08, map[string]string{"quantile": "0"})),
+				ContainElement(buildGauge("some-id", "go_gc_duration_seconds", 0.000157366, map[string]string{"quantile": "0.25"})),
+				ContainElement(buildGauge("some-id", "go_gc_duration_seconds", 0.000300143, map[string]string{"quantile": "0.5"})),
+				ContainElement(buildGauge("some-id", "go_gc_duration_seconds", 0.001091972, map[string]string{"quantile": "0.75"})),
+				ContainElement(buildGauge("some-id", "go_gc_duration_seconds", 0.011609012, map[string]string{"quantile": "1"})),
+				ContainElement(buildGauge("some-id", "go_gc_duration_seconds_sum", 0.346341323, nil)),
+				ContainElement(buildCounter("some-id", "go_gc_duration_seconds_count", 331, nil)),
+			))
+
+		})
+	})
+
+	It("ignores unknown metric types", func() {
 		spyMetricsGetter.resp <- &http.Response{
 			StatusCode: 200,
-			Body:       ioutil.NopCloser(strings.NewReader(smallPromOutput)),
+			Body:       ioutil.NopCloser(strings.NewReader(promUntyped)),
 		}
 		Expect(s.Scrape()).To(Succeed())
+		Expect(spyMetricEmitter.envelopes).To(BeEmpty())
+	})
 
-		Expect(spyMetricEmitter.envelopes).To(And(
-			ContainElement(buildEnvelope("source-1", "node_timex_pps_calibration_total", 1, nil)),
-			ContainElement(buildEnvelope("source-2", "node_timex_pps_error_total", 2, nil)),
-		))
+	It("scrapes the given endpoint", func() {
+		spyMetricsGetter.resp <- &http.Response{
+			StatusCode: 200,
+			Body:       ioutil.NopCloser(strings.NewReader(smallCounterOutput)),
+		}
+		Expect(s.Scrape()).To(Succeed())
 
 		var addr string
 		Eventually(spyMetricsGetter.a).Should(Receive(&addr))
@@ -97,13 +216,13 @@ var _ = Describe("Scraper", func() {
 		}
 		spyMetricsGetter.resp <- &http.Response{
 			StatusCode: 200,
-			Body:       ioutil.NopCloser(strings.NewReader(smallPromOutput)),
+			Body:       ioutil.NopCloser(strings.NewReader(smallGaugeOutput)),
 		}
 		Expect(s.Scrape()).To(HaveOccurred())
 
 		Expect(spyMetricEmitter.envelopes).To(And(
-			ContainElement(buildEnvelope("source-1", "node_timex_pps_calibration_total", 1, nil)),
-			ContainElement(buildEnvelope("source-2", "node_timex_pps_error_total", 2, nil)),
+			ContainElement(buildGauge("source-1", "gauge_1", 1, nil)),
+			ContainElement(buildGauge("source-2", "gauge_2", 2, nil)),
 		))
 	})
 
@@ -125,7 +244,7 @@ var _ = Describe("Scraper", func() {
 			spyMetricsGetter.delay <- 1 * time.Second
 			spyMetricsGetter.resp <- &http.Response{
 				StatusCode: 200,
-				Body:       ioutil.NopCloser(strings.NewReader(smallPromOutput)),
+				Body:       ioutil.NopCloser(strings.NewReader(smallGaugeOutput)),
 			}
 		}
 
@@ -176,15 +295,6 @@ var _ = Describe("Scraper", func() {
 			Body:       ioutil.NopCloser(strings.NewReader("")),
 		}
 		Expect(s.Scrape()).To(HaveOccurred())
-	})
-
-	It("ignores unknown metric types", func() {
-		spyMetricsGetter.resp <- &http.Response{
-			StatusCode: 200,
-			Body:       ioutil.NopCloser(strings.NewReader(promSummary)),
-		}
-		Expect(s.Scrape()).To(Succeed())
-		Expect(spyMetricEmitter.envelopes).To(BeEmpty())
 	})
 
 	It("can emit metrics for attempted scrapes", func() {
@@ -315,13 +425,53 @@ promhttp_metric_handler_requests_total{code="200"} 6
 promhttp_metric_handler_requests_total{code="500"} 7
 promhttp_metric_handler_requests_total{code="503"} 8
 `
-	smallPromOutput = `
-# HELP node_timex_pps_calibration_total Pulse per second count of calibration intervals.
-# TYPE node_timex_pps_calibration_total counter
-node_timex_pps_calibration_total{source_id="source-1"} 1
-# HELP node_timex_pps_error_total Pulse per second count of calibration errors.
-# TYPE node_timex_pps_error_total counter
-node_timex_pps_error_total{source_id="source-2"} 2
+	histogramOutput = `
+# A histogram, which has a pretty complex representation in the text format:
+# HELP http_request_duration_seconds A histogram of the request duration.
+# TYPE http_request_duration_seconds histogram
+http_request_duration_seconds_bucket{le="1"} 133988
+http_request_duration_seconds_bucket{le="+Inf"} 144320
+http_request_duration_seconds_sum 53423
+http_request_duration_seconds_count 144320
+`
+
+	smallGaugeOutput = `
+# HELP gauge_1 Example metric
+# TYPE gauge_1 gauge
+gauge_1{source_id="source-1"} 1
+# HELP gauge_2 Example metric
+# TYPE gauge_2 gauge
+gauge_2{source_id="source-2"} 2
+`
+	smallCounterOutput = `
+# HELP counter_1 Example metric
+# TYPE counter_1 counter
+counter_1{source_id="source-1"} 1
+# HELP counter_2 Example metric
+# TYPE counter_2 counter
+counter_2{source_id="source-2"} 2
+`
+	multiHistogramOutput = `
+# A histogram, which has a pretty complex representation in the text format:
+# HELP histogram_1 A histogram of the request duration.
+# TYPE histogram_1 histogram
+histogram_1_bucket{le="1", source_id="source-1"} 133988
+histogram_1_sum{source_id="source-1"} 53423
+histogram_1_count{source_id="source-1"} 133988
+# HELP histogram_2 A histogram of the request duration.
+# TYPE histogram_2 histogram
+histogram_2_bucket{le="1", source_id="source-2"} 133988
+histogram_2_sum{source_id="source-2"} 53423
+histogram_2_count{source_id="source-2"} 133988
+`
+
+	floatCounterOutput = `
+# HELP counter_int Example metric
+# TYPE counter_int counter
+counter_int{source_id="source-1"} 1
+# HELP counter_float Example metric
+# TYPE counter_float counter
+counter_float{source_id="source-2"} 2.2
 `
 
 	promInvalid = `
@@ -341,9 +491,12 @@ go_gc_duration_seconds{quantile="1"} 0.011609012
 go_gc_duration_seconds_sum 0.346341323
 go_gc_duration_seconds_count 331
 `
+	promUntyped = `
+test 9.5e-08
+`
 )
 
-func buildEnvelope(sourceID, name string, value float64, tags map[string]string) *loggregator_v2.Envelope {
+func buildGauge(sourceID, name string, value float64, tags map[string]string) *loggregator_v2.Envelope {
 	if tags == nil {
 		tags = map[string]string{}
 	}
@@ -355,6 +508,23 @@ func buildEnvelope(sourceID, name string, value float64, tags map[string]string)
 				Metrics: map[string]*loggregator_v2.GaugeValue{
 					name: {Value: value},
 				},
+			},
+		},
+		Tags: tags,
+	}
+}
+
+func buildCounter(sourceID, name string, value float64, tags map[string]string) *loggregator_v2.Envelope {
+	if tags == nil {
+		tags = map[string]string{}
+	}
+
+	return &loggregator_v2.Envelope{
+		SourceId: sourceID,
+		Message: &loggregator_v2.Envelope_Counter{
+			Counter: &loggregator_v2.Counter{
+				Name:  name,
+				Total: uint64(value),
 			},
 		},
 		Tags: tags,
@@ -375,6 +545,25 @@ func (s *spyMetricEmitter) EmitGauge(opts ...loggregator.EmitGaugeOption) {
 		Message: &loggregator_v2.Envelope_Gauge{
 			Gauge: &loggregator_v2.Gauge{
 				Metrics: make(map[string]*loggregator_v2.GaugeValue),
+			},
+		},
+		Tags: map[string]string{},
+	}
+
+	for _, o := range opts {
+		o(e)
+	}
+
+	s.mu.Lock()
+	s.envelopes = append(s.envelopes, e)
+	s.mu.Unlock()
+}
+
+func (s *spyMetricEmitter) EmitCounter(name string, opts ...loggregator.EmitCounterOption) {
+	e := &loggregator_v2.Envelope{
+		Message: &loggregator_v2.Envelope_Counter{
+			Counter: &loggregator_v2.Counter{
+				Name: name,
 			},
 		},
 		Tags: map[string]string{},

@@ -82,11 +82,11 @@ var _ = Describe("App", func() {
 			go scraper.Run()
 
 			Eventually(spyAgent.Envelopes).Should(And(
-				ContainElement(buildEnvelope("source-1", "node_timex_pps_calibration_total", 1)),
-				ContainElement(buildEnvelope("source-1", "node_timex_pps_error_total", 2)),
-				ContainElement(buildEnvelope("source-1", "node_timex_pps_frequency_hertz", 3)),
-				ContainElement(buildEnvelope("source-2", "node_timex_pps_jitter_seconds", 4)),
-				ContainElement(buildEnvelope("default-id", "node_timex_pps_jitter_total", 5)),
+				ContainElement(buildCounter("source-1", "node_timex_pps_calibration_total", 1)),
+				ContainElement(buildCounter("source-1", "node_timex_pps_error_total", 2)),
+				ContainElement(buildGauge("source-1", "node_timex_pps_frequency_hertz", 3)),
+				ContainElement(buildGauge("source-2", "node_timex_pps_jitter_seconds", 4)),
+				ContainElement(buildCounter("default-id", "node_timex_pps_jitter_total", 5)),
 			))
 		})
 
@@ -206,7 +206,7 @@ var _ = Describe("App", func() {
 	})
 })
 
-func buildEnvelope(sourceID, name string, value float64) *loggregator_v2.Envelope {
+func buildGauge(sourceID, name string, value float64) *loggregator_v2.Envelope {
 	return &loggregator_v2.Envelope{
 		SourceId: sourceID,
 		Message: &loggregator_v2.Envelope_Gauge{
@@ -214,6 +214,18 @@ func buildEnvelope(sourceID, name string, value float64) *loggregator_v2.Envelop
 				Metrics: map[string]*loggregator_v2.GaugeValue{
 					name: {Value: value},
 				},
+			},
+		},
+	}
+}
+
+func buildCounter(sourceID, name string, value float64) *loggregator_v2.Envelope {
+	return &loggregator_v2.Envelope{
+		SourceId: sourceID,
+		Message: &loggregator_v2.Envelope_Counter{
+			Counter: &loggregator_v2.Counter{
+				Name:  name,
+				Total: uint64(value),
 			},
 		},
 	}

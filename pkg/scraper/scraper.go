@@ -4,6 +4,8 @@ import (
 	"code.cloudfoundry.org/loggregator-agent/pkg/metrics"
 	"errors"
 	"fmt"
+	"github.com/prometheus/client_model/go"
+	"github.com/prometheus/common/expfmt"
 	"io"
 	"io/ioutil"
 	"net/http"
@@ -13,7 +15,6 @@ import (
 	"time"
 
 	"code.cloudfoundry.org/go-loggregator"
-	"github.com/wfernandes/app-metrics-plugin/pkg/parser"
 )
 
 type Scraper struct {
@@ -30,6 +31,7 @@ type ScrapeOption func(s *Scraper)
 
 type MetricsEmitter interface {
 	EmitGauge(opts ...loggregator.EmitGaugeOption)
+	EmitCounter(name string, opts ...loggregator.EmitCounterOption)
 }
 
 type metricsClient interface {
@@ -99,11 +101,12 @@ func (s *Scraper) Scrape() error {
 		wg.Add(1)
 
 		go func(addr string) {
-			err := s.scrape(addr)
-
+			scrapeResult, err := s.scrape(addr)
 			if err != nil {
 				errs <- err.Error()
 			}
+
+			s.emitMetrics(scrapeResult)
 			wg.Done()
 		}(a)
 	}
@@ -123,10 +126,10 @@ func (s *Scraper) Scrape() error {
 	return nil
 }
 
-func (s *Scraper) scrape(addr string) error {
+func (s *Scraper) scrape(addr string) (map[string]*io_prometheus_client.MetricFamily, error) {
 	resp, err := s.systemMetricsClient.Get(addr)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	defer func() {
@@ -134,53 +137,127 @@ func (s *Scraper) scrape(addr string) error {
 		resp.Body.Close()
 	}()
 
-	body, err := ioutil.ReadAll(resp.Body)
-	if err != nil {
-		return err
-	}
-
 	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("unexpected status code %d: %s", resp.StatusCode, body)
+		body, _ := ioutil.ReadAll(resp.Body)
+		return nil, fmt.Errorf("unexpected status code %d: %s", resp.StatusCode, body)
 	}
 
-	p := parser.NewPrometheus()
-
-	res, err := p.Parse(body)
+	p := &expfmt.TextParser{}
+	res, err := p.TextToMetricFamilies(resp.Body)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
-	for _, v := range res {
-		f, ok := v.(*parser.Family)
-		if !ok {
+	return res, err
+}
+
+func (s *Scraper) emitMetrics(res map[string]*io_prometheus_client.MetricFamily) {
+	for _, family := range res {
+		name := family.GetName()
+
+		for _, metric := range family.GetMetric() {
+			switch family.GetType() {
+			case io_prometheus_client.MetricType_GAUGE:
+				s.emitGauge(name, metric)
+			case io_prometheus_client.MetricType_COUNTER:
+				s.emitCounter(name, metric)
+			case io_prometheus_client.MetricType_HISTOGRAM:
+				s.emitHistogram(name, metric)
+			case io_prometheus_client.MetricType_SUMMARY:
+				s.emitSummary(name, metric)
+			default:
+				return
+			}
+		}
+	}
+}
+
+func (s *Scraper) emitGauge(name string, metric *io_prometheus_client.Metric) {
+	val := metric.GetGauge().GetValue()
+	sourceID, tags := parseTags(s.sourceID, metric)
+
+	s.metricsEmitter.EmitGauge(
+		loggregator.WithGaugeValue(name, val, ""),
+		loggregator.WithGaugeSourceInfo(sourceID, ""),
+		loggregator.WithEnvelopeTags(tags),
+	)
+}
+
+func (s *Scraper) emitCounter(name string, m *io_prometheus_client.Metric) {
+	val := m.GetCounter().GetValue()
+	if val != float64(uint64(val)) {
+		return
+	}
+
+	sourceID, tags := parseTags(s.sourceID, m)
+	s.metricsEmitter.EmitCounter(
+		name,
+		loggregator.WithTotal(uint64(val)),
+		loggregator.WithCounterSourceInfo(sourceID, ""),
+		loggregator.WithEnvelopeTags(tags),
+	)
+}
+
+func (s *Scraper) emitHistogram(name string, m *io_prometheus_client.Metric) {
+	histogram := m.GetHistogram()
+
+	sourceID, tags := parseTags(s.sourceID, m)
+	s.metricsEmitter.EmitGauge(
+		loggregator.WithGaugeValue(name+"_sum", histogram.GetSampleSum(), ""),
+		loggregator.WithGaugeSourceInfo(sourceID, ""),
+		loggregator.WithEnvelopeTags(tags),
+	)
+	s.metricsEmitter.EmitCounter(
+		name+"_count",
+		loggregator.WithTotal(histogram.GetSampleCount()),
+		loggregator.WithCounterSourceInfo(sourceID, ""),
+		loggregator.WithEnvelopeTags(tags),
+	)
+	for _, bucket := range histogram.GetBucket() {
+		s.metricsEmitter.EmitGauge(
+			loggregator.WithGaugeValue(name+"_bucket", float64(bucket.GetCumulativeCount()), ""),
+			loggregator.WithGaugeSourceInfo(sourceID, ""),
+			loggregator.WithEnvelopeTags(tags),
+			loggregator.WithEnvelopeTag("le", strconv.FormatFloat(bucket.GetUpperBound(), 'g', -1, 64)),
+		)
+	}
+}
+
+func (s *Scraper) emitSummary(name string, m *io_prometheus_client.Metric) {
+	summary := m.GetSummary()
+	sourceID, tags := parseTags(s.sourceID, m)
+	s.metricsEmitter.EmitGauge(
+		loggregator.WithGaugeValue(name+"_sum", summary.GetSampleSum(), ""),
+		loggregator.WithGaugeSourceInfo(sourceID, ""),
+		loggregator.WithEnvelopeTags(tags),
+	)
+	s.metricsEmitter.EmitCounter(
+		name+"_count",
+		loggregator.WithTotal(summary.GetSampleCount()),
+		loggregator.WithCounterSourceInfo(sourceID, ""),
+		loggregator.WithEnvelopeTags(tags),
+	)
+	for _, quantile := range summary.GetQuantile() {
+		s.metricsEmitter.EmitGauge(
+			loggregator.WithGaugeValue(name, float64(quantile.GetValue()), ""),
+			loggregator.WithGaugeSourceInfo(sourceID, ""),
+			loggregator.WithEnvelopeTags(tags),
+			loggregator.WithEnvelopeTag("quantile", strconv.FormatFloat(quantile.GetQuantile(), 'g', -1, 64)),
+		)
+	}
+}
+
+func parseTags(defaultSourceID string, m *io_prometheus_client.Metric) (string, map[string]string) {
+	labels := make(map[string]string)
+	sourceID := defaultSourceID
+	for _, l := range m.GetLabel() {
+		if l.GetName() == "source_id" {
+			sourceID = l.GetValue()
 			continue
 		}
-
-		for _, m := range f.Metrics {
-			mm, ok := m.(parser.Metric)
-			if !ok {
-				continue
-			}
-			v, err := strconv.ParseFloat(mm.Value, 64)
-			if err != nil {
-				continue
-			}
-
-			sourceID, ok := mm.Labels["source_id"]
-			if !ok {
-				sourceID = s.sourceID
-			}
-			delete(mm.Labels, "source_id")
-
-			s.metricsEmitter.EmitGauge(
-				loggregator.WithGaugeSourceInfo(sourceID, ""),
-				loggregator.WithGaugeValue(f.Name, v, ""),
-				loggregator.WithEnvelopeTags(mm.Labels),
-			)
-		}
+		labels[l.GetName()] = l.GetValue()
 	}
-
-	return err
+	return sourceID, labels
 }
 
 type defaultGauge struct{}
