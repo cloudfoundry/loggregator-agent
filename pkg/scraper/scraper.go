@@ -214,9 +214,10 @@ func (s *Scraper) emitHistogram(name string, m *io_prometheus_client.Metric) {
 		loggregator.WithEnvelopeTags(tags),
 	)
 	for _, bucket := range histogram.GetBucket() {
-		s.metricsEmitter.EmitGauge(
-			loggregator.WithGaugeValue(name+"_bucket", float64(bucket.GetCumulativeCount()), ""),
-			loggregator.WithGaugeSourceInfo(sourceID, ""),
+		s.metricsEmitter.EmitCounter(
+			name+"_bucket",
+			loggregator.WithTotal(bucket.GetCumulativeCount()),
+			loggregator.WithCounterSourceInfo(sourceID, ""),
 			loggregator.WithEnvelopeTags(tags),
 			loggregator.WithEnvelopeTag("le", strconv.FormatFloat(bucket.GetUpperBound(), 'g', -1, 64)),
 		)

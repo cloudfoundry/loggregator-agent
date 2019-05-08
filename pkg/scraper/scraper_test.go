@@ -128,8 +128,8 @@ var _ = Describe("Scraper", func() {
 			Expect(s.Scrape()).To(Succeed())
 
 			Expect(spyMetricEmitter.envelopes).To(And(
-				ContainElement(buildGauge("some-id", "http_request_duration_seconds_bucket", 133988, map[string]string{"le": "1"})),
-				ContainElement(buildGauge("some-id", "http_request_duration_seconds_bucket", 144320, map[string]string{"le": "+Inf"})),
+				ContainElement(buildCounter("some-id", "http_request_duration_seconds_bucket", 133988, map[string]string{"le": "1"})),
+				ContainElement(buildCounter("some-id", "http_request_duration_seconds_bucket", 144320, map[string]string{"le": "+Inf"})),
 				ContainElement(buildGauge("some-id", "http_request_duration_seconds_sum", 53423, nil)),
 				ContainElement(buildCounter("some-id", "http_request_duration_seconds_count", 144320, nil)),
 			))
@@ -144,10 +144,10 @@ var _ = Describe("Scraper", func() {
 			Expect(s.Scrape()).To(Succeed())
 
 			Expect(spyMetricEmitter.envelopes).To(And(
-				ContainElement(buildGauge("source-1", "histogram_1_bucket", 133988, map[string]string{"le": "1"})),
+				ContainElement(buildCounter("source-1", "histogram_1_bucket", 133988, map[string]string{"le": "1"})),
 				ContainElement(buildGauge("source-1", "histogram_1_sum", 53423, nil)),
 				ContainElement(buildCounter("source-1", "histogram_1_count", 133988, nil)),
-				ContainElement(buildGauge("source-2", "histogram_2_bucket", 133988, map[string]string{"le": "1"})),
+				ContainElement(buildCounter("source-2", "histogram_2_bucket", 133988, map[string]string{"le": "1"})),
 				ContainElement(buildGauge("source-2", "histogram_2_sum", 53423, nil)),
 				ContainElement(buildCounter("source-2", "histogram_2_count", 133988, nil)),
 			))
