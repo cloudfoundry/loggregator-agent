@@ -13,8 +13,8 @@ type dns struct {
 	Records []record
 }
 
-func NewDNSMetricUrlProvider(dnsFile string, port int) func() []string {
-	return func() []string {
+func NewDNSScrapeTargetProvider(sourceID, dnsFile string, port int) TargetProvider {
+	return func() []Target {
 		file, err := os.Open(dnsFile)
 		if err != nil {
 			log.Fatal(err)
@@ -27,12 +27,16 @@ func NewDNSMetricUrlProvider(dnsFile string, port int) func() []string {
 			panic(err)
 		}
 
-		var metricAddrs []string
+		var targets []Target
 		for _, r := range d.Records {
 			ip := r[0]
-			metricAddrs = append(metricAddrs, fmt.Sprintf("https://%s:%d/metrics", ip, port))
+
+			targets = append(targets, Target{
+				ID: sourceID,
+				MetricURL: fmt.Sprintf("https://%s:%d/metrics", ip, port),
+			})
 		}
 
-		return metricAddrs
+		return targets
 	}
 }

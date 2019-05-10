@@ -13,12 +13,12 @@ import (
 )
 
 type MetricScraper struct {
-	cfg         Config
-	log         *log.Logger
-	urlProvider func() []string
-	doneChan    chan struct{}
-	stoppedChan chan struct{}
-	metrics     metricsClient
+	cfg           Config
+	log           *log.Logger
+	scrapeTargets scraper.TargetProvider
+	doneChan      chan struct{}
+	stoppedChan   chan struct{}
+	metrics       metricsClient
 }
 
 type metricsClient interface {
@@ -28,12 +28,12 @@ type metricsClient interface {
 
 func NewMetricScraper(cfg Config, l *log.Logger, m metricsClient) *MetricScraper {
 	return &MetricScraper{
-		cfg:         cfg,
-		log:         l,
-		urlProvider: scraper.NewDNSMetricUrlProvider(cfg.DNSFile, cfg.ScrapePort),
-		doneChan:    make(chan struct{}),
-		metrics:     m,
-		stoppedChan: make(chan struct{}),
+		cfg:           cfg,
+		log:           l,
+		scrapeTargets: scraper.NewDNSScrapeTargetProvider(cfg.DefaultSourceID, cfg.DNSFile, cfg.ScrapePort),
+		doneChan:      make(chan struct{}),
+		metrics:       m,
+		stoppedChan:   make(chan struct{}),
 	}
 }
 
@@ -61,8 +61,7 @@ func (m *MetricScraper) scrape() {
 	}
 
 	s := scraper.New(
-		m.cfg.DefaultSourceID,
-		m.urlProvider,
+		m.scrapeTargets,
 		client,
 		newTLSClient(m.cfg),
 		scraper.WithMetricsClient(m.metrics),

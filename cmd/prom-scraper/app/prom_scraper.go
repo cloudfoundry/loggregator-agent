@@ -44,13 +44,12 @@ func (p *PromScraper) Run() {
 		p.log.Fatal(err)
 	}
 
-	metricsUrlProvider := func() []string {
-		return metricUrlsFromFiles(p.cfg.MetricPortCfg, p.log)
+	scrapeTargetProvider := func() []scraper.Target {
+		return scrapeTargetsFromFiles(p.cfg.MetricPortCfg, p.log)
 	}
 
 	s := scraper.New(
-		p.cfg.DefaultSourceID,
-		metricsUrlProvider,
+		scrapeTargetProvider,
 		client,
 		http.DefaultClient,
 	)
@@ -62,31 +61,38 @@ func (p *PromScraper) Run() {
 	}
 }
 
-type portConfig struct {
-	Metric string `yaml:"port"`
-}
-
-func metricUrlsFromFiles(glob string, l *log.Logger) []string {
+func scrapeTargetsFromFiles(glob string, l *log.Logger) []scraper.Target {
 	files, err := filepath.Glob(glob)
 	if err != nil {
 		l.Fatal("Unable to read metric port location")
 	}
 
-	var addrs []string
+	var targets []scraper.Target
+
 	for _, f := range files {
 		yamlFile, err := ioutil.ReadFile(f)
 		if err != nil {
 			l.Fatalf("cannot read file: %s", err)
 		}
 
-		var c portConfig
+		var c struct{
+			Port string `yaml:"port"`
+			SourceID string `yaml:"source_id"`
+			InstanceID string `yaml:"instance_id"`
+		}
 		err = yaml.Unmarshal(yamlFile, &c)
 		if err != nil {
 			l.Fatalf("Unmarshal: %v", err)
 		}
 
-		addrs = append(addrs, fmt.Sprintf("http://127.0.0.1:%s/metrics", c.Metric))
+		target := scraper.Target{
+			ID: c.SourceID,
+			InstanceID: c.InstanceID,
+			MetricURL: fmt.Sprintf("http://127.0.0.1:%s/metrics", c.Port),
+		}
+
+		targets = append(targets, target)
 	}
 
-	return addrs
+	return targets
 }

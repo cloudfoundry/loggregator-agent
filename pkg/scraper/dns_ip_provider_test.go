@@ -8,8 +8,13 @@ import (
 
 var _ = Describe("DnsIpProvider", func() {
 	It("returns metrics urls from the ips returned from the lookup", func() {
-		urlProvider := scraper.NewDNSMetricUrlProvider("testdata/records.json", 9100)
-		urls := urlProvider()
+		scrapeTargets := scraper.NewDNSScrapeTargetProvider("default-source", "testdata/records.json", 9100)
+		targets := scrapeTargets()
+
+		var urls []string
+		for _, t := range targets {
+			urls = append(urls, t.MetricURL)
+		}
 
 		Expect(urls).To(ConsistOf(
 			"https://10.0.16.26:9100/metrics",

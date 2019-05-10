@@ -18,8 +18,7 @@ import (
 )
 
 type Scraper struct {
-	sourceID            string
-	addrProvider        func() []string
+	targetProvider      TargetProvider
 	metricsEmitter      MetricsEmitter
 	systemMetricsClient MetricsGetter
 	urlsScraped         metrics.Gauge
@@ -27,7 +26,15 @@ type Scraper struct {
 	scrapeDuration      metrics.Gauge
 }
 
+type TargetProvider func() []Target
+
 type ScrapeOption func(s *Scraper)
+
+type Target struct {
+	ID         string
+	InstanceID string
+	MetricURL  string
+}
 
 type MetricsEmitter interface {
 	EmitGauge(opts ...loggregator.EmitGaugeOption)
@@ -43,15 +50,13 @@ type MetricsGetter interface {
 }
 
 func New(
-	sourceID string,
-	addrProvider func() []string,
+	t TargetProvider,
 	e MetricsEmitter,
 	sc MetricsGetter,
 	opts ...ScrapeOption,
 ) *Scraper {
 	scraper := &Scraper{
-		sourceID:            sourceID,
-		addrProvider:        addrProvider,
+		targetProvider:      t,
 		metricsEmitter:      e,
 		systemMetricsClient: sc,
 		urlsScraped:         &defaultGauge{},
@@ -92,21 +97,21 @@ func (s *Scraper) Scrape() error {
 		s.scrapeDuration.Set(float64(duration / time.Millisecond))
 	}()
 
-	addrList := s.addrProvider()
-	errs := make(chan string, len(addrList))
+	targetList := s.targetProvider()
+	errs := make(chan string, len(targetList))
 	var wg sync.WaitGroup
 
-	s.urlsScraped.Set(float64(len(addrList)))
-	for _, a := range addrList {
+	s.urlsScraped.Set(float64(len(targetList)))
+	for _, a := range targetList {
 		wg.Add(1)
 
-		go func(addr string) {
-			scrapeResult, err := s.scrape(addr)
+		go func(target Target) {
+			scrapeResult, err := s.scrape(target)
 			if err != nil {
 				errs <- err.Error()
 			}
 
-			s.emitMetrics(scrapeResult)
+			s.emitMetrics(scrapeResult, target)
 			wg.Done()
 		}(a)
 	}
@@ -126,8 +131,8 @@ func (s *Scraper) Scrape() error {
 	return nil
 }
 
-func (s *Scraper) scrape(addr string) (map[string]*io_prometheus_client.MetricFamily, error) {
-	resp, err := s.systemMetricsClient.Get(addr)
+func (s *Scraper) scrape(target Target) (map[string]*io_prometheus_client.MetricFamily, error) {
+	resp, err := s.systemMetricsClient.Get(target.MetricURL)
 	if err != nil {
 		return nil, err
 	}
@@ -151,20 +156,22 @@ func (s *Scraper) scrape(addr string) (map[string]*io_prometheus_client.MetricFa
 	return res, err
 }
 
-func (s *Scraper) emitMetrics(res map[string]*io_prometheus_client.MetricFamily) {
+func (s *Scraper) emitMetrics(res map[string]*io_prometheus_client.MetricFamily, t Target) {
 	for _, family := range res {
 		name := family.GetName()
 
 		for _, metric := range family.GetMetric() {
+			sourceID, tags := s.parseTags(metric, t)
+
 			switch family.GetType() {
 			case io_prometheus_client.MetricType_GAUGE:
-				s.emitGauge(name, metric)
+				s.emitGauge(sourceID, t.InstanceID, name, tags, metric)
 			case io_prometheus_client.MetricType_COUNTER:
-				s.emitCounter(name, metric)
+				s.emitCounter(sourceID, t.InstanceID, name, tags, metric)
 			case io_prometheus_client.MetricType_HISTOGRAM:
-				s.emitHistogram(name, metric)
+				s.emitHistogram(sourceID, t.InstanceID, name, tags, metric)
 			case io_prometheus_client.MetricType_SUMMARY:
-				s.emitSummary(name, metric)
+				s.emitSummary(sourceID, t.InstanceID, name, tags, metric)
 			default:
 				return
 			}
@@ -172,93 +179,89 @@ func (s *Scraper) emitMetrics(res map[string]*io_prometheus_client.MetricFamily)
 	}
 }
 
-func (s *Scraper) emitGauge(name string, metric *io_prometheus_client.Metric) {
+func (s *Scraper) emitGauge(sourceID, instanceID, name string, tags map[string]string, metric *io_prometheus_client.Metric) {
 	val := metric.GetGauge().GetValue()
-	sourceID, tags := parseTags(s.sourceID, metric)
 
 	s.metricsEmitter.EmitGauge(
 		loggregator.WithGaugeValue(name, val, ""),
-		loggregator.WithGaugeSourceInfo(sourceID, ""),
+		loggregator.WithGaugeSourceInfo(sourceID, instanceID),
 		loggregator.WithEnvelopeTags(tags),
 	)
 }
 
-func (s *Scraper) emitCounter(name string, m *io_prometheus_client.Metric) {
-	val := m.GetCounter().GetValue()
+func (s *Scraper) emitCounter(sourceID, instanceID, name string, tags map[string]string, metric *io_prometheus_client.Metric) {
+	val := metric.GetCounter().GetValue()
 	if val != float64(uint64(val)) {
-		return
+		return //the counter contains a fractional value
 	}
 
-	sourceID, tags := parseTags(s.sourceID, m)
 	s.metricsEmitter.EmitCounter(
 		name,
 		loggregator.WithTotal(uint64(val)),
-		loggregator.WithCounterSourceInfo(sourceID, ""),
+		loggregator.WithCounterSourceInfo(sourceID, instanceID),
 		loggregator.WithEnvelopeTags(tags),
 	)
 }
 
-func (s *Scraper) emitHistogram(name string, m *io_prometheus_client.Metric) {
-	histogram := m.GetHistogram()
+func (s *Scraper) emitHistogram(sourceID, instanceID, name string, tags map[string]string, metric *io_prometheus_client.Metric) {
+	histogram := metric.GetHistogram()
 
-	sourceID, tags := parseTags(s.sourceID, m)
 	s.metricsEmitter.EmitGauge(
 		loggregator.WithGaugeValue(name+"_sum", histogram.GetSampleSum(), ""),
-		loggregator.WithGaugeSourceInfo(sourceID, ""),
+		loggregator.WithGaugeSourceInfo(sourceID, instanceID),
 		loggregator.WithEnvelopeTags(tags),
 	)
 	s.metricsEmitter.EmitCounter(
 		name+"_count",
 		loggregator.WithTotal(histogram.GetSampleCount()),
-		loggregator.WithCounterSourceInfo(sourceID, ""),
+		loggregator.WithCounterSourceInfo(sourceID, instanceID),
 		loggregator.WithEnvelopeTags(tags),
 	)
 	for _, bucket := range histogram.GetBucket() {
 		s.metricsEmitter.EmitCounter(
 			name+"_bucket",
 			loggregator.WithTotal(bucket.GetCumulativeCount()),
-			loggregator.WithCounterSourceInfo(sourceID, ""),
+			loggregator.WithCounterSourceInfo(sourceID, instanceID),
 			loggregator.WithEnvelopeTags(tags),
 			loggregator.WithEnvelopeTag("le", strconv.FormatFloat(bucket.GetUpperBound(), 'g', -1, 64)),
 		)
 	}
 }
 
-func (s *Scraper) emitSummary(name string, m *io_prometheus_client.Metric) {
-	summary := m.GetSummary()
-	sourceID, tags := parseTags(s.sourceID, m)
+func (s *Scraper) emitSummary(sourceID, instanceID, name string, tags map[string]string, metric *io_prometheus_client.Metric) {
+	summary := metric.GetSummary()
 	s.metricsEmitter.EmitGauge(
 		loggregator.WithGaugeValue(name+"_sum", summary.GetSampleSum(), ""),
-		loggregator.WithGaugeSourceInfo(sourceID, ""),
+		loggregator.WithGaugeSourceInfo(sourceID, instanceID),
 		loggregator.WithEnvelopeTags(tags),
 	)
 	s.metricsEmitter.EmitCounter(
 		name+"_count",
 		loggregator.WithTotal(summary.GetSampleCount()),
-		loggregator.WithCounterSourceInfo(sourceID, ""),
+		loggregator.WithCounterSourceInfo(sourceID, instanceID),
 		loggregator.WithEnvelopeTags(tags),
 	)
 	for _, quantile := range summary.GetQuantile() {
 		s.metricsEmitter.EmitGauge(
 			loggregator.WithGaugeValue(name, float64(quantile.GetValue()), ""),
-			loggregator.WithGaugeSourceInfo(sourceID, ""),
+			loggregator.WithGaugeSourceInfo(sourceID, instanceID),
 			loggregator.WithEnvelopeTags(tags),
 			loggregator.WithEnvelopeTag("quantile", strconv.FormatFloat(quantile.GetQuantile(), 'g', -1, 64)),
 		)
 	}
 }
 
-func parseTags(defaultSourceID string, m *io_prometheus_client.Metric) (string, map[string]string) {
-	labels := make(map[string]string)
-	sourceID := defaultSourceID
+func (s *Scraper) parseTags(m *io_prometheus_client.Metric, t Target) (string, map[string]string) {
+	tags := make(map[string]string)
+	sourceID := t.ID
 	for _, l := range m.GetLabel() {
 		if l.GetName() == "source_id" {
 			sourceID = l.GetValue()
 			continue
 		}
-		labels[l.GetName()] = l.GetValue()
+		tags[l.GetName()] = l.GetValue()
 	}
-	return sourceID, labels
+	return sourceID, tags
 }
 
 type defaultGauge struct{}

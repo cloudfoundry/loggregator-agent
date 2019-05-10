@@ -28,9 +28,14 @@ var _ = Describe("Scraper", func() {
 		spyMetricsGetter = newSpyMetricsGetter()
 		spyMetricEmitter = newSpyMetricEmitter()
 		s = scraper.New(
-			"some-id",
-			func() []string {
-				return []string{"http://some.url/metrics"}
+			func() []scraper.Target {
+				return []scraper.Target{
+					{
+						ID:         "some-id",
+						InstanceID: "some-instance-id",
+						MetricURL:  "http://some.url/metrics",
+					},
+				}
 			},
 			spyMetricEmitter,
 			spyMetricsGetter,
@@ -38,7 +43,7 @@ var _ = Describe("Scraper", func() {
 	})
 
 	Context("gauges", func() {
-		It("emits a gauge metric with a default source ID", func() {
+		It("emits a gauge metric with the target source ID", func() {
 			spyMetricsGetter.resp <- &http.Response{
 				StatusCode: 200,
 				Body:       ioutil.NopCloser(strings.NewReader(promOutput)),
@@ -47,8 +52,8 @@ var _ = Describe("Scraper", func() {
 			Expect(s.Scrape()).To(Succeed())
 
 			Expect(spyMetricEmitter.envelopes).To(And(
-				ContainElement(buildGauge("some-id", "node_timex_pps_frequency_hertz", 3, nil)),
-				ContainElement(buildGauge("some-id", "node_timex_pps_jitter_seconds", 4, nil)),
+				ContainElement(buildGauge("some-id", "some-instance-id", "node_timex_pps_frequency_hertz", 3, nil)),
+				ContainElement(buildGauge("some-id", "some-instance-id", "node_timex_pps_jitter_seconds", 4, nil)),
 			))
 		})
 
@@ -61,8 +66,8 @@ var _ = Describe("Scraper", func() {
 			Expect(s.Scrape()).To(Succeed())
 
 			Expect(spyMetricEmitter.envelopes).To(And(
-				ContainElement(buildGauge("source-1", "gauge_1", 1, nil)),
-				ContainElement(buildGauge("source-2", "gauge_2", 2, nil)),
+				ContainElement(buildGauge("source-1", "some-instance-id", "gauge_1", 1, nil)),
+				ContainElement(buildGauge("source-2", "some-instance-id", "gauge_2", 2, nil)),
 			))
 		})
 	})
@@ -77,12 +82,12 @@ var _ = Describe("Scraper", func() {
 			Expect(s.Scrape()).To(Succeed())
 
 			Expect(spyMetricEmitter.envelopes).To(And(
-				ContainElement(buildCounter("some-id", "node_timex_pps_calibration_total", 1, nil)),
-				ContainElement(buildCounter("some-id", "node_timex_pps_error_total", 2, nil)),
-				ContainElement(buildCounter("some-id", "node_timex_pps_jitter_total", 5, nil)),
-				ContainElement(buildCounter("some-id", "promhttp_metric_handler_requests_total", 6, map[string]string{"code": "200"})),
-				ContainElement(buildCounter("some-id", "promhttp_metric_handler_requests_total", 7, map[string]string{"code": "500"})),
-				ContainElement(buildCounter("some-id", "promhttp_metric_handler_requests_total", 8, map[string]string{"code": "503"})),
+				ContainElement(buildCounter("some-id", "some-instance-id", "node_timex_pps_calibration_total", 1, nil)),
+				ContainElement(buildCounter("some-id", "some-instance-id", "node_timex_pps_error_total", 2, nil)),
+				ContainElement(buildCounter("some-id", "some-instance-id", "node_timex_pps_jitter_total", 5, nil)),
+				ContainElement(buildCounter("some-id", "some-instance-id", "promhttp_metric_handler_requests_total", 6, map[string]string{"code": "200"})),
+				ContainElement(buildCounter("some-id", "some-instance-id", "promhttp_metric_handler_requests_total", 7, map[string]string{"code": "500"})),
+				ContainElement(buildCounter("some-id", "some-instance-id", "promhttp_metric_handler_requests_total", 8, map[string]string{"code": "503"})),
 			))
 
 			var addr string
@@ -99,8 +104,8 @@ var _ = Describe("Scraper", func() {
 			Expect(s.Scrape()).To(Succeed())
 
 			Expect(spyMetricEmitter.envelopes).To(And(
-				ContainElement(buildCounter("source-1", "counter_1", 1, nil)),
-				ContainElement(buildCounter("source-2", "counter_2", 2, nil)),
+				ContainElement(buildCounter("source-1", "some-instance-id", "counter_1", 1, nil)),
+				ContainElement(buildCounter("source-2", "some-instance-id", "counter_2", 2, nil)),
 			))
 		})
 
@@ -113,7 +118,7 @@ var _ = Describe("Scraper", func() {
 			Expect(s.Scrape()).To(Succeed())
 
 			Expect(spyMetricEmitter.envelopes).To(ConsistOf(
-				buildCounter("source-1", "counter_int", 1, nil),
+				buildCounter("source-1", "some-instance-id", "counter_int", 1, nil),
 			))
 		})
 	})
@@ -128,10 +133,10 @@ var _ = Describe("Scraper", func() {
 			Expect(s.Scrape()).To(Succeed())
 
 			Expect(spyMetricEmitter.envelopes).To(And(
-				ContainElement(buildCounter("some-id", "http_request_duration_seconds_bucket", 133988, map[string]string{"le": "1"})),
-				ContainElement(buildCounter("some-id", "http_request_duration_seconds_bucket", 144320, map[string]string{"le": "+Inf"})),
-				ContainElement(buildGauge("some-id", "http_request_duration_seconds_sum", 53423, nil)),
-				ContainElement(buildCounter("some-id", "http_request_duration_seconds_count", 144320, nil)),
+				ContainElement(buildCounter("some-id", "some-instance-id", "http_request_duration_seconds_bucket", 133988, map[string]string{"le": "1"})),
+				ContainElement(buildCounter("some-id", "some-instance-id", "http_request_duration_seconds_bucket", 144320, map[string]string{"le": "+Inf"})),
+				ContainElement(buildGauge("some-id", "some-instance-id", "http_request_duration_seconds_sum", 53423, nil)),
+				ContainElement(buildCounter("some-id", "some-instance-id", "http_request_duration_seconds_count", 144320, nil)),
 			))
 		})
 
@@ -144,12 +149,12 @@ var _ = Describe("Scraper", func() {
 			Expect(s.Scrape()).To(Succeed())
 
 			Expect(spyMetricEmitter.envelopes).To(And(
-				ContainElement(buildCounter("source-1", "histogram_1_bucket", 133988, map[string]string{"le": "1"})),
-				ContainElement(buildGauge("source-1", "histogram_1_sum", 53423, nil)),
-				ContainElement(buildCounter("source-1", "histogram_1_count", 133988, nil)),
-				ContainElement(buildCounter("source-2", "histogram_2_bucket", 133988, map[string]string{"le": "1"})),
-				ContainElement(buildGauge("source-2", "histogram_2_sum", 53423, nil)),
-				ContainElement(buildCounter("source-2", "histogram_2_count", 133988, nil)),
+				ContainElement(buildCounter("source-1", "some-instance-id", "histogram_1_bucket", 133988, map[string]string{"le": "1"})),
+				ContainElement(buildGauge("source-1", "some-instance-id", "histogram_1_sum", 53423, nil)),
+				ContainElement(buildCounter("source-1", "some-instance-id", "histogram_1_count", 133988, nil)),
+				ContainElement(buildCounter("source-2", "some-instance-id", "histogram_2_bucket", 133988, map[string]string{"le": "1"})),
+				ContainElement(buildGauge("source-2", "some-instance-id", "histogram_2_sum", 53423, nil)),
+				ContainElement(buildCounter("source-2", "some-instance-id", "histogram_2_count", 133988, nil)),
 			))
 		})
 	})
@@ -164,13 +169,13 @@ var _ = Describe("Scraper", func() {
 			Expect(s.Scrape()).To(Succeed())
 
 			Expect(spyMetricEmitter.envelopes).To(And(
-				ContainElement(buildGauge("some-id", "go_gc_duration_seconds", 9.5e-08, map[string]string{"quantile": "0"})),
-				ContainElement(buildGauge("some-id", "go_gc_duration_seconds", 0.000157366, map[string]string{"quantile": "0.25"})),
-				ContainElement(buildGauge("some-id", "go_gc_duration_seconds", 0.000300143, map[string]string{"quantile": "0.5"})),
-				ContainElement(buildGauge("some-id", "go_gc_duration_seconds", 0.001091972, map[string]string{"quantile": "0.75"})),
-				ContainElement(buildGauge("some-id", "go_gc_duration_seconds", 0.011609012, map[string]string{"quantile": "1"})),
-				ContainElement(buildGauge("some-id", "go_gc_duration_seconds_sum", 0.346341323, nil)),
-				ContainElement(buildCounter("some-id", "go_gc_duration_seconds_count", 331, nil)),
+				ContainElement(buildGauge("some-id", "some-instance-id", "go_gc_duration_seconds", 9.5e-08, map[string]string{"quantile": "0"})),
+				ContainElement(buildGauge("some-id", "some-instance-id", "go_gc_duration_seconds", 0.000157366, map[string]string{"quantile": "0.25"})),
+				ContainElement(buildGauge("some-id", "some-instance-id", "go_gc_duration_seconds", 0.000300143, map[string]string{"quantile": "0.5"})),
+				ContainElement(buildGauge("some-id", "some-instance-id", "go_gc_duration_seconds", 0.001091972, map[string]string{"quantile": "0.75"})),
+				ContainElement(buildGauge("some-id", "some-instance-id", "go_gc_duration_seconds", 0.011609012, map[string]string{"quantile": "1"})),
+				ContainElement(buildGauge("some-id", "some-instance-id", "go_gc_duration_seconds_sum", 0.346341323, nil)),
+				ContainElement(buildCounter("some-id", "some-instance-id", "go_gc_duration_seconds_count", 331, nil)),
 			))
 
 		})
@@ -199,11 +204,18 @@ var _ = Describe("Scraper", func() {
 
 	It("scrapes all endpoints even when one fails", func() {
 		s = scraper.New(
-			"some-id",
-			func() []string {
-				return []string{
-					"http://some.url/metrics",
-					"http://some.other.url/metrics",
+			func() []scraper.Target {
+				return []scraper.Target{
+					{
+						ID:         "some-id",
+						InstanceID: "some-instance-id",
+						MetricURL:  "http://some.url/metrics",
+					},
+					{
+						ID:         "some-id",
+						InstanceID: "some-instance-id",
+						MetricURL:  "http://some.other.url/metrics",
+					},
 				}
 			},
 			spyMetricEmitter,
@@ -221,19 +233,30 @@ var _ = Describe("Scraper", func() {
 		Expect(s.Scrape()).To(HaveOccurred())
 
 		Expect(spyMetricEmitter.envelopes).To(And(
-			ContainElement(buildGauge("source-1", "gauge_1", 1, nil)),
-			ContainElement(buildGauge("source-2", "gauge_2", 2, nil)),
+			ContainElement(buildGauge("source-1", "some-instance-id", "gauge_1", 1, nil)),
+			ContainElement(buildGauge("source-2", "some-instance-id", "gauge_2", 2, nil)),
 		))
 	})
 
 	It("scrapes endpoints asynchronously", func() {
 		s = scraper.New(
-			"some-id",
-			func() []string {
-				return []string{
-					"http://some.url/metrics",
-					"http://some.other.url/metrics",
-					"http://some.other.other.url/metrics",
+			func() []scraper.Target {
+				return []scraper.Target{
+					{
+						ID:         "some-id",
+						InstanceID: "some-instance-id",
+						MetricURL:  "http://some.url/metrics",
+					},
+					{
+						ID:         "some-id",
+						InstanceID: "some-instance-id",
+						MetricURL:  "http://some.other.url/metrics",
+					},
+					{
+						ID:         "some-id",
+						InstanceID: "some-instance-id",
+						MetricURL:  "http://some.other.other.url/metrics",
+					},
 				}
 			},
 			spyMetricEmitter,
@@ -255,12 +278,23 @@ var _ = Describe("Scraper", func() {
 
 	It("returns a compilation of errors from scrapes", func() {
 		s = scraper.New(
-			"some-id",
-			func() []string {
-				return []string{
-					"http://some.url/metrics",
-					"http://some.other.url/metrics",
-					"http://some.other.other.url/metrics",
+			func() []scraper.Target {
+				return []scraper.Target{
+					{
+						ID:         "some-id",
+						InstanceID: "some-instance-id",
+						MetricURL:  "http://some.url/metrics",
+					},
+					{
+						ID:         "some-id",
+						InstanceID: "some-instance-id",
+						MetricURL:  "http://some.other.url/metrics",
+					},
+					{
+						ID:         "some-id",
+						InstanceID: "some-instance-id",
+						MetricURL:  "http://some.other.other.url/metrics",
+					},
 				}
 			},
 			spyMetricEmitter,
@@ -300,12 +334,23 @@ var _ = Describe("Scraper", func() {
 	It("can emit metrics for attempted scrapes", func() {
 		spyMetricClient := testhelper.NewMetricClient()
 		s = scraper.New(
-			"some-id",
-			func() []string {
-				return []string{
-					"http://some.url/metrics",
-					"http://some.other.url/metrics",
-					"http://some.other.other.url/metrics",
+			func() []scraper.Target {
+				return []scraper.Target{
+					{
+						ID:         "some-id",
+						InstanceID: "some-instance-id",
+						MetricURL:  "http://some.url/metrics",
+					},
+					{
+						ID:         "some-id",
+						InstanceID: "some-instance-id",
+						MetricURL:  "http://some.other.url/metrics",
+					},
+					{
+						ID:         "some-id",
+						InstanceID: "some-instance-id",
+						MetricURL:  "http://some.other.other.url/metrics",
+					},
 				}
 			},
 			spyMetricEmitter,
@@ -338,12 +383,23 @@ var _ = Describe("Scraper", func() {
 	It("can emit metrics for failed scrapes", func() {
 		spyMetricClient := testhelper.NewMetricClient()
 		s = scraper.New(
-			"some-id",
-			func() []string {
-				return []string{
-					"http://some.url/metrics",
-					"http://some.other.url/metrics",
-					"http://some.other.other.url/metrics",
+			func() []scraper.Target {
+				return []scraper.Target{
+					{
+						ID:         "some-id",
+						InstanceID: "some-instance-id",
+						MetricURL:  "http://some.url/metrics",
+					},
+					{
+						ID:         "some-id",
+						InstanceID: "some-instance-id",
+						MetricURL:  "http://some.other.url/metrics",
+					},
+					{
+						ID:         "some-id",
+						InstanceID: "some-instance-id",
+						MetricURL:  "http://some.other.other.url/metrics",
+					},
 				}
 			},
 			spyMetricEmitter,
@@ -376,10 +432,13 @@ var _ = Describe("Scraper", func() {
 	It("can emit metrics for scrape duration", func() {
 		spyMetricClient := testhelper.NewMetricClient()
 		s = scraper.New(
-			"some-id",
-			func() []string {
-				return []string{
-					"http://some.url/metrics",
+			func() []scraper.Target {
+				return []scraper.Target{
+					{
+						ID:         "some-id",
+						InstanceID: "some-instance-id",
+						MetricURL:  "http://some.url/metrics",
+					},
 				}
 			},
 			spyMetricEmitter,
@@ -496,13 +555,14 @@ test 9.5e-08
 `
 )
 
-func buildGauge(sourceID, name string, value float64, tags map[string]string) *loggregator_v2.Envelope {
+func buildGauge(sourceID, instanceID, name string, value float64, tags map[string]string) *loggregator_v2.Envelope {
 	if tags == nil {
 		tags = map[string]string{}
 	}
 
 	return &loggregator_v2.Envelope{
-		SourceId: sourceID,
+		SourceId:   sourceID,
+		InstanceId: instanceID,
 		Message: &loggregator_v2.Envelope_Gauge{
 			Gauge: &loggregator_v2.Gauge{
 				Metrics: map[string]*loggregator_v2.GaugeValue{
@@ -514,13 +574,14 @@ func buildGauge(sourceID, name string, value float64, tags map[string]string) *l
 	}
 }
 
-func buildCounter(sourceID, name string, value float64, tags map[string]string) *loggregator_v2.Envelope {
+func buildCounter(sourceID, instanceID, name string, value float64, tags map[string]string) *loggregator_v2.Envelope {
 	if tags == nil {
 		tags = map[string]string{}
 	}
 
 	return &loggregator_v2.Envelope{
-		SourceId: sourceID,
+		SourceId:   sourceID,
+		InstanceId: instanceID,
 		Message: &loggregator_v2.Envelope_Counter{
 			Counter: &loggregator_v2.Counter{
 				Name:  name,
