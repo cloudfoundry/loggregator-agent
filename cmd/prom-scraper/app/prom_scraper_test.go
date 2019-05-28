@@ -98,9 +98,10 @@ var _ = Describe("PromScraper", func() {
 		ps := app.NewPromScraper(cfg, testLogger)
 		go ps.Run()
 
-		Eventually(func() http.Header {return promServer.firstRequestHeaders}).ShouldNot(BeNil())
-		Expect(promServer.firstRequestHeaders).To(HaveKeyWithValue("Header1", []string{"value1"}))
-		Expect(promServer.firstRequestHeaders).To(HaveKeyWithValue("Header2", []string{"value2"}))
+		Eventually(promServer.requestHeaders).Should(Receive(And(
+			HaveKeyWithValue("Header1", []string{"value1"}),
+			HaveKeyWithValue("Header2", []string{"value2"}),
+		)))
 	})
 })
 
@@ -112,6 +113,7 @@ func newStubPromServer() *stubPromServer {
 	addr := server.Listener.Addr().String()
 	tokens := strings.Split(addr, ":")
 	s.port = tokens[len(tokens)-1]
+	s.requestHeaders = make(chan http.Header, 100)
 
 	return s
 }
@@ -120,13 +122,11 @@ type stubPromServer struct {
 	resp string
 	port string
 
-	firstRequestHeaders http.Header
+	requestHeaders chan http.Header
 }
 
 func (s *stubPromServer) ServeHTTP(w http.ResponseWriter, req *http.Request) {
-	if s.firstRequestHeaders == nil {
-		s.firstRequestHeaders = req.Header
-	}
+	s.requestHeaders <- req.Header
 	w.Write([]byte(s.resp))
 }
 
