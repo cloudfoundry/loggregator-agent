@@ -38,7 +38,7 @@ var _ = Describe("Scraper", func() {
 				}
 			},
 			spyMetricEmitter,
-			spyMetricsGetter,
+			spyMetricsGetter.Get,
 		)
 	})
 
@@ -91,7 +91,7 @@ var _ = Describe("Scraper", func() {
 			))
 
 			var addr string
-			Eventually(spyMetricsGetter.a).Should(Receive(&addr))
+			Eventually(spyMetricsGetter.addrs).Should(Receive(&addr))
 			Expect(addr).To(Equal("http://some.url/metrics"))
 		})
 
@@ -198,8 +198,38 @@ var _ = Describe("Scraper", func() {
 		Expect(s.Scrape()).To(Succeed())
 
 		var addr string
-		Eventually(spyMetricsGetter.a).Should(Receive(&addr))
+		Eventually(spyMetricsGetter.addrs).Should(Receive(&addr))
 		Expect(addr).To(Equal("http://some.url/metrics"))
+	})
+
+	It("scrapes the given endpoint with given headers", func() {
+		headers := map[string]string{
+			"header1": "value1",
+			"header2": "value2",
+		}
+
+		s = scraper.New(
+			func() []scraper.Target {
+				return []scraper.Target{
+					{
+						ID:         "some-id",
+						InstanceID: "some-instance-id",
+						MetricURL:  "http://some.url/metrics",
+						Headers:    headers,
+					},
+				}
+			},
+			spyMetricEmitter,
+			spyMetricsGetter.Get,
+		)
+
+		spyMetricsGetter.resp <- &http.Response{
+			StatusCode: 200,
+			Body:       ioutil.NopCloser(strings.NewReader(promSummary)),
+		}
+
+		Expect(s.Scrape()).To(Succeed())
+		Eventually(spyMetricsGetter.headers).Should(Receive(Equal(headers)))
 	})
 
 	It("scrapes all endpoints even when one fails", func() {
@@ -219,7 +249,7 @@ var _ = Describe("Scraper", func() {
 				}
 			},
 			spyMetricEmitter,
-			spyMetricsGetter,
+			spyMetricsGetter.Get,
 		)
 
 		spyMetricsGetter.resp <- &http.Response{
@@ -260,7 +290,7 @@ var _ = Describe("Scraper", func() {
 				}
 			},
 			spyMetricEmitter,
-			spyMetricsGetter,
+			spyMetricsGetter.Get,
 		)
 
 		for i := 0; i < 3; i++ {
@@ -273,7 +303,7 @@ var _ = Describe("Scraper", func() {
 
 		go s.Scrape()
 
-		Eventually(func() int { return len(spyMetricsGetter.a) }, 1).Should(Equal(3))
+		Eventually(func() int { return len(spyMetricsGetter.addrs) }, 1).Should(Equal(3))
 	})
 
 	It("returns a compilation of errors from scrapes", func() {
@@ -298,7 +328,7 @@ var _ = Describe("Scraper", func() {
 				}
 			},
 			spyMetricEmitter,
-			spyMetricsGetter,
+			spyMetricsGetter.Get,
 		)
 
 		spyMetricsGetter.err <- errors.New("something")
@@ -354,7 +384,7 @@ var _ = Describe("Scraper", func() {
 				}
 			},
 			spyMetricEmitter,
-			spyMetricsGetter,
+			spyMetricsGetter.Get,
 			scraper.WithMetricsClient(spyMetricClient),
 		)
 
@@ -403,7 +433,7 @@ var _ = Describe("Scraper", func() {
 				}
 			},
 			spyMetricEmitter,
-			spyMetricsGetter,
+			spyMetricsGetter.Get,
 			scraper.WithMetricsClient(spyMetricClient),
 		)
 
@@ -442,7 +472,7 @@ var _ = Describe("Scraper", func() {
 				}
 			},
 			spyMetricEmitter,
-			spyMetricsGetter,
+			spyMetricsGetter.Get,
 			scraper.WithMetricsClient(spyMetricClient),
 		)
 
@@ -640,23 +670,27 @@ func (s *spyMetricEmitter) EmitCounter(name string, opts ...loggregator.EmitCoun
 }
 
 type spyMetricsGetter struct {
-	a     chan string
-	resp  chan *http.Response
-	delay chan time.Duration
-	err   chan error
+	addrs   chan string
+	headers chan map[string]string
+
+	resp    chan *http.Response
+	delay   chan time.Duration
+	err     chan error
 }
 
 func newSpyMetricsGetter() *spyMetricsGetter {
 	return &spyMetricsGetter{
-		a:     make(chan string, 100),
-		resp:  make(chan *http.Response, 100),
-		delay: make(chan time.Duration, 100),
-		err:   make(chan error, 100),
+		addrs:   make(chan string, 100),
+		headers: make(chan map[string]string, 100),
+		resp:    make(chan *http.Response, 100),
+		delay:   make(chan time.Duration, 100),
+		err:     make(chan error, 100),
 	}
 }
 
-func (s *spyMetricsGetter) Get(addr string) (*http.Response, error) {
-	s.a <- addr
+func (s *spyMetricsGetter) Get(addr string, headers map[string]string) (*http.Response, error) {
+	s.addrs <- addr
+	s.headers <- headers
 
 	if len(s.delay) > 0 {
 		time.Sleep(<-s.delay)

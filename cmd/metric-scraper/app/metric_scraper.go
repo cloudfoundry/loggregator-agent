@@ -60,10 +60,13 @@ func (m *MetricScraper) scrape() {
 		m.log.Fatal(err)
 	}
 
+	tlsClient := newTLSClient(m.cfg)
 	s := scraper.New(
 		m.scrapeTargets,
 		client,
-		newTLSClient(m.cfg),
+		func(addr string, _ map[string]string) (response *http.Response, e error) {
+			return tlsClient.Get(addr)
+		},
 		scraper.WithMetricsClient(m.metrics),
 	)
 

@@ -4,11 +4,13 @@ import (
 	"code.cloudfoundry.org/loggregator-agent/pkg/scraper"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
+	"io/ioutil"
 )
 
 var _ = Describe("DnsIpProvider", func() {
 	It("returns metrics urls from the ips returned from the lookup", func() {
-		scrapeTargets := scraper.NewDNSScrapeTargetProvider("default-source", "testdata/records.json", 9100)
+		dnsFile := writeScrapeConfig(genericConfig)
+		scrapeTargets := scraper.NewDNSScrapeTargetProvider("default-source", dnsFile, 9100)
 		targets := scrapeTargets()
 
 		var urls []string
@@ -22,3 +24,27 @@ var _ = Describe("DnsIpProvider", func() {
 		))
 	})
 })
+
+func writeScrapeConfig(config string) string {
+	f, err := ioutil.TempFile("", "records.json")
+	Expect(err).ToNot(HaveOccurred())
+
+	_, err = f.Write([]byte(config))
+	Expect(err).ToNot(HaveOccurred())
+
+	return f.Name()
+}
+
+var genericConfig = `
+{
+    "records": [
+      [
+        "10.0.16.27",
+        "hostname-1"
+      ],
+      [
+        "10.0.16.26",
+        "hostname-2"
+      ]
+    ]
+}`

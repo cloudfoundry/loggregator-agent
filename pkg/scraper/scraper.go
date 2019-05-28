@@ -18,12 +18,12 @@ import (
 )
 
 type Scraper struct {
-	targetProvider      TargetProvider
-	metricsEmitter      MetricsEmitter
-	systemMetricsClient MetricsGetter
-	urlsScraped         metrics.Gauge
-	failedScrapes       metrics.Gauge
-	scrapeDuration      metrics.Gauge
+	targetProvider TargetProvider
+	metricsEmitter MetricsEmitter
+	metricsGetter  MetricsGetter
+	urlsScraped    metrics.Gauge
+	failedScrapes  metrics.Gauge
+	scrapeDuration metrics.Gauge
 }
 
 type TargetProvider func() []Target
@@ -34,6 +34,7 @@ type Target struct {
 	ID         string
 	InstanceID string
 	MetricURL  string
+	Headers    map[string]string
 }
 
 type MetricsEmitter interface {
@@ -45,9 +46,7 @@ type metricsClient interface {
 	NewGauge(name string, opts ...metrics.MetricOption) metrics.Gauge
 }
 
-type MetricsGetter interface {
-	Get(addr string) (*http.Response, error)
-}
+type MetricsGetter func(addr string, headers map[string]string) (*http.Response, error)
 
 func New(
 	t TargetProvider,
@@ -56,12 +55,12 @@ func New(
 	opts ...ScrapeOption,
 ) *Scraper {
 	scraper := &Scraper{
-		targetProvider:      t,
-		metricsEmitter:      e,
-		systemMetricsClient: sc,
-		urlsScraped:         &defaultGauge{},
-		scrapeDuration:      &defaultGauge{},
-		failedScrapes:       &defaultGauge{},
+		targetProvider: t,
+		metricsEmitter: e,
+		metricsGetter:  sc,
+		urlsScraped:    &defaultGauge{},
+		scrapeDuration: &defaultGauge{},
+		failedScrapes:  &defaultGauge{},
 	}
 
 	for _, o := range opts {
@@ -132,7 +131,7 @@ func (s *Scraper) Scrape() error {
 }
 
 func (s *Scraper) scrape(target Target) (map[string]*io_prometheus_client.MetricFamily, error) {
-	resp, err := s.systemMetricsClient.Get(target.MetricURL)
+	resp, err := s.metricsGetter(target.MetricURL, target.Headers)
 	if err != nil {
 		return nil, err
 	}

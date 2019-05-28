@@ -10,7 +10,6 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
-	"path/filepath"
 	"strings"
 	"sync"
 	"time"
@@ -30,73 +29,78 @@ var _ = Describe("PromScraper", func() {
 		promServer *stubPromServer
 
 		testLogger = log.New(GinkgoWriter, "", log.LstdFlags)
+
+		metricConfigDir string
 	)
 
-	Describe("when there is a debug_port config file", func() {
-		var metricConfigDir string
+	BeforeEach(func() {
+		promServer = newStubPromServer()
+		metricConfigDir = metricPortConfigDir()
 
-		BeforeEach(func() {
-			promServer = newStubPromServer()
+		spyAgent = newSpyAgent()
 
-			metricConfigDir = metricPortConfigDir()
-			createMetricPortConfigFile(metricConfigDir, promServer.port)
+		cfg = app.Config{
+			ClientKeyPath:          testhelper.Cert("metron.key"),
+			ClientCertPath:         testhelper.Cert("metron.crt"),
+			CACertPath:             testhelper.Cert("loggregator-ca.crt"),
+			LoggregatorIngressAddr: spyAgent.addr,
+			MetricPortCfg:          fmt.Sprintf("%s/*", metricConfigDir),
+			ScrapeInterval:         100 * time.Millisecond,
+		}
+	})
 
-			spyAgent = newSpyAgent()
+	AfterEach(func() {
+		os.RemoveAll(metricConfigDir)
+		gexec.CleanupBuildArtifacts()
+	})
 
-			cfg = app.Config{
-				ClientKeyPath:          testhelper.Cert("metron.key"),
-				ClientCertPath:         testhelper.Cert("metron.crt"),
-				CACertPath:             testhelper.Cert("loggregator-ca.crt"),
-				LoggregatorIngressAddr: spyAgent.addr,
-				MetricPortCfg:          fmt.Sprintf("%s/*/metric_port.yml", metricConfigDir),
-				ScrapeInterval:         100 * time.Millisecond,
-			}
-		})
+	It("scrapes a prometheus endpoint and sends those metrics to a loggregator agent", func() {
+		writeScrapeConfig(metricConfigDir, fmt.Sprintf(metricConfigTemplate, promServer.port))
+		promServer.resp = promOutput
 
-		AfterEach(func() {
-			os.RemoveAll(metricConfigDir)
-			gexec.CleanupBuildArtifacts()
-		})
+		ps := app.NewPromScraper(cfg, testLogger)
+		go ps.Run()
 
-		It("scrapes a prometheus endpoint and sends those metrics to a loggregator agent", func() {
-			promServer.resp = promOutput
+		Eventually(spyAgent.Envelopes).Should(And(
+			ContainElement(buildCounter("node_timex_pps_calibration_total", "some-id", "some-instance-id", 1)),
+			ContainElement(buildCounter("node_timex_pps_error_total", "some-id", "some-instance-id", 2)),
+			ContainElement(buildGauge("node_timex_pps_frequency_hertz", "some-id", "some-instance-id", 3)),
+			ContainElement(buildGauge("node_timex_pps_jitter_seconds", "some-id", "some-instance-id", 4)),
+			ContainElement(buildCounter("node_timex_pps_jitter_total", "some-id", "some-instance-id", 5)),
+		))
+	})
 
-			ps := app.NewPromScraper(cfg, testLogger)
-			go ps.Run()
+	It("scrapes multiple prometheus endpoints and sends those metrics to a loggregator agent", func() {
+		promServer2 := newStubPromServer()
+		writeScrapeConfig(metricConfigDir, fmt.Sprintf(metricConfigTemplate, promServer.port))
+		writeScrapeConfig(metricConfigDir, fmt.Sprintf(metricConfigTemplate, promServer2.port))
 
-			Eventually(spyAgent.Envelopes).Should(And(
-				ContainElement(buildCounter("node_timex_pps_calibration_total", "some-id", "some-instance-id", 1)),
-				ContainElement(buildCounter("node_timex_pps_error_total", "some-id", "some-instance-id", 2)),
-				ContainElement(buildGauge("node_timex_pps_frequency_hertz", "some-id", "some-instance-id", 3)),
-				ContainElement(buildGauge("node_timex_pps_jitter_seconds", "some-id", "some-instance-id", 4)),
-				ContainElement(buildCounter("node_timex_pps_jitter_total", "some-id", "some-instance-id", 5)),
-			))
-		})
+		promServer.resp = promOutput
+		promServer2.resp = promOutput2
 
-		Context("multiple scrapable endpoints", func() {
-			var promServer2 *stubPromServer
-			BeforeEach(func() {
-				promServer2 = newStubPromServer()
-				createMetricPortConfigFile(metricConfigDir, promServer2.port)
-			})
+		ps := app.NewPromScraper(cfg, testLogger)
+		go ps.Run()
 
-			It("scrapes multiple prometheus endpoints and sends those metrics to a loggregator agent", func() {
-				promServer.resp = promOutput
-				promServer2.resp = promOutput2
+		Eventually(spyAgent.Envelopes).Should(And(
+			ContainElement(buildCounter("node_timex_pps_calibration_total", "some-id", "some-instance-id", 1)),
+			ContainElement(buildCounter("node_timex_pps_error_total", "some-id", "some-instance-id", 2)),
+			ContainElement(buildGauge("node_timex_pps_frequency_hertz", "some-id", "some-instance-id", 3)),
+			ContainElement(buildGauge("node_timex_pps_jitter_seconds", "some-id", "some-instance-id", 4)),
+			ContainElement(buildCounter("node_timex_pps_jitter_total", "some-id", "some-instance-id", 5)),
+			ContainElement(buildCounter("node2_counter", "some-id", "some-instance-id", 6)),
+		))
+	})
 
-				ps := app.NewPromScraper(cfg, testLogger)
-				go ps.Run()
+	It("scrapes with headers if provided", func() {
+		writeScrapeConfig(metricConfigDir, fmt.Sprintf(metricConfigWithHeadersTemplate, promServer.port))
+		promServer.resp = promOutput
 
-				Eventually(spyAgent.Envelopes).Should(And(
-					ContainElement(buildCounter("node_timex_pps_calibration_total", "some-id", "some-instance-id", 1)),
-					ContainElement(buildCounter("node_timex_pps_error_total", "some-id", "some-instance-id", 2)),
-					ContainElement(buildGauge("node_timex_pps_frequency_hertz", "some-id", "some-instance-id", 3)),
-					ContainElement(buildGauge("node_timex_pps_jitter_seconds", "some-id", "some-instance-id", 4)),
-					ContainElement(buildCounter("node_timex_pps_jitter_total", "some-id", "some-instance-id", 5)),
-					ContainElement(buildCounter("node2_counter", "some-id", "some-instance-id", 6)),
-				))
-			})
-		})
+		ps := app.NewPromScraper(cfg, testLogger)
+		go ps.Run()
+
+		Eventually(func() http.Header {return promServer.firstRequestHeaders}).ShouldNot(BeNil())
+		Expect(promServer.firstRequestHeaders).To(HaveKeyWithValue("Header1", []string{"value1"}))
+		Expect(promServer.firstRequestHeaders).To(HaveKeyWithValue("Header2", []string{"value2"}))
 	})
 })
 
@@ -115,9 +119,14 @@ func newStubPromServer() *stubPromServer {
 type stubPromServer struct {
 	resp string
 	port string
+
+	firstRequestHeaders http.Header
 }
 
 func (s *stubPromServer) ServeHTTP(w http.ResponseWriter, req *http.Request) {
+	if s.firstRequestHeaders == nil {
+		s.firstRequestHeaders = req.Header
+	}
 	w.Write([]byte(s.resp))
 }
 
@@ -175,11 +184,19 @@ const (
 node2_counter 6
 `
 )
+
 const metricConfigTemplate = `---
 port: %s
 source_id: some-id
+instance_id: some-instance-id`
+
+const metricConfigWithHeadersTemplate = `---
+port: %s
+source_id: some-id
 instance_id: some-instance-id
-`
+headers:
+  Header1: value1
+  Header2: value2`
 
 func metricPortConfigDir() string {
 	dir, err := ioutil.TempDir(".", "")
@@ -190,20 +207,12 @@ func metricPortConfigDir() string {
 	return dir
 }
 
-func createMetricPortConfigFile(configDir, port string) {
-	fDir, err := ioutil.TempDir(configDir, "")
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	tmpfn := filepath.Join(fDir, "metric_port.yml")
-	tmpfn, err = filepath.Abs(tmpfn)
+func writeScrapeConfig(metricConfigDir, config string) {
+	f, err := ioutil.TempFile(metricConfigDir, "metric_port.yml")
 	Expect(err).ToNot(HaveOccurred())
 
-	contents := fmt.Sprintf(metricConfigTemplate, port)
-	if err := ioutil.WriteFile(tmpfn, []byte(contents), 0666); err != nil {
-		log.Fatal(err)
-	}
+	_, err = f.Write([]byte(config))
+	Expect(err).ToNot(HaveOccurred())
 }
 
 type spyAgent struct {

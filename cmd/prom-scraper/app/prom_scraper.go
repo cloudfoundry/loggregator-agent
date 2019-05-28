@@ -51,7 +51,7 @@ func (p *PromScraper) Run() {
 	s := scraper.New(
 		scrapeTargetProvider,
 		client,
-		http.DefaultClient,
+		scrape,
 	)
 
 	for range time.Tick(p.cfg.ScrapeInterval) {
@@ -75,24 +75,39 @@ func scrapeTargetsFromFiles(glob string, l *log.Logger) []scraper.Target {
 			l.Fatalf("cannot read file: %s", err)
 		}
 
-		var c struct{
-			Port string `yaml:"port"`
-			SourceID string `yaml:"source_id"`
-			InstanceID string `yaml:"instance_id"`
+		var c struct {
+			Port       string            `yaml:"port"`
+			SourceID   string            `yaml:"source_id"`
+			InstanceID string            `yaml:"instance_id"`
+			Headers    map[string]string `yaml:"headers"`
 		}
 		err = yaml.Unmarshal(yamlFile, &c)
 		if err != nil {
 			l.Fatalf("Unmarshal: %v", err)
 		}
 
-		target := scraper.Target{
-			ID: c.SourceID,
+		targets = append(targets, scraper.Target{
+			ID:         c.SourceID,
 			InstanceID: c.InstanceID,
-			MetricURL: fmt.Sprintf("http://127.0.0.1:%s/metrics", c.Port),
-		}
-
-		targets = append(targets, target)
+			MetricURL:  fmt.Sprintf("http://127.0.0.1:%s/metrics", c.Port),
+			Headers:    c.Headers,
+		})
 	}
 
 	return targets
+}
+
+func scrape(addr string, headers map[string]string) (response *http.Response, e error) {
+	req, err := http.NewRequest(http.MethodGet, addr, nil)
+	if err != nil {
+		return nil, err
+	}
+
+	requestHeader := http.Header{}
+	for k, v := range headers {
+		requestHeader[k] = []string{v}
+	}
+	req.Header = requestHeader
+
+	return http.DefaultClient.Do(req)
 }
