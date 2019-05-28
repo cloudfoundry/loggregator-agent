@@ -2,7 +2,6 @@ package scraper
 
 import (
 	"code.cloudfoundry.org/loggregator-agent/pkg/metrics"
-	"errors"
 	"fmt"
 	"github.com/prometheus/client_model/go"
 	"github.com/prometheus/common/expfmt"
@@ -10,7 +9,6 @@ import (
 	"io/ioutil"
 	"net/http"
 	"strconv"
-	"strings"
 	"sync"
 	"time"
 
@@ -97,7 +95,7 @@ func (s *Scraper) Scrape() error {
 	}()
 
 	targetList := s.targetProvider()
-	errs := make(chan string, len(targetList))
+	errs := make(chan *ScrapeError, len(targetList))
 	var wg sync.WaitGroup
 
 	s.urlsScraped.Set(float64(len(targetList)))
@@ -107,7 +105,12 @@ func (s *Scraper) Scrape() error {
 		go func(target Target) {
 			scrapeResult, err := s.scrape(target)
 			if err != nil {
-				errs <- err.Error()
+				errs <- &ScrapeError{
+					ID:         target.ID,
+					InstanceID: target.InstanceID,
+					MetricURL:  target.MetricURL,
+					Err:        err,
+				}
 			}
 
 			s.emitMetrics(scrapeResult, target)
@@ -120,11 +123,11 @@ func (s *Scraper) Scrape() error {
 
 	s.failedScrapes.Set(float64(len(errs)))
 	if len(errs) > 0 {
-		var errorsSlice []string
+		var errorsSlice []*ScrapeError
 		for e := range errs {
 			errorsSlice = append(errorsSlice, e)
 		}
-		return errors.New(strings.Join(errorsSlice, ","))
+		return &ScraperError{Errors: errorsSlice}
 	}
 
 	return nil

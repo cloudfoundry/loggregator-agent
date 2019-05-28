@@ -337,7 +337,26 @@ var _ = Describe("Scraper", func() {
 
 		err := s.Scrape()
 		Expect(err).To(HaveOccurred())
-		Expect(err.Error()).To(Equal("something,something,something"))
+		Expect(err.(*scraper.ScraperError).Errors).To(ConsistOf(
+			&scraper.ScrapeError{
+				ID:         "some-id",
+				InstanceID: "some-instance-id",
+				MetricURL:  "http://some.url/metrics",
+				Err: errors.New("something"),
+			},
+			&scraper.ScrapeError{
+				ID:         "some-id",
+				InstanceID: "some-instance-id",
+				MetricURL:  "http://some.other.url/metrics",
+				Err: errors.New("something"),
+			},
+			&scraper.ScrapeError{
+				ID:         "some-id",
+				InstanceID: "some-instance-id",
+				MetricURL:  "http://some.other.other.url/metrics",
+				Err: errors.New("something"),
+			},
+		))
 	})
 
 	It("returns an error if the parser fails", func() {
@@ -350,7 +369,7 @@ var _ = Describe("Scraper", func() {
 
 	It("returns an error if MetricsGetter returns an error", func() {
 		spyMetricsGetter.err <- errors.New("some-error")
-		Expect(s.Scrape()).To(MatchError("some-error"))
+		Expect(s.Scrape()).To(MatchError(ContainSubstring("some-error")))
 	})
 
 	It("returns an error if the response is not a 200 OK", func() {
@@ -673,9 +692,9 @@ type spyMetricsGetter struct {
 	addrs   chan string
 	headers chan map[string]string
 
-	resp    chan *http.Response
-	delay   chan time.Duration
-	err     chan error
+	resp  chan *http.Response
+	delay chan time.Duration
+	err   chan error
 }
 
 func newSpyMetricsGetter() *spyMetricsGetter {
