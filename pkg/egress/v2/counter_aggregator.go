@@ -11,15 +11,19 @@ type counterID struct {
 
 type CounterAggregator struct {
 	counterTotals map[counterID]uint64
+	tagger Tagger
 }
 
-func NewCounterAggregator() *CounterAggregator {
+func NewCounterAggregator(tagger Tagger) *CounterAggregator {
 	return &CounterAggregator{
 		counterTotals: make(map[counterID]uint64),
+		tagger: tagger,
 	}
 }
 
 func (ca *CounterAggregator) Process(env *loggregator_v2.Envelope) error {
+	ca.tagger.TagEnvelope(env)
+
 	c := env.GetCounter()
 	if c != nil {
 		if len(ca.counterTotals) > 10000 {

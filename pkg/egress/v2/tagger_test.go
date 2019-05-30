@@ -9,7 +9,7 @@ import (
 )
 
 var _ = Describe("Tagger", func() {
-	It("adds the given tags to all envelopes", func() {
+	It("adds the given defaultTags to all envelopes", func() {
 		tags := map[string]string{
 			"tag-one": "value-one",
 			"tag-two": "value-two",
@@ -17,13 +17,13 @@ var _ = Describe("Tagger", func() {
 		env := &loggregator_v2.Envelope{SourceId: "uuid"}
 
 		tagger := v2.NewTagger(tags)
-		Expect(tagger.Process(env)).ToNot(HaveOccurred())
+		tagger.TagEnvelope(env)
 
 		Expect(env.Tags["tag-one"]).To(Equal("value-one"))
 		Expect(env.Tags["tag-two"]).To(Equal("value-two"))
 	})
 
-	It("does not write over tags if they already exist", func() {
+	It("does not write over defaultTags if they already exist", func() {
 		tags := map[string]string{
 			"existing-tag": "some-new-value",
 		}
@@ -36,11 +36,11 @@ var _ = Describe("Tagger", func() {
 		}
 
 		tagger := v2.NewTagger(tags)
-		Expect(tagger.Process(env)).ToNot(HaveOccurred())
+		tagger.TagEnvelope(env)
 		Expect(env.Tags["existing-tag"]).To(Equal("existing-value"))
 	})
 
-	It("does not write over deprecated tags if they already exist", func() {
+	It("does not write over deprecated defaultTags if they already exist", func() {
 		tags := map[string]string{
 			"existing-tag": "some-new-value",
 		}
@@ -56,7 +56,7 @@ var _ = Describe("Tagger", func() {
 		}
 
 		tagger := v2.NewTagger(tags)
-		Expect(tagger.Process(env)).ToNot(HaveOccurred())
+		tagger.TagEnvelope(env)
 		Expect(env.Tags["existing-tag"]).To(Equal("existing-value"))
 	})
 
@@ -71,7 +71,7 @@ var _ = Describe("Tagger", func() {
 		}
 
 		tagger := v2.NewTagger(map[string]string{})
-		Expect(tagger.Process(env)).ToNot(HaveOccurred())
+		tagger.TagEnvelope(env)
 
 		Expect(env.Tags["text-tag"]).To(Equal("text-value"))
 		Expect(env.Tags["integer-tag"]).To(Equal("502"))

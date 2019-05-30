@@ -12,7 +12,8 @@ var _ = Describe("EnvelopeWriter", func() {
 		mockSingleWriter := newMockSingleWriter()
 		close(mockSingleWriter.WriteOutput.Ret0)
 
-		ew := v2.NewEnvelopeWriter(mockSingleWriter, v2.NewCounterAggregator())
+		tagger := v2.NewTagger(nil)
+		ew := v2.NewEnvelopeWriter(mockSingleWriter, v2.NewCounterAggregator(tagger))
 		Expect(ew.Write(buildCounterEnvelope(10, "name-1", "origin-1"))).ToNot(HaveOccurred())
 
 		var receivedEnvelope *loggregator_v2.Envelope

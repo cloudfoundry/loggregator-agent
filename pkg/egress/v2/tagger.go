@@ -1,27 +1,31 @@
 package v2
 
 import (
-	"strconv"
-
 	"code.cloudfoundry.org/go-loggregator/rpc/loggregator_v2"
+	"strconv"
 )
 
 type Tagger struct {
-	tags map[string]string
+	defaultTags map[string]string
 }
 
 func NewTagger(ts map[string]string) Tagger {
 	return Tagger{
-		tags: ts,
+		defaultTags: ts,
 	}
 }
 
-func (t Tagger) Process(env *loggregator_v2.Envelope) error {
+func (t Tagger) TagEnvelope(env *loggregator_v2.Envelope) {
 	if env.Tags == nil {
 		env.Tags = make(map[string]string)
 	}
 
-	// Move deprecated tags to tags.
+	t.moveDeprecatedTags(env)
+	t.addDefaultTags(env)
+}
+
+func (t Tagger) moveDeprecatedTags(env *loggregator_v2.Envelope) {
+	// Move deprecated defaultTags to defaultTags.
 	for k, v := range env.GetDeprecatedTags() {
 		switch v.Data.(type) {
 		case *loggregator_v2.Value_Text:
@@ -34,12 +38,12 @@ func (t Tagger) Process(env *loggregator_v2.Envelope) error {
 			env.Tags[k] = v.String()
 		}
 	}
+}
 
-	for k, v := range t.tags {
+func (t Tagger) addDefaultTags(env *loggregator_v2.Envelope) {
+	for k, v := range t.defaultTags {
 		if _, ok := env.Tags[k]; !ok {
 			env.Tags[k] = v
 		}
 	}
-
-	return nil
 }

@@ -187,10 +187,10 @@ func ingressClients(downstreamAddrs []string,
 			il.Printf("Dropped %d logs for url %s", missed, addr)
 		}), timeoutwaitgroup.New(time.Minute))
 
+		tagger := egress_v2.NewTagger(tags)
 		ew := egress_v2.NewEnvelopeWriter(
 			dw,
-			egress_v2.NewCounterAggregator(),
-			egress_v2.NewTagger(tags),
+			egress_v2.NewCounterAggregator(tagger),
 		)
 
 		ingressClients = append(ingressClients, ew)
