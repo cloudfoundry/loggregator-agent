@@ -8,8 +8,8 @@ import (
 	"net/http"
 
 	"code.cloudfoundry.org/go-loggregator"
+	"code.cloudfoundry.org/go-loggregator/conversion"
 	ingress "code.cloudfoundry.org/loggregator-agent/pkg/ingress/v1"
-	"code.cloudfoundry.org/loggregator/plumbing/conversion"
 	"github.com/cloudfoundry/sonde-go/events"
 )
 
