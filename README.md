@@ -1,3 +1,5 @@
+**Archived** Now bundled in https://github.com/cloudfoundry/loggregator-agent-release
+
 Loggregator Agent
 [![slack.cloudfoundry.org][slack-badge]][loggregator-slack]
 [![CI Badge][ci-badge]][ci-pipeline]
