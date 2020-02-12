@@ -77,12 +77,15 @@ func (s ForwarderAgent) Run() {
 
 	downstreamAddrs := getDownstreamAddresses(s.downstreamPortsCfg, s.log)
 	clients := ingressClients(downstreamAddrs, s.grpc, s.log, s.tags)
+	tagger := egress_v2.NewTagger(s.tags)
+	ew := egress_v2.NewEnvelopeWriter(
+		multiWriter{writers: clients},
+		egress_v2.NewCounterAggregator(tagger),
+	)
 	go func() {
 		for {
 			e := diode.Next()
-			for _, c := range clients {
-				c.Write(e)
-			}
+			ew.Write(e)
 		}
 	}()
 
@@ -124,6 +127,17 @@ func (c clientWriter) Write(e *loggregator_v2.Envelope) error {
 
 func (c clientWriter) Close() error {
 	return c.c.CloseSend()
+}
+
+type multiWriter struct {
+	writers []Writer
+}
+
+func (mw multiWriter) Write(e *loggregator_v2.Envelope) error {
+	for _, w := range mw.writers {
+		w.Write(e)
+	}
+	return nil
 }
 
 type portConfig struct {
